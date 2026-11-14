@@ -191,7 +191,6 @@ fn list_hosts_in(home: &Path) -> TResult<Vec<String>> {
     let mut index = 0;
     while index < files.len() && index < MAX_FILES {
         let path = files[index].clone();
-        let root = index == 0;
         index += 1;
         let Some((canonical, text)) = read_ssh_file(&path, &ssh_dir)? else {
             continue;
@@ -213,17 +212,19 @@ fn list_hosts_in(home: &Path) -> TResult<Vec<String>> {
                         }
                     }
                 }
-            } else if root && keyword.eq_ignore_ascii_case("include") {
+            } else if keyword.eq_ignore_ascii_case("include") {
                 for value in &words[1..] {
                     if files.len() == MAX_FILES {
                         break;
                     }
+                    // OpenSSH: ~/ is the home, absolute stays, anything else is relative to ~/.ssh.
+                    // Includes are followed in included files too (nested), bounded by MAX_FILES + seen.
                     let path = if let Some(rest) = value.strip_prefix("~/") {
                         home.join(rest)
                     } else if Path::new(value).is_absolute() {
                         PathBuf::from(value)
                     } else {
-                        continue;
+                        ssh_dir.join(value)
                     };
                     for path in expand(&path, &ssh_dir) {
                         if files.len() == MAX_FILES {
@@ -435,28 +436,23 @@ mod tests {
         );
     }
     #[test]
-    fn includes_are_one_level_absolute_or_tilde_and_at_most_twenty_files() {
+    fn includes_follow_relative_and_nested_paths_bounded_by_the_file_limit() {
         let dir = home();
         let ssh = dir.path().join(".ssh");
+        // Relative Include (resolved against ~/.ssh) that itself includes a nested file.
+        fs::write(ssh.join("extra"), "Host relative\nInclude deeper\n").unwrap();
+        fs::write(ssh.join("deeper"), "Host nested\n").unwrap();
+        config(dir.path(), "Include extra\n");
+        let found = list_hosts_in(dir.path()).unwrap();
+        assert!(found.contains(&"relative".into())); // relative Include is followed now
+        assert!(found.contains(&"nested".into())); // and so is the nested Include inside it
+                                                   // The total number of visited files stays bounded even with a wide glob of includers.
         fs::create_dir(ssh.join("parts")).unwrap();
         for i in 0..30 {
-            fs::write(
-                ssh.join(format!("parts/{i:02}")),
-                format!("Host h{i:02}\nInclude ~/.ssh/nested\n"),
-            )
-            .unwrap();
+            fs::write(ssh.join(format!("parts/{i:02}")), format!("Host h{i:02}\n")).unwrap();
         }
-        fs::write(ssh.join("nested"), "Host forbidden").unwrap();
-        fs::write(ssh.join("relative"), "Host relative").unwrap();
-        config(
-            dir.path(),
-            &format!("Include {}/parts/*\nInclude relative\n", ssh.display()),
-        );
-        let found = list_hosts_in(dir.path()).unwrap();
-        assert_eq!(found.len(), 19); // config itself counts toward the twenty-file limit
-        assert!(!found.contains(&"forbidden".into()));
-        config(dir.path(), "Include ~/.ssh/parts/00");
-        assert_eq!(list_hosts_in(dir.path()).unwrap(), ["h00"]);
+        config(dir.path(), "Include parts/*\n");
+        assert_eq!(list_hosts_in(dir.path()).unwrap().len(), MAX_FILES - 1); // config counts toward the limit
     }
     #[test]
     fn file_size_symlink_escape_and_host_count_are_bounded() {
