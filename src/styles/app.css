@@ -42,7 +42,7 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .hint { color: var(--muted); font-size: 12px; align-self: center; }
 .sp { flex: 1; }
 
-.app { height: 100%; min-height: 540px; display: flex; flex-direction: column; gap: 8px; max-width: none; margin: 0 auto; }
+.app { height: 100%; min-height: 540px; display: flex; flex-direction: column; gap: 8px; max-width: none; margin: 0 auto; position: relative; }
 .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tb { padding: 5px 10px; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; color: var(--fg); }
 .tb:hover:not(:disabled) { border-color: var(--accent); }
@@ -151,7 +151,7 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .fkeys .danger:hover:not(:disabled) kbd, .fkeys .danger:focus-visible kbd { border-color: var(--warn); }
 
 /* Meldungen */
-.toasts { flex: none; align-self: flex-end; display: flex; flex-direction: column; gap: 6px; align-items: center; z-index: 40; max-width: 90%; pointer-events: none; }
+.toasts { position: absolute; right: 8px; bottom: 8px; left: auto; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; z-index: 40; max-width: 90%; pointer-events: none; }
 .toast { background: #212932; color: #d9dee4; padding: 8px 14px; border-radius: 8px; box-shadow: 0 6px 24px #0006; pointer-events: auto; cursor: pointer; }
 .toast.error { background: var(--warn); color: #fff; }
 
