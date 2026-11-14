@@ -231,5 +231,11 @@ describe("Auftragsnamen und Fehlergründe aus i18n", () => {
     expect(failureReason({ path: "/p", message: "Zugriff verweigert: /p", kind: "permission" }, de)).toBe("Zugriff verweigert.");
     expect(failureReason({ path: "/p", message: "Roher Text", kind: "io" }, en)).toBe("Roher Text");
     expect(failureReason({ path: "/p", message: "Roher Text" }, en)).toBe("Roher Text");
+    // Weitere feste Fehlerarten werden jetzt ebenfalls übersetzt statt den deutschen Kerntext zu zeigen.
+    expect(failureReason({ path: "/p", message: "Der Name ist bereits vorhanden: /p", kind: "exists" }, en)).toBe("The name already exists: /p");
+    expect(failureReason({ path: "/p", message: "Das ist kein Ordner: /p", kind: "notDirectory" }, en)).toBe("Not a folder: /p");
+    expect(failureReason({ path: "/p", message: "Die Größe stimmt nicht", kind: "sizeMismatch" }, en)).toBe("The size does not match after the transfer. The file was not accepted.");
+    expect(failureReason({ path: "/p", message: "SMB-Anmeldung abgelehnt.", kind: "smbAuth" }, en)).toBe("SMB sign-in was rejected.");
+    expect(failureReason({ path: "/p", message: "Der Server hat den Vorgang nicht ausgeführt.", kind: "remote" }, en)).toBe("The server did not carry out the operation.");
   });
 });

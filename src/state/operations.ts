@@ -236,6 +236,30 @@ export function failureReason(failure: { path: string; message: string; kind?: s
       return tr("error.readOnly");
     case "invalidTarget":
       return tr("error.invalidTarget");
+    case "exists":
+      return tr("error.exists", { name: failure.path });
+    case "notDirectory":
+      return tr("error.notDirectory", { path: failure.path });
+    case "invalidName":
+      return tr("error.invalidName", { name: failure.path });
+    case "invalidInput":
+      return tr("error.invalidInput");
+    case "sizeMismatch":
+      return tr("error.sizeMismatch");
+    case "remote":
+      return tr("error.remote");
+    case "smbSecurity":
+      return tr("error.smbSecurity");
+    case "smbUnreachable":
+      return tr("error.smbUnreachable");
+    case "smbShareMissing":
+      return tr("error.smbShareMissing");
+    case "smbAuth":
+      return tr("error.smbAuth");
+    case "smbFailure":
+      return tr("error.smbFailure");
+    // Kinds with a varied or path-specific message (unsupported, archive, the shared "io"
+    // bucket) keep the core's message; translating them generically would drop their detail.
     default:
       return failure.message;
   }
