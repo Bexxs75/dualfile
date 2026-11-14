@@ -107,7 +107,7 @@ Defaults from [`src/state/keymap.ts`](src/state/keymap.ts); file-list shortcuts 
 ## Documentation
 
 - [Changelog](CHANGELOG.md), [contribution guide](CONTRIBUTING.md), [security policy](SECURITY.md).
-- [Third-party license inventory](THIRD-PARTY-LICENSES.md) — currently incomplete Rust metadata; review required before distribution.
+- [Third-party license inventory](THIRD-PARTY-LICENSES.md) — complete (no UNKNOWN entries). Regenerate with `scripts/gen-third-party.py`; Rust licenses come from the local Cargo registry cache (populated by a build) or a `--vendor` mirror.
 
 ## Contributing
 

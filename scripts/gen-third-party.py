@@ -2,6 +2,7 @@
 """Offline lockfile license inventory (Python 3.11+). Missing metadata stays UNKNOWN."""
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import tomllib
@@ -9,20 +10,42 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _license_of(manifest):
+    try:
+        package = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package", {})
+    except (OSError, tomllib.TOMLDecodeError):
+        return None, None
+    key = (package.get("name"), package.get("version"))
+    license_id = package.get("license")
+    if not isinstance(license_id, str):
+        license_id = "UNKNOWN (license-file requires review)" if package.get("license-file") else "UNKNOWN"
+    return key, license_id
+
+
 def cargo_metadata(vendor):
     result = {}
     for manifest in sorted(vendor.glob("*/Cargo.toml")):
-        package = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package", {})
-        key = (package.get("name"), package.get("version"))
-        license_id = package.get("license")
-        if not isinstance(license_id, str):
-            license_id = "UNKNOWN (license-file requires review)" if package.get("license-file") else "UNKNOWN"
-        result[key] = license_id
+        key, license_id = _license_of(manifest)
+        if key:
+            result[key] = license_id
+    return result
+
+
+def cargo_registry_cache():
+    """Offline fallback: the already-extracted crate sources in the local Cargo registry cache
+    (populated by a build or `cargo fetch`). No downloads; missing crates simply stay absent."""
+    result = {}
+    cargo_home = Path(os.environ.get("CARGO_HOME") or (Path.home() / ".cargo"))
+    for manifest in (cargo_home / "registry" / "src").glob("*/*/Cargo.toml"):
+        key, license_id = _license_of(manifest)
+        if key and key[0] and key not in result:
+            result[key] = license_id
     return result
 
 
 def inventory(root, vendor):
-    metadata = cargo_metadata(vendor)
+    # The registry cache fills Cargo licenses when no --vendor mirror is given; an explicit mirror wins.
+    metadata = {**cargo_registry_cache(), **cargo_metadata(vendor)}
     rows = set()
     for lock in (root / "Cargo.lock", root / "src-tauri/Cargo.lock"):
         for package in tomllib.loads(lock.read_text(encoding="utf-8"))["package"]:
