@@ -2188,7 +2188,7 @@ mod tests {
     fn lister_commands_refuse_folders_and_special_files() {
         let f = fixture();
         let dir = f.dir("ordner");
-        assert_eq!(f.state.file_info(&dir).unwrap_err().kind, "io");
+        assert_eq!(f.state.file_info(&dir).unwrap_err().kind, "isADirectory");
         assert!(f.state.read_block(&dir, 0, 1).is_err());
         let fifo = f.p("pipe");
         std::process::Command::new("mkfifo")

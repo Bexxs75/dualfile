@@ -237,5 +237,9 @@ describe("Auftragsnamen und Fehlergründe aus i18n", () => {
     expect(failureReason({ path: "/p", message: "Die Größe stimmt nicht", kind: "sizeMismatch" }, en)).toBe("The size does not match after the transfer. The file was not accepted.");
     expect(failureReason({ path: "/p", message: "SMB-Anmeldung abgelehnt.", kind: "smbAuth" }, en)).toBe("SMB sign-in was rejected.");
     expect(failureReason({ path: "/p", message: "Der Server hat den Vorgang nicht ausgeführt.", kind: "remote" }, en)).toBe("The server did not carry out the operation.");
+    expect(failureReason({ path: "/p", message: "Der Ordner ist nicht leer: /p", kind: "directoryNotEmpty" }, en)).toBe("The folder is not empty: /p");
+    expect(failureReason({ path: "/p", message: "… ausgetauscht", kind: "changedSincePlan" }, en)).toBe("The entry changed since it was planned and was not deleted: /p");
+    // Ein roher I/O-Fehler behält weiterhin den Kerntext (dynamische OS-Meldung).
+    expect(failureReason({ path: "/p", message: "Lesen fehlgeschlagen für /p", kind: "io" }, en)).toBe("Lesen fehlgeschlagen für /p");
   });
 });

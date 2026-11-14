@@ -258,8 +258,18 @@ export function failureReason(failure: { path: string; message: string; kind?: s
       return tr("error.smbAuth");
     case "smbFailure":
       return tr("error.smbFailure");
-    // Kinds with a varied or path-specific message (unsupported, archive, the shared "io"
-    // bucket) keep the core's message; translating them generically would drop their detail.
+    case "isADirectory":
+      return tr("error.isADirectory", { path: failure.path });
+    case "directoryNotEmpty":
+      return tr("error.directoryNotEmpty", { path: failure.path });
+    case "changedSincePlan":
+      return tr("error.changedSincePlan", { path: failure.path });
+    case "incompletePlan":
+      return tr("error.incompletePlan");
+    case "renameLeftover":
+      return tr("error.renameLeftover", { path: failure.path });
+    // Kinds with a varied message (unsupported, archive, raw "io") keep the core's message;
+    // translating them generically would drop their detail.
     default:
       return failure.message;
   }

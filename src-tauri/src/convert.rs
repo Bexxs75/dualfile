@@ -161,12 +161,12 @@ pub fn error_kind(error: &Error) -> &'static str {
         Error::Plugin { kind, .. } => kind,
         Error::SizeMismatch(_) => "sizeMismatch",
         Error::VerifyFailed => "verifyFailed",
-        Error::IsADirectory(_)
-        | Error::DirectoryNotEmpty(_)
-        | Error::ChangedSincePlan(_)
-        | Error::IncompletePlan
-        | Error::RenameLeftover(_)
-        | Error::Io { .. } => "io",
+        Error::IsADirectory(_) => "isADirectory",
+        Error::DirectoryNotEmpty(_) => "directoryNotEmpty",
+        Error::ChangedSincePlan(_) => "changedSincePlan",
+        Error::IncompletePlan => "incompletePlan",
+        Error::RenameLeftover(_) => "renameLeftover",
+        Error::Io { .. } => "io",
     }
 }
 
@@ -1026,7 +1026,11 @@ mod tests {
             (Error::SizeMismatch(p()), "sizeMismatch"),
             (Error::Remote("x".into()), "remote"),
             (Error::Cancelled, "cancelled"),
-            (Error::IsADirectory(p()), "io"),
+            (Error::IsADirectory(p()), "isADirectory"),
+            (Error::DirectoryNotEmpty(p()), "directoryNotEmpty"),
+            (Error::ChangedSincePlan(p()), "changedSincePlan"),
+            (Error::IncompletePlan, "incompletePlan"),
+            (Error::RenameLeftover(p()), "renameLeftover"),
             (Error::Archive("Archiv zu groß für die Anzeige"), "archive"),
             (
                 Error::Unsupported(dualfile_core::archive::MSG_READ_ONLY),
