@@ -121,7 +121,7 @@ test("B22 undo toast/history name items and show platform shortcut without overl
   expect(app.dialog()).toHaveTextContent("Kopieren: notizen.txt und 1 weitere");
   expect(app.dialog()).toHaveTextContent("Ctrl+Z");
   expect(app.dialog()).not.toHaveTextContent("⌘");
-  expect(css).toMatch(/\.toasts\s*\{[^}]*flex: none; align-self: flex-end/);
+  expect(css).toMatch(/\.toasts\s*\{[^}]*position: absolute;[^}]*pointer-events: none/);
   expect(css).toMatch(/\.toast\s*\{[^}]*background: #212932/);
   await app.user.keyboard("{Escape}");
   platform.mockReturnValue("MacIntel");
