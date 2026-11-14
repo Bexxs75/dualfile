@@ -47,6 +47,7 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   add("similar", "similar.title", "images", "", () => openTool("similar"));
   add("history", "undo.history", "history", "Ctrl+Shift+Z", () => controller.openDialog({ kind: "history" }));
   add("settings", "menu.view.settings", "settings", "Ctrl+,", () => controller.openDialog({ kind: "settings" }));
+  add("search", "search.title", "search", "Ctrl+Shift+F", () => controller.openDialog({ kind: "search", w: state.active }));
   add("connections", "header.manageConnections", "connect", "Ctrl+N", () => controller.openDialog({ kind: "connections" }));
   for (const [action, key] of [["new", "ssh.new"], ["import", "ssh.import"], ["system", "system.import"]] as const) {
     add(action, key, "import", "", () => controller.openDialog({ kind: "connections", entry: { action } }));
