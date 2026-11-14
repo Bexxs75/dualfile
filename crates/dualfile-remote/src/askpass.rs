@@ -505,22 +505,15 @@ mod tests {
         )
         .unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
-        // Needs the runnable askpass_helper example: run `cargo build --examples` first (CI does).
+        // The askpass_helper example (built by `cargo build --examples`) lives at
+        // <target>/<profile>/examples/. The test binary's location varies, so search upward
+        // from it for the first ancestor that holds examples/askpass_helper.
         let exe = std::env::current_exe().unwrap();
-        let profile = exe.parent().unwrap().parent().unwrap();
-        let helper = profile.join("examples/askpass_helper");
-        if !helper.is_file() {
-            let list = |d: &std::path::Path| {
-                std::fs::read_dir(d)
-                    .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned())).collect::<Vec<_>>().join(", "))
-                    .unwrap_or_else(|e| format!("<{e}>"))
-            };
-            panic!(
-                "helper not found.\n exe={}\n profile={}\n helper={}\n profile dir: [{}]\n examples dir: [{}]",
-                exe.display(), profile.display(), helper.display(),
-                list(profile), list(&profile.join("examples"))
-            );
-        }
+        let helper = exe
+            .ancestors()
+            .map(|dir| dir.join("examples/askpass_helper"))
+            .find(|p| p.is_file())
+            .expect("build the askpass_helper example first: cargo build --examples");
         let output = dir.path().join("answer");
         let mut command = std::process::Command::new(&script);
         server.configure(&mut command).unwrap();

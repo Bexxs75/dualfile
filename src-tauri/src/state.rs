@@ -380,7 +380,10 @@ impl AppState {
 
     pub fn space_free(&self, raw: &str) -> Option<dualfile_core::vfs::SpaceFree> {
         let path = self.path(raw).ok()?;
-        if !matches!(path.scheme(), dualfile_core::vfs::Scheme::Local | dualfile_core::vfs::Scheme::Sftp) {
+        if !matches!(
+            path.scheme(),
+            dualfile_core::vfs::Scheme::Local | dualfile_core::vfs::Scheme::Sftp
+        ) {
             return None;
         }
         self.vfs(&path).ok()?.space_free(&path)
