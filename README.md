@@ -6,8 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/Bexxs75/dualfile/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Bexxs75/dualfile"></a>
+  <a href="https://github.com/Bexxs75/dualfile/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Bexxs75/dualfile/total?label=downloads&color=brightgreen"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
-  <img alt="Platform: Linux" src="https://img.shields.io/badge/platform-Linux-555">
+  <img alt="Platform: Linux x86_64 and arm64" src="https://img.shields.io/badge/platform-Linux%20x86__64%20%7C%20arm64-555">
   <img alt="Made with Rust and Tauri 2" src="https://img.shields.io/badge/Made%20with-Rust%20%26%20Tauri%202-orange">
 </p>
 
@@ -51,15 +52,14 @@ Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and b
 
 ## Download
 
-[Download from GitHub Releases](https://github.com/Bexxs75/dualfile/releases/latest).
-This is the intended release location; this checkout does not establish that a published release exists.
+[Download from GitHub Releases](https://github.com/Bexxs75/dualfile/releases/latest). The latest release is **v0.1.0**, a development snapshot.
 
-| Format | Status |
+| Format | Available |
 |---|---|
-| Linux x86_64 AppImage (`Dualfile-<version>-x86_64.AppImage`) | Built by the release workflow |
-| Linux arm64 AppImage (`Dualfile-<version>-aarch64.AppImage`, Raspberry Pi) | Built by the release workflow on a native arm64 runner |
-| Linux x86_64 tar.gz (`Dualfile-<version>-x86_64.tar.gz`) | Built by the release workflow |
-| Linux arm64 tar.gz (`Dualfile-<version>-aarch64.tar.gz`) | Built by the release workflow on a native arm64 runner |
+| Linux x86_64 AppImage (`Dualfile-<version>-x86_64.AppImage`) | Yes |
+| Linux arm64 AppImage (`Dualfile-<version>-aarch64.AppImage`, Raspberry Pi) | Yes |
+| Linux x86_64 tar.gz (`Dualfile-<version>-x86_64.tar.gz`) | Yes |
+| Linux arm64 tar.gz (`Dualfile-<version>-aarch64.tar.gz`) | Yes |
 
 For an AppImage, make the downloaded file executable and run it. A tar.gz extracts to a `Dualfile-<version>-<arch>/` folder; start it with `./Dualfile-<version>-<arch>/AppRun`. Check the release notes and checksums first.
 
