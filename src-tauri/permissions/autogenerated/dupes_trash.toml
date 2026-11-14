@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dupes-trash"
+description = "Enables the dupes_trash command without any pre-configured scope."
+commands.allow = ["dupes_trash"]
+
+[[permission]]
+identifier = "deny-dupes-trash"
+description = "Denies the dupes_trash command without any pre-configured scope."
+commands.deny = ["dupes_trash"]

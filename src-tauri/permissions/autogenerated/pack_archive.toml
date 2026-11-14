@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pack-archive"
+description = "Enables the pack_archive command without any pre-configured scope."
+commands.allow = ["pack_archive"]
+
+[[permission]]
+identifier = "deny-pack-archive"
+description = "Denies the pack_archive command without any pre-configured scope."
+commands.deny = ["pack_archive"]

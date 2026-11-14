@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ssh-host-resolve"
+description = "Enables the ssh_host_resolve command without any pre-configured scope."
+commands.allow = ["ssh_host_resolve"]
+
+[[permission]]
+identifier = "deny-ssh-host-resolve"
+description = "Denies the ssh_host_resolve command without any pre-configured scope."
+commands.deny = ["ssh_host_resolve"]

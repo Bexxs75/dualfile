@@ -1,0 +1,39 @@
+* { font-family: 'Inter', 'Noto Sans', sans-serif; font-size: 13px; }
+window, .app { background: #edf2f5; color: #162631; }
+.header { background: #112d3a; min-height: 58px; padding: 0 22px; }
+.brand { color: #f5fafb; font-size: 17px; font-weight: 800; letter-spacing: 1.5px; }
+.sub { color: #abc8d0; font-size: 12px; }
+.hint { color: #8eb3bc; font-size: 12px; }
+.sidebar { background: #e3ebef; padding: 24px 13px; border-right: 1px solid #cddce2; }
+.sidehead { color: #5c7581; font-size: 10px; font-weight: 800; letter-spacing: 1.3px; margin: 0 9px 10px; }
+.network-head { margin-top: 25px; }
+button.place { background: transparent; border: 0; border-radius: 8px; box-shadow: none; color: #274451; min-height: 35px; padding: 0 10px; }
+button.place:hover { background: #d1e1e7; }
+.sidenote { color: #6c8590; font-size: 11px; margin: 10px; }
+.toolbar { background: #f7fafb; border-bottom: 1px solid #d8e3e7; padding: 11px 16px; }
+button.action, button.primary { border: 1px solid #d7e3e7; border-radius: 7px; background: #fff; box-shadow: none; color: #244451; padding: 7px 10px; }
+button.action:hover { background: #e9f3f5; }
+button.primary { color: #fff; background: #166e82; border-color: #166e82; font-weight: 700; }
+button.primary:hover { background: #0d5d70; }
+.panes { padding: 17px; }
+.pane { background: #fff; border: 1px solid #d3e0e5; border-radius: 10px; }
+.panetop { background: #f5f9fa; padding: 13px 16px; border-bottom: 1px solid #e2ebee; }
+.panetitle { color: #147088; font-size: 11px; font-weight: 800; letter-spacing: 1.3px; }
+.count { color: #66818c; font-size: 11px; }
+.tabs { background: #edf4f6; border-bottom: 1px solid #dce8ec; padding: 5px 12px 0; }
+.tabgroup { background: #e5eef1; border: 1px solid #d5e3e8; border-radius: 6px 6px 0 0; }
+button.tab, button.tab-close, button.tab-add { background: transparent; border: 0; box-shadow: none; color: #42616d; min-height: 27px; padding: 2px 10px; }
+button.tab.current { color: #0b6680; font-weight: 700; }
+button.tab-close { padding: 2px 6px; color: #67818a; }
+button.tab-add { border-radius: 5px; font-weight: 700; }
+button.tab:hover, button.tab-close:hover, button.tab-add:hover { background: #d6e8ec; }
+entry.address { margin: 13px 14px 7px; padding: 8px 11px; border: 1px solid #cedde2; border-radius: 6px; background: #fff; color: #183542; }
+entry.search { margin: 0 14px 12px; padding: 7px 11px; border: 1px solid #dbe5e9; border-radius: 6px; background: #f7fafb; color: #183542; }
+.columns { background: #f4f8f9; border-top: 1px solid #e4ecee; border-bottom: 1px solid #e4ecee; padding: 8px 18px; color: #67808a; font-size: 10px; font-weight: 800; }
+button.file { border: 0; border-bottom: 1px solid #edf2f4; border-radius: 0; box-shadow: none; background: #fff; min-height: 36px; padding: 2px 17px; color: #253c47; }
+button.file:hover { background: #eef7f9; }
+button.file.selected { background: #dceff3; color: #0e5b70; }
+.meta { color: #6a838d; font-size: 11px; }
+.empty { color: #69818a; margin: 30px; }
+.footer { background: #112d3a; min-height: 35px; padding: 0 18px; color: #d7e9ed; }
+.keys { color: #91bac5; font-size: 11px; }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-plugin-columns"
+description = "Enables the plugin_columns command without any pre-configured scope."
+commands.allow = ["plugin_columns"]
+
+[[permission]]
+identifier = "deny-plugin-columns"
+description = "Denies the plugin_columns command without any pre-configured scope."
+commands.deny = ["plugin_columns"]

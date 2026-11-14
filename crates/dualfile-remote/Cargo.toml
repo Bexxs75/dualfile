@@ -1,0 +1,33 @@
+[package]
+name = "dualfile-remote"
+description = "Dualfile server connections: FTP/FTPS back end for the virtual file system (network code lives here, not in the core)"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+dualfile-core = { path = "../dualfile-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+sha2 = "0.11"
+zeroize = "1"
+# FTP/FTPS: rustls only (no OpenSSL, no system TLS library).
+suppaftp = { version = "12.2.1", default-features = false, features = ["rustls-ring", "deprecated", "no-log"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-webpki = { version = "0.103", default-features = false, features = ["ring", "std"] }
+rustls-native-certs = "0.8"
+
+# SFTP: pure Rust SSH (no OpenSSL, no libssh2). `ring` as crypto back end (already used by
+# rustls above), `rsa` for rsa-sha2 host keys and user keys; no compression, no agent code used.
+smb2 = "0.43"
+russh = { version = "0.65", default-features = false, features = ["ring", "rsa"] }
+russh-sftp = "3"
+tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "sync", "io-util"] }
+
+[target.'cfg(unix)'.dependencies]
+# Anchored, no-follow config reads: prevent symlink swaps and blocking special files.
+rustix = { version = "1", features = ["fs"] }
+
+[dev-dependencies]
+tempfile = "3"

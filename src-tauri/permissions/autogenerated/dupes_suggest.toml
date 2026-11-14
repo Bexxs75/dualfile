@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dupes-suggest"
+description = "Enables the dupes_suggest command without any pre-configured scope."
+commands.allow = ["dupes_suggest"]
+
+[[permission]]
+identifier = "deny-dupes-suggest"
+description = "Denies the dupes_suggest command without any pre-configured scope."
+commands.deny = ["dupes_suggest"]

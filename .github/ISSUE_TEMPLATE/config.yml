@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation and project status
+    url: https://github.com/Bexxs75/dualfile#readme
+    about: Read the documentation before opening an issue.
+  - name: Security policy
+    url: https://github.com/Bexxs75/dualfile/security/policy
+    about: Report vulnerabilities privately through GitHub Security Advisories.

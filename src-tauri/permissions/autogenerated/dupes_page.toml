@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dupes-page"
+description = "Enables the dupes_page command without any pre-configured scope."
+commands.allow = ["dupes_page"]
+
+[[permission]]
+identifier = "deny-dupes-page"
+description = "Denies the dupes_page command without any pre-configured scope."
+commands.deny = ["dupes_page"]

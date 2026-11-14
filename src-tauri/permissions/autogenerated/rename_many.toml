@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rename-many"
+description = "Enables the rename_many command without any pre-configured scope."
+commands.allow = ["rename_many"]
+
+[[permission]]
+identifier = "deny-rename-many"
+description = "Denies the rename_many command without any pre-configured scope."
+commands.deny = ["rename_many"]

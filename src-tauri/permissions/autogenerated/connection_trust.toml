@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-connection-trust"
+description = "Enables the connection_trust command without any pre-configured scope."
+commands.allow = ["connection_trust"]
+
+[[permission]]
+identifier = "deny-connection-trust"
+description = "Denies the connection_trust command without any pre-configured scope."
+commands.deny = ["connection_trust"]

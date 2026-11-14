@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-find-in-file"
+description = "Enables the find_in_file command without any pre-configured scope."
+commands.allow = ["find_in_file"]
+
+[[permission]]
+identifier = "deny-find-in-file"
+description = "Denies the find_in_file command without any pre-configured scope."
+commands.deny = ["find_in_file"]

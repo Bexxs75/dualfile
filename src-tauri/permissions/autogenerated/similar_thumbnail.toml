@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-similar-thumbnail"
+description = "Enables the similar_thumbnail command without any pre-configured scope."
+commands.allow = ["similar_thumbnail"]
+
+[[permission]]
+identifier = "deny-similar-thumbnail"
+description = "Denies the similar_thumbnail command without any pre-configured scope."
+commands.deny = ["similar_thumbnail"]

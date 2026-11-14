@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-system-mount-unmount"
+description = "Enables the system_mount_unmount command without any pre-configured scope."
+commands.allow = ["system_mount_unmount"]
+
+[[permission]]
+identifier = "deny-system-mount-unmount"
+description = "Denies the system_mount_unmount command without any pre-configured scope."
+commands.deny = ["system_mount_unmount"]

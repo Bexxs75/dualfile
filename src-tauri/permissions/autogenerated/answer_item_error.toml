@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-answer-item-error"
+description = "Enables the answer_item_error command without any pre-configured scope."
+commands.allow = ["answer_item_error"]
+
+[[permission]]
+identifier = "deny-answer-item-error"
+description = "Denies the answer_item_error command without any pre-configured scope."
+commands.deny = ["answer_item_error"]

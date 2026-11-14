@@ -1,0 +1,21 @@
+import { beforeEach, expect, test, vi } from "vitest";
+import { createTauriApi } from "./tauri";
+import { invoke, Channel } from "@tauri-apps/api/core";
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), Channel: class { onmessage = (_value: unknown) => {}; } }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
+beforeEach(() => vi.mocked(invoke).mockReset());
+test("system commands use the typed native bridge and a progress channel", async () => {
+  const api = createTauriApi();
+  await api.systemStatus(); expect(invoke).toHaveBeenLastCalledWith("system_status", undefined);
+  await api.startMenuSet(true); expect(invoke).toHaveBeenLastCalledWith("start_menu_set", { enabled: true });
+  await api.traySet(false, "en"); expect(invoke).toHaveBeenLastCalledWith("tray_set", { enabled: false, language: "en" });
+  await api.updateCheck(); expect(invoke).toHaveBeenLastCalledWith("update_check", undefined);
+  const progress = vi.fn(); await api.updateInstall("1.2.0", progress);
+  expect(invoke).toHaveBeenLastCalledWith("update_install", { version: "1.2.0", progress: expect.any(Channel) });
+  const channel = vi.mocked(invoke).mock.calls.at(-1)![1] as { progress: Channel<unknown> };
+  channel.progress.onmessage({ downloaded: 12, total: 20, phase: "download" });
+  expect(progress).toHaveBeenCalledWith({ downloaded: 12, total: 20, phase: "download" });
+  await api.updateCancel(); expect(invoke).toHaveBeenLastCalledWith("update_cancel", undefined);
+  await api.restart(); expect(invoke).toHaveBeenLastCalledWith("plugin:process|restart", undefined);
+  await api.releaseOpen(); expect(invoke).toHaveBeenLastCalledWith("release_open", undefined);
+});

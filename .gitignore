@@ -1,0 +1,9 @@
+target/
+node_modules/
+dist/
+.env
+*.log
+vendor/
+.cargo-home/
+target-tauri/
+src-tauri/gen/

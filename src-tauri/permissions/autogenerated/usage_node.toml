@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-usage-node"
+description = "Enables the usage_node command without any pre-configured scope."
+commands.allow = ["usage_node"]
+
+[[permission]]
+identifier = "deny-usage-node"
+description = "Denies the usage_node command without any pre-configured scope."
+commands.deny = ["usage_node"]

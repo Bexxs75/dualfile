@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-block"
+description = "Enables the read_block command without any pre-configured scope."
+commands.allow = ["read_block"]
+
+[[permission]]
+identifier = "deny-read-block"
+description = "Denies the read_block command without any pre-configured scope."
+commands.deny = ["read_block"]

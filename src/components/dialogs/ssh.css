@@ -1,0 +1,14 @@
+.ssh-profile { display: grid; gap: 10px; }
+.ssh-profile label { display: grid; gap: 4px; }
+.ssh-profile input:not([type=checkbox]), .ssh-profile select { width: 100%; box-sizing: border-box; }
+.ssh-note { padding: 10px; border: 1px solid; border-radius: 5px; overflow-wrap: anywhere; }
+.ssh-info { background: var(--panel2); color: var(--fg); border-color: var(--line); }
+.ssh-warning { background: light-dark(#fff2dc, #3f2b17); border-color: #be802e; }
+.ssh-actions, .ssh-entry { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ssh-actions { justify-content: flex-end; }
+.ssh-entry { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ssh-host { display: block; padding: 5px; }
+
+.ssh-profile label.ssh-check { display: flex; align-items: center; gap: 8px; }
+.ssh-resolved { height: 4.5em; overflow: auto; margin-bottom: 0; }
+.ssh-attempt-error { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }

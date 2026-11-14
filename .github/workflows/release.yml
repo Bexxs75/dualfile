@@ -1,0 +1,135 @@
+name: Linux draft release
+'on':
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+defaults:
+  run:
+    shell: bash
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+            appimagetool: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+            appimagetool: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target-tauri
+      OUTPUT_DIR: ${{ github.workspace }}/dist-appimage
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      # No fixed Rust toolchain is declared by the source manifests.
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check tag matches application version
+        run: |
+          python3 - <<'PY'
+          import json, os
+          version = json.load(open('src-tauri/tauri.conf.json'))['version']
+          if os.environ['RELEASE_TAG'] != 'v' + version:
+              raise SystemExit('Tag must match src-tauri/tauri.conf.json version')
+          PY
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libssl-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2 file curl desktop-file-utils
+      - run: npm ci
+      - name: Download appimagetool for CI
+        env:
+          APPIMAGETOOL_URL: ${{ matrix.appimagetool }}
+        run: |
+          curl --fail --location --retry 3 "$APPIMAGETOOL_URL" -o "$RUNNER_TEMP/appimagetool"
+          chmod +x "$RUNNER_TEMP/appimagetool"
+      - name: Build final AppImage and tarball
+        env:
+          ARCH: ${{ matrix.arch }}
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: bash scripts/build-appimage.sh
+      - name: Sign final AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          shopt -s nullglob
+          images=("$OUTPUT_DIR"/*.AppImage)
+          if (( ${#images[@]} != 1 )); then
+            echo 'Expected exactly one final AppImage.' >&2
+            exit 1
+          fi
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo 'Missing updater signing key.' >&2; exit 1; }
+          # Sign only after the AppDir has been repacked by build-appimage.sh.
+          npx tauri signer sign --password "${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}" "${images[0]}"
+          test -s "${images[0]}.sig"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assets-${{ matrix.arch }}
+          if-no-files-found: error
+          path: |
+            ${{ env.OUTPUT_DIR }}/*.AppImage
+            ${{ env.OUTPUT_DIR }}/*.AppImage.sig
+            ${{ env.OUTPUT_DIR }}/*.tar.gz
+
+  assemble:
+    needs: build
+    runs-on: ubuntu-22.04
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse to modify a published release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const releases = await github.paginate(github.rest.repos.listReleases, context.repo);
+            const existing = releases.find(r => r.tag_name === process.env.RELEASE_TAG);
+            if (existing && !existing.draft) {
+              core.setFailed('This tag already has a published release; refusing to modify it.');
+            }
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: assets-*
+          merge-multiple: true
+      - name: Generate updater manifest
+        run: |
+          shopt -s nullglob
+          x86=(release-assets/*-x86_64.AppImage.sig)
+          arm=(release-assets/*-aarch64.AppImage.sig)
+          if (( ${#x86[@]} != 1 || ${#arm[@]} != 1 )); then
+            echo 'Expected exactly one signature per architecture.' >&2
+            exit 1
+          fi
+          python3 scripts/make-latest-json.py \
+            --version "$RELEASE_TAG" \
+            --release-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}" \
+            --signature "linux-x86_64=${x86[0]}" \
+            --signature "linux-aarch64=${arm[0]}" \
+            --notes-file .github/RELEASE_TEMPLATE.md \
+            --output release-assets/latest.json
+      - name: Generate checksums
+        working-directory: release-assets
+        run: |
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' | sort -z | xargs -0 sha256sum > SHA256SUMS
+      - name: Create or update draft only
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body_path: .github/RELEASE_TEMPLATE.md
+          fail_on_unmatched_files: true
+          files: release-assets/*

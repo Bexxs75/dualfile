@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-system-places-list"
+description = "Enables the system_places_list command without any pre-configured scope."
+commands.allow = ["system_places_list"]
+
+[[permission]]
+identifier = "deny-system-places-list"
+description = "Denies the system_places_list command without any pre-configured scope."
+commands.deny = ["system_places_list"]

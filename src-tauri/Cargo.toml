@@ -1,0 +1,49 @@
+[package]
+name = "dualfile"
+version = "0.1.0"
+description = "Dualfile: two-pane file manager (Tauri shell around dualfile-core)"
+edition = "2021"
+publish = false
+
+# Own workspace on purpose: the root workspace (core crate only) keeps building and
+# testing on the host without any Tauri/GTK system libraries.
+[workspace]
+
+[lib]
+name = "dualfile_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dualfile-core = { path = "../crates/dualfile-core" }
+dualfile-remote = { path = "../crates/dualfile-remote" }
+# The example plugin programs (feature `example-binaries`) are only built for the tests.
+dualfile-plugin = { path = "../crates/dualfile-plugin", default-features = false }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-updater = "2"
+tokio = { version = "1", features = ["sync", "macros"] }
+tauri-plugin-process = "2"
+tempfile = "3"
+notify-debouncer-mini = "0.6"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# System keychain (Secret Service / KWallet over D-Bus). Pure Rust: `async-secret-service` talks
+# D-Bus through zbus and `crypto-rust` does the session encryption, so no libdbus/OpenSSL is
+# needed. Other platforms use the session memory only until their keychain back end is added.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+keyring = { version = "3.6", default-features = false, features = ["async-secret-service", "crypto-rust"] }
+
+[dev-dependencies]
+dualfile-plugin = { path = "../crates/dualfile-plugin", features = ["example-binaries"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

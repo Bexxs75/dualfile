@@ -1,0 +1,27 @@
+[package]
+name = "dualfile-plugin"
+description = "Dualfile plugins: manifest, package check, sandboxed plugin process host, JSON line protocol and a plugin-backed virtual file system (no network code)"
+edition.workspace = true
+version.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[features]
+# Builds the example plugin programs (`build.rs`) for tests; the program itself does not need them.
+default = ["example-binaries"]
+example-binaries = []
+
+[dependencies]
+dualfile-core = { path = "../dualfile-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+sha2 = "0.11"
+# Landlock and seccomp are used through raw system calls (no extra crate, no system library).
+libc = "0.2"
+rustix = { version = "1", features = ["fs"] }
+base64ct = { version = "1", features = ["alloc"] }
+tempfile = "3"
+
+[dev-dependencies]
+zip = { version = "9", default-features = false, features = ["deflate-flate2", "bzip2"] }

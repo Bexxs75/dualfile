@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-app-close-now"
+description = "Enables the app_close_now command without any pre-configured scope."
+commands.allow = ["app_close_now"]
+
+[[permission]]
+identifier = "deny-app-close-now"
+description = "Denies the app_close_now command without any pre-configured scope."
+commands.deny = ["app_close_now"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-menu-set"
+description = "Enables the start_menu_set command without any pre-configured scope."
+commands.allow = ["start_menu_set"]
+
+[[permission]]
+identifier = "deny-start-menu-set"
+description = "Denies the start_menu_set command without any pre-configured scope."
+commands.deny = ["start_menu_set"]

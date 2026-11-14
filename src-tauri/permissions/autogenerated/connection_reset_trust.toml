@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-connection-reset-trust"
+description = "Enables the connection_reset_trust command without any pre-configured scope."
+commands.allow = ["connection_reset_trust"]
+
+[[permission]]
+identifier = "deny-connection-reset-trust"
+description = "Denies the connection_reset_trust command without any pre-configured scope."
+commands.deny = ["connection_reset_trust"]

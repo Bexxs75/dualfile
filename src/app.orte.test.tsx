@@ -1,0 +1,140 @@
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { expect, test, vi } from "vitest";
+import { DOCS, HOME, setupApp } from "./test-utils";
+import { activeTabOf } from "./app/state";
+import { newSshProfile } from "./components/dialogs/ConnectionProfileForm";
+import { CoreError } from "./ipc/api";
+
+test.each(["de", "en"] as const)("places keyboard, portal, bookmarks and disabled history (%s)", async language => {
+  const app = await setupApp({ language, settings: { bookmarks: [{ name: "Docs", path: DOCS, color: "blue", order: 0 }] } });
+  const pane = within(app.pane(1));
+  expect(pane.getByRole("button", { name: language === "de" ? "Zurück" : "Back" })).toBeDisabled();
+  expect(pane.getByRole("button", { name: language === "de" ? "Vor" : "Forward" })).toBeDisabled();
+  const trigger = pane.getByRole("button", { name: /Ort wählen:|Choose location:/ });
+  act(() => trigger.focus());
+  await app.user.keyboard("{ArrowDown}");
+  const menu = screen.getByRole("menu");
+  expect(app.pane(1).contains(menu)).toBe(false);
+  expect(screen.getAllByRole("menuitem")[0]).toHaveFocus();
+  await app.user.keyboard("{End}{Home}{Escape}");
+  expect(trigger).toHaveFocus();
+  expect(screen.queryByRole("menu")).toBeNull();
+  await app.user.click(trigger);
+  await app.user.click(screen.getByRole("menuitem", { name: /Docs/ }));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toBe(DOCS));
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+  expect(screen.queryByRole("button", { name: /Zum lokalen Rechner|Zurück zur Verbindung/ })).toBeNull();
+});
+
+test("history spans places, maps dead IDs, reconnects and keeps stacks on cancellation", async () => {
+  const app = await setupApp();
+  const controller = app.runtime.controller;
+  const saved = await app.api.connectionSave(newSshProfile("nas"));
+  await act(async () => { await controller.refreshConnections(); await controller.chooseConnection(0, saved.profile); });
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toMatch(/^sftp:/));
+  const first = activeTabOf(app.runtime.store.getState(), 0).path;
+  await act(async () => { await controller.navigateTo(0, HOME); });
+  await app.api.connectionDisconnect(saved.profile.id);
+  await act(async () => { await controller.refreshConnections(); });
+  const before = activeTabOf(app.runtime.store.getState(), 0);
+  const connect = vi.spyOn(app.api, "connectionConnect").mockRejectedValueOnce(new CoreError("password", "needsPassword"));
+  await app.user.click(within(app.pane(0)).getByRole("button", { name: "Zurück" }));
+  await waitFor(() => expect(connect).toHaveBeenCalled());
+  await app.user.keyboard("{Escape}{Escape}");
+  expect(activeTabOf(app.runtime.store.getState(), 0).back).toEqual(before.back);
+  expect(activeTabOf(app.runtime.store.getState(), 0).forward).toEqual(before.forward);
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+  await act(async () => { await controller.goBack(0); });
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toMatch(/^sftp:/));
+  const second = activeTabOf(app.runtime.store.getState(), 0).path;
+  expect(second).not.toBe(first);
+  act(() => within(app.pane(0)).getByRole("grid").focus());
+  await app.user.keyboard("{Alt>}{ArrowRight}{/Alt}");
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME));
+  await app.user.keyboard("{Alt>}{ArrowLeft}{/Alt}");
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(second));
+  expect(connect).toHaveBeenCalledTimes(2);
+});
+
+test("connection completion targets the chosen panel despite an active-panel change; remembers its directory", async () => {
+  const app = await setupApp();
+  const controller = app.runtime.controller;
+  const saved = await app.api.connectionSave(newSshProfile("nas"));
+  await act(async () => { await controller.refreshConnections(); });
+  const original = app.api.connectionConnect.bind(app.api);
+  let resume!: () => void;
+  vi.spyOn(app.api, "connectionConnect").mockImplementationOnce(async id => {
+    await new Promise<void>(resolve => { resume = resolve; });
+    return original(id);
+  });
+  await app.user.click(within(app.pane(1)).getByRole("button", { name: /Ort wählen/ }));
+  await app.user.click(screen.getByRole("menuitem", { name: /nas · SFTP/ }));
+  act(() => controller.setActive(0));
+  await act(async () => { resume(); });
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toMatch(/^sftp:/));
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+  const root = activeTabOf(app.runtime.store.getState(), 1).path;
+  const child = root.replace(/\/$/, "") + "/nested";
+  await app.api.makeDir(root, "nested");
+  await act(async () => { await controller.navigateTo(1, child); await controller.navigateTo(1, HOME); await controller.chooseConnection(1, saved.profile); });
+  expect(activeTabOf(app.runtime.store.getState(), 1).path).toBe(child);
+  await act(async () => { await controller.navigateTo(1, HOME); });
+  await app.api.connectionDisconnect(saved.profile.id);
+  await act(async () => { await controller.refreshConnections(); });
+  await app.user.click(within(app.pane(1)).getByRole("button", { name: /Ort wählen/ }));
+  await app.user.click(screen.getByRole("menuitem", { name: /nas · SFTP/ }));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toMatch(/!.*\/nested$/));
+});
+
+test("password and host-key flow preserves the target panel; stale bookmark resolves to the live ID", async () => {
+  const app = await setupApp();
+  const controller = app.runtime.controller;
+  const saved = await app.api.connectionSave({ ...newSshProfile("nas"), host: "demo-sftp", transport: "builtin", port: 22, user: "demo" });
+  await act(async () => { await controller.refreshConnections(); });
+  await app.user.click(within(app.pane(1)).getByRole("button", { name: /Ort wählen/ }));
+  await app.user.click(screen.getByRole("menuitem", { name: /nas · SFTP/ }));
+  expect(screen.getByRole("dialog", { name: "Passwort" })).toBeVisible();
+  act(() => controller.setActive(0));
+  await app.user.type(screen.getByLabelText("Antwort"), "demo");
+  await app.user.click(screen.getByRole("button", { name: "Verbinden" }));
+  await app.user.click(await screen.findByRole("button", { name: "Einmal vertrauen und verbinden" }));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toMatch(/^sftp:/));
+  const stale = activeTabOf(app.runtime.store.getState(), 1).path;
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+  await act(async () => { await controller.navigateTo(1, HOME); });
+  await app.api.connectionDisconnect(saved.profile.id);
+  await act(async () => { await controller.refreshConnections(); });
+  const outcome = await app.api.connectionConnect(saved.profile.id, "demo");
+  if (outcome.state === "needsTrust") await app.api.connectionTrust(saved.profile.id, "once", outcome.fingerprint);
+  await act(async () => {
+    await controller.refreshConnections();
+    app.runtime.store.dispatch({ type: "settings", update: s => ({ ...s, bookmarks: [{ name: "Old remote", path: stale, color: "blue", order: 0 }] }) });
+  });
+  await app.user.click(within(app.pane(1)).getByRole("button", { name: /Ort wählen/ }));
+  await app.user.click(screen.getByRole("menuitem", { name: /Old remote/ }));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toMatch(/^sftp:/));
+  expect(activeTabOf(app.runtime.store.getState(), 1).path).not.toBe(stale);
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+});
+
+test("cancel password during history navigation leaves both stacks intact", async () => {
+  const app = await setupApp();
+  const controller = app.runtime.controller;
+  const saved = await app.api.connectionSave({ ...newSshProfile("nas"), host: "demo-sftp", transport: "builtin", port: 22, user: "demo" });
+  const outcome = await app.api.connectionConnect(saved.profile.id, "demo");
+  if (outcome.state !== "needsTrust") throw new Error("Expected trust prompt");
+  const live = await app.api.connectionTrust(saved.profile.id, "once", outcome.fingerprint);
+  if (live.state !== "connected") throw new Error("Expected connection");
+  await act(async () => {
+    await controller.refreshConnections();
+    await controller.navigateTo(0, live.root);
+    await controller.navigateTo(0, HOME);
+  });
+  await app.api.connectionDisconnect(saved.profile.id);
+  await act(async () => { await controller.refreshConnections(); });
+  const before = activeTabOf(app.runtime.store.getState(), 0);
+  await app.user.click(within(app.pane(0)).getByRole("button", { name: "Zurück" }));
+  expect(screen.getByRole("dialog", { name: "Passwort" })).toBeVisible();
+  await app.user.keyboard("{Escape}{Escape}");
+  expect(activeTabOf(app.runtime.store.getState(), 0)).toEqual(before);
+});

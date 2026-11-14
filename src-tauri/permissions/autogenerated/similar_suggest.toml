@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-similar-suggest"
+description = "Enables the similar_suggest command without any pre-configured scope."
+commands.allow = ["similar_suggest"]
+
+[[permission]]
+identifier = "deny-similar-suggest"
+description = "Denies the similar_suggest command without any pre-configured scope."
+commands.deny = ["similar_suggest"]
