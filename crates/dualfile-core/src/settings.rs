@@ -352,8 +352,18 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         plugins: Vec::new(),
         extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
         keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
-        pane_color_left: field(&mut obj, "pane_color_left", d.pane_color_left.clone(), &mut fixes),
-        pane_color_right: field(&mut obj, "pane_color_right", d.pane_color_right.clone(), &mut fixes),
+        pane_color_left: field(
+            &mut obj,
+            "pane_color_left",
+            d.pane_color_left.clone(),
+            &mut fixes,
+        ),
+        pane_color_right: field(
+            &mut obj,
+            "pane_color_right",
+            d.pane_color_right.clone(),
+            &mut fixes,
+        ),
     };
     s.connections = load_connections(&mut obj, &mut fixes);
     s.plugins = load_plugins(&mut obj, &mut fixes);
