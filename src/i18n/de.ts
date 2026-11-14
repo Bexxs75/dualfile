@@ -365,6 +365,7 @@ const de = {
   "places.computer": "Dieser Computer",
   "places.new": "Neue Verbindung …",
   "places.home": "Home-Ordner",
+  "places.drives": "Geräte",
   "places.choose": "Ort wählen",
   "action.up": "Eine Ebene höher",
   "action.reload": "Neu laden",

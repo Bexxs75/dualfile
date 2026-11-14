@@ -368,6 +368,7 @@ const en: Record<keyof typeof de, string> = {
   "places.computer": "This computer",
   "places.new": "New connection …",
   "places.home": "Home folder",
+  "places.drives": "Devices",
   "places.choose": "Choose location",
   "action.up": "Go up",
   "action.reload": "Reload",

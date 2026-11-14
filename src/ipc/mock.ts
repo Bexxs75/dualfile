@@ -2177,6 +2177,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       pendingErrors.delete(jobId); answer(decision);
     },
     ...createMockSshPrompts(scheduler),
+    async localDrives() { return [{ name: "USB-Stick", path: "/run/media/demo/USB-Stick" }, { name: "Sicherung", path: "/run/media/demo/Sicherung" }]; },
     async systemPlacesList() { return structuredClone(mockSystemPlaces).map(p => unmountedSystemPlaces.has(p.url) ? { ...p, mountedAt: null, sources: p.sources.filter(s => s !== "mounted") } : p); },
     async systemPlacesImport(urls) {
       if (urls.length > 200 || urls.some(url => !mockSystemPlaces.some(p => p.url === url))) throw new CoreError("Unknown place", "invalidInput");

@@ -144,6 +144,7 @@ pub fn run() {
             commands::undo_list,
             commands::undo_run,
             commands::ssh_prompt_answer,
+            commands::local_drives,
             commands::system_places_list,
             commands::system_places_import,
             commands::system_mount_connect,

@@ -160,6 +160,7 @@ export function createTauriApi(): DualfileApi {
     pluginColumns: (paths, columnIds) => call("plugin_columns", { paths, columnIds }),
     pluginPreview: (path, pluginId) => call("plugin_preview", { path, pluginId: pluginId ?? null }),
 
+    localDrives: () => call("local_drives"),
     systemPlacesList: () => call("system_places_list"),
     systemPlacesImport: (urls) => call("system_places_import", { urls }),
     systemMountConnect: (profileId) => call("system_mount_connect", { profileId }),

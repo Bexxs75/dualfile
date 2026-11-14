@@ -83,6 +83,7 @@ export interface DualfileApi extends SystemApi {
   /** Runs a cancellable job; its ID arrives through onEvent before this resolves. */
   undoRun(id: number): Promise<UndoResult>;
   onUndoChanged(handler: () => void): () => void;
+  localDrives(): Promise<import("./types").Drive[]>;
   systemPlacesList(): Promise<import("./types").SystemPlace[]>;
   systemPlacesImport(urls: string[]): Promise<ConnectionEntry[]>;
   systemMountConnect(profileId: string): Promise<string>;

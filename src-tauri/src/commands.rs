@@ -800,6 +800,14 @@ pub async fn similar_thumbnail(
 }
 
 #[tauri::command]
+pub async fn local_drives(
+    window: tauri::WebviewWindow,
+) -> Result<Vec<dualfile_core::drives::Drive>, UiError> {
+    ssh_main_window(window.label())?;
+    Ok(dualfile_core::drives::local_drives())
+}
+
+#[tauri::command]
 pub async fn system_places_list(
     window: tauri::WebviewWindow,
 ) -> Result<Vec<dualfile_core::system_places::SystemPlace>, UiError> {

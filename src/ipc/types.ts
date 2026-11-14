@@ -631,6 +631,12 @@ export interface SimilarPage extends Omit<DupesPage, "groups"> { groups: Similar
 export interface SimilarChoice { groupIndex: number; trashPaths: string[] }
 export interface Thumbnail { bytes: number[]; width: number; height: number }
 
+/** A locally mounted removable drive (USB stick, external disk) under /media or /run/media. */
+export interface Drive {
+  name: string;
+  path: string;
+}
+
 export interface SystemPlace {
   sources: string[];
   name: string;

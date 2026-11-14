@@ -28,4 +28,5 @@ pub use vfs::{format_ipc_path, parse_ipc_path, LocalVfs, VPath, Vfs};
 mod remote_tests;
 
 #[cfg(unix)]
+pub mod drives;
 pub mod system_places;
