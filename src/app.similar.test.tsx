@@ -201,12 +201,19 @@ test("previews wait for visibility, run at most two and discard the closed queue
       name: "Suche starten"
     }));
     await app.runJobs();
-    await within(dialog()).findAllByRole("checkbox");
+    const boxes = await within(dialog()).findAllByRole("checkbox");
     expect(thumbnail).not.toHaveBeenCalled();
-    for (const observer of observers) observer.callback([({
-      isIntersecting: true,
-      target: observer.target!
-    } as IntersectionObserverEntry)], ({} as IntersectionObserver));
+    // Each card registers its visibility observer in an effect that runs after the card renders;
+    // wait until every card's observer is in place before signalling visibility, otherwise a
+    // not-yet-registered observer means no preview runs (a timing flake under load).
+    await waitFor(() => expect(observers.filter((o) => o.target).length).toBe(boxes.length));
+    for (const observer of observers) {
+      if (!observer.target) continue;
+      observer.callback(
+        [{ isIntersecting: true, target: observer.target } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    }
     expect(thumbnail).toHaveBeenCalledTimes(2);
     await app.user.keyboard("{Escape}");
     // Drain the actual requests and their React effects before checking the closed queue.
