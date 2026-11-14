@@ -260,6 +260,81 @@ pub fn xdg_open_command(path: &Path) -> Command {
     command
 }
 
+/// Largest remote file opened by copying it locally first. Bigger files should be fetched with
+/// a deliberate copy job rather than silently streamed into temp.
+const MAX_OPEN_EXTERNAL_BYTES: u64 = 512 << 20;
+
+/// Total size of retained temp copies of opened remote files before the oldest are removed.
+/// Bounds disk use when many files are opened in one session (the runtime dir is often a small
+/// tmpfs). At least the newest copy is always kept.
+const OPEN_TEMP_BUDGET: u64 = 2 << 30;
+
+/// Base directory for the private temp copies of opened remote files: the per-user runtime dir
+/// when the session provides one (the OS clears it at logout), otherwise the system temp dir.
+fn open_temp_base() -> PathBuf {
+    match std::env::var_os("XDG_RUNTIME_DIR") {
+        Some(dir) if !dir.is_empty() => PathBuf::from(dir),
+        _ => std::env::temp_dir(),
+    }
+}
+
+/// Local file name for an opened remote file: the last path component with any directory
+/// separators stripped, so the system opener keeps the original extension and nothing can
+/// escape the temp directory. Falls back to a neutral name.
+fn remote_open_name(path: &dualfile_core::vfs::VPath) -> String {
+    path.path()
+        .file_name()
+        .and_then(|n| n.to_str())
+        .map(|n| n.trim_matches(|c| c == '/' || c == '\\'))
+        .filter(|n| !n.is_empty() && n != &"." && n != &"..")
+        .unwrap_or("datei")
+        .to_string()
+}
+
+/// Copies a remote file into a fresh private temp directory (0700) as a 0600 file and returns
+/// the directory handle; the caller keeps it alive and dropping it removes the copy. `max` is
+/// enforced both against the reported size and while streaming, so a server that under-reports
+/// the size cannot make us write an unbounded file.
+fn fetch_remote_to_temp(
+    vfs: &dyn dualfile_core::vfs::Vfs,
+    path: &dualfile_core::vfs::VPath,
+    max: u64,
+) -> Result<(tempfile::TempDir, u64), UiError> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    if vfs.stat(path)?.size > max {
+        return Err(UiError::new(
+            "unsupported",
+            "Die Datei ist zu groß zum direkten Öffnen; bitte erst herunterladen",
+        ));
+    }
+    let base = open_temp_base();
+    let dir = tempfile::Builder::new()
+        .prefix("dualfile-open-")
+        .tempdir_in(&base)
+        .map_err(|error| io_error("Das Temp-Verzeichnis", &base, &error))?;
+    let local = dir.path().join(remote_open_name(path));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&local)
+        .map_err(|error| io_error("Die lokale Kopie", &local, &error))?;
+    let mut reader = vfs.open_read(path)?;
+    // Stream with a hard ceiling in case `stat` under-reported the size.
+    let copied = std::io::copy(&mut reader.by_ref().take(max + 1), &mut file)
+        .map_err(|error| io_error("Die lokale Kopie", &local, &error))?;
+    if copied > max {
+        return Err(UiError::new(
+            "unsupported",
+            "Die Datei ist größer als gemeldet; Öffnen abgebrochen",
+        ));
+    }
+    file.sync_all().ok();
+    Ok((dir, copied))
+}
+
 /// Decompression budget of one search inside an archive.
 const SEARCH_BYTES: u64 = 8 << 30;
 const SEARCH_TIME: Duration = Duration::from_secs(120);
@@ -297,6 +372,10 @@ pub struct AppState {
     plugins: PluginState,
     /// Cancel flag of the running lister search; one search at a time (a new one cancels it).
     search: Mutex<Option<Arc<AtomicBool>>>,
+    /// Temp copies of remote files opened externally, with each copy's size. Kept (the external
+    /// program may still have the file open) until the app exits or the total exceeds
+    /// `OPEN_TEMP_BUDGET`, when the oldest are removed. Cleared in `shutdown`. See `open_external`.
+    open_temp: Mutex<Vec<(tempfile::TempDir, u64)>>,
 }
 
 impl AppState {
@@ -359,6 +438,7 @@ impl AppState {
             router,
             submit_lock: Mutex::new(()),
             search: Mutex::new(None),
+            open_temp: Mutex::new(Vec::new()),
             // Without a watcher (e.g. no inotify) everything else keeps working.
             watcher: WatchService::new(sink, DEBOUNCE).ok(),
             plugins: PluginState::new(plugins),
@@ -950,10 +1030,29 @@ impl AppState {
             ));
         }
         if path.scheme().is_remote() {
-            return Err(UiError::new(
-                "unsupported",
-                "Dateien auf einem Server oder Plugin-Ort können nicht direkt geöffnet werden; erst herunterladen",
-            ));
+            // Server/plugin files cannot be handed to xdg-open directly: copy the file into a
+            // private temp directory first, then open that local copy.
+            let vfs = self.vfs_for_read(&path)?;
+            let (dir, bytes) = fetch_remote_to_temp(vfs.as_ref(), &path, MAX_OPEN_EXTERNAL_BYTES)?;
+            let local = dir.path().join(remote_open_name(&path));
+            let mut child = xdg_open_command(&local).spawn().map_err(|_| {
+                UiError::new("unsupported", "xdg-open konnte nicht gestartet werden")
+            })?;
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            // Keep the copy (the opened program may still have it open), bounded by a total budget:
+            // the oldest copies are dropped (their files removed) once the budget is exceeded.
+            {
+                let mut kept = self.open_temp.lock().unwrap();
+                kept.push((dir, bytes));
+                let mut total: u64 = kept.iter().map(|(_, b)| *b).sum();
+                while total > OPEN_TEMP_BUDGET && kept.len() > 1 {
+                    let (_, b) = kept.remove(0);
+                    total -= b;
+                }
+            }
+            return Ok(());
         }
         std::fs::metadata(path.path())
             .map_err(|error| io_error("Die Datei", path.path(), &error))?;
@@ -1127,6 +1226,8 @@ impl AppState {
         for id in active {
             let _ = self.jobs.wait(id);
         }
+        // Remove the temp copies of remotely opened files (dropping each TempDir deletes it).
+        self.open_temp.lock().unwrap().clear();
         self.close_connections();
         self.close_plugins();
     }
@@ -1162,6 +1263,105 @@ mod tests {
         fn emit(&self, event: CoreEventDto) {
             let _ = lock(&self.0).send(event);
         }
+    }
+
+    #[test]
+    fn remote_open_copies_into_a_private_0600_file_and_enforces_the_cap() {
+        use dualfile_core::error::Result as CoreResult;
+        use dualfile_core::vfs::{Caps, Entry, ReplaceMode, WriteFinish, WriteMode};
+        use std::io::Read;
+        use std::os::unix::fs::PermissionsExt;
+
+        struct Fake {
+            size: u64,
+            bytes: Vec<u8>,
+        }
+        impl Vfs for Fake {
+            fn list(&self, _p: &VPath) -> CoreResult<Vec<Entry>> {
+                unimplemented!()
+            }
+            fn stat(&self, _p: &VPath) -> CoreResult<Entry> {
+                Ok(Entry {
+                    name: "x".into(),
+                    kind: EntryKind::File,
+                    size: self.size,
+                    modified: None,
+                    mode: None,
+                    hidden: false,
+                    link_target: None,
+                    broken_link: false,
+                    error: None,
+                })
+            }
+            fn open_read(&self, _p: &VPath) -> CoreResult<Box<dyn Read + Send>> {
+                Ok(Box::new(std::io::Cursor::new(self.bytes.clone())))
+            }
+            fn create_write(&self, _p: &VPath, _m: WriteMode) -> CoreResult<Box<dyn WriteFinish>> {
+                unimplemented!()
+            }
+            fn mkdir(&self, _p: &VPath) -> CoreResult<()> {
+                unimplemented!()
+            }
+            fn rename(&self, _a: &VPath, _b: &VPath, _m: ReplaceMode) -> CoreResult<()> {
+                unimplemented!()
+            }
+            fn read_link(&self, _p: &VPath) -> CoreResult<String> {
+                unimplemented!()
+            }
+            fn create_symlink(&self, _t: &str, _a: &VPath) -> CoreResult<()> {
+                unimplemented!()
+            }
+            fn trash(&self, _p: &VPath) -> CoreResult<()> {
+                unimplemented!()
+            }
+            fn remove_permanent(&self, _p: &VPath) -> CoreResult<()> {
+                unimplemented!()
+            }
+            fn capabilities(&self) -> Caps {
+                Caps::default()
+            }
+        }
+
+        let vpath = parse_path("/srv/bild.png", Path::new("/home/demo")).unwrap();
+
+        // Normal copy: content and name preserved, file is private (0600).
+        let fake = Fake {
+            size: 5,
+            bytes: b"hello".to_vec(),
+        };
+        let (dir, bytes) = fetch_remote_to_temp(&fake, &vpath, 1024).unwrap();
+        assert_eq!(bytes, 5);
+        let local = dir.path().join("bild.png");
+        assert_eq!(fs::read(&local).unwrap(), b"hello");
+        assert_eq!(
+            fs::metadata(&local).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+
+        // Rejected when the reported size exceeds the cap (nothing is streamed).
+        let big = Fake {
+            size: 2000,
+            bytes: vec![0u8; 10],
+        };
+        assert!(fetch_remote_to_temp(&big, &vpath, 1024).is_err());
+
+        // Rejected when a lying stat under-reports and the stream exceeds the cap.
+        let lying = Fake {
+            size: 1,
+            bytes: vec![0u8; 4096],
+        };
+        assert!(fetch_remote_to_temp(&lying, &vpath, 1024).is_err());
+    }
+
+    #[test]
+    fn remote_open_name_keeps_only_the_last_component() {
+        let name = |p: &str| remote_open_name(&parse_path(p, Path::new("/home/demo")).unwrap());
+        // Only the final path component is ever used as the local name, so the copy always
+        // stays inside its private temp directory (and `parse_path` already rejects `..`).
+        assert_eq!(name("/srv/a/b/bild.png"), "bild.png");
+        assert_eq!(name("/srv/archiv.tar.gz"), "archiv.tar.gz");
+        // A path with no usable final name falls back to a neutral one.
+        assert_eq!(name("/"), "datei");
     }
 
     #[test]

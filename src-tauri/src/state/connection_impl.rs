@@ -1484,7 +1484,7 @@ mod tests {
     }
 
     #[test]
-    fn servers_have_no_trash_no_open_no_pack_target_no_sync_target() {
+    fn servers_have_no_trash_no_pack_target_no_sync_target() {
         let f = fixture();
         let (_, root) = f.connect_ftps();
         let base = root.trim_end_matches('/').to_owned();
@@ -1498,7 +1498,9 @@ mod tests {
             kind(f.state.restore_from_trash(std::slice::from_ref(&item))),
             "unsupported"
         );
-        assert_eq!(kind(f.state.open_external(&item)), "unsupported");
+        // Opening a remote file externally is supported now (it is copied locally first and
+        // handed to xdg-open); that path is covered without launching a desktop app by the
+        // `fetch_remote_to_temp` and `remote_open_*` unit tests in `state.rs`.
         assert!(
             f.ftp.exists("/t/a.txt"),
             "nothing was deleted as a replacement"

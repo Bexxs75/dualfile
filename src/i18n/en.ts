@@ -592,7 +592,7 @@ const en: Record<keyof typeof de, string> = {
   "error.name.tooLong": "The name is too long (255 bytes at most).",
   "error.name.exists": "The name already exists.",
   "error.openFailed": "Could not open: {name}",
-  "error.openRemote": "Server files cannot be opened externally yet: {name}. Copy it locally first.",
+  "info.openingRemote": "Opening server file: {name} …",
 
   // Notices when loading settings
   "notice.repaired": "The settings were repaired: {messages}",

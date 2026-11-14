@@ -589,7 +589,7 @@ const de = {
   "error.name.tooLong": "Der Name ist zu lang (höchstens 255 Bytes).",
   "error.name.exists": "Der Name ist bereits vorhanden.",
   "error.openFailed": "Konnte nicht geöffnet werden: {name}",
-  "error.openRemote": "Serverdateien lassen sich noch nicht direkt extern öffnen: {name}. Bitte zuerst lokal kopieren.",
+  "info.openingRemote": "Serverdatei wird geöffnet: {name} …",
 
   // Hinweise zum Laden der Einstellungen
   "notice.repaired": "Die Einstellungen wurden repariert: {messages}",
