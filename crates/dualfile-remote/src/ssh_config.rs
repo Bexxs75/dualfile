@@ -429,7 +429,10 @@ mod tests {
             ["192.168.1.5", "a", "eddie"]
         );
         fs::remove_file(dir.path().join(".ssh/config")).unwrap();
-        assert_eq!(list_hosts_in(dir.path()).unwrap(), ["192.168.1.5", "a", "eddie"]);
+        assert_eq!(
+            list_hosts_in(dir.path()).unwrap(),
+            ["192.168.1.5", "a", "eddie"]
+        );
     }
     #[test]
     fn includes_are_one_level_absolute_or_tilde_and_at_most_twenty_files() {
