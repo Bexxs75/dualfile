@@ -17,7 +17,7 @@
   --bg: #161a1f; --panel: #1c2229; --panel2: #212932; --line: #2c3540; --fg: #d9dee4; --muted: #8793a1;
   --accent: #e0a45c; --accent-ink: #1a1307; --sel: #2b3b4d; --cur: #38506a; --dir: #9cc3e6;
   --warn: #e07a5f; --ok: #7bc08a; --rowh: 28px; --fs: 13px;
-  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "DejaVu Sans Mono", monospace;
   color-scheme: dark;
 }
