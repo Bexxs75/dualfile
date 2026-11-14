@@ -8,11 +8,18 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function runDemo(runtime: AppRuntime): Promise<void> {
   const params = new URLSearchParams(location.search);
   const file = params.get("demo");
-  if (!file) return;
+  const theme = params.get("theme");
+  const accent = params.get("accent");
+  if (!file && !theme && !accent && !params.has("settings")) return;
   const { store, controller } = runtime;
   while (store.getState().phase !== "ready") await sleep(50);
-  const theme = params.get("theme");
   if (theme === "schiefer" || theme === "papier" || theme === "werkstatt") controller.updateSettings((s) => ({ ...s, theme }));
+  if (accent) controller.updateSettings((s) => ({ ...s, accent, accentAutomatic: false }));
+  if (params.has("settings")) {
+    controller.openDialog({ kind: "settings" });
+    return;
+  }
+  if (!file) return;
   await controller.navigateTo(0, `${store.getState().home}/Ansicht`);
   const index = visibleEntries(store.getState(), 0).findIndex((entry) => entry.name === file);
   if (index < 0) return;
