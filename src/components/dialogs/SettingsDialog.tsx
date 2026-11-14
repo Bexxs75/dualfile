@@ -74,6 +74,17 @@ export function SettingsDialog() {
       <div className="settings">
         <label className="fld"><span>{tr("settings.showParentEntry")}</span><input type="checkbox" checked={settings.showParentEntry !== false} onChange={event => set({ showParentEntry: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.extensionColumn")}</span><input type="checkbox" checked={settings.extensionColumn === true} onChange={event => set({ extensionColumn: event.target.checked })} /></label>
+        <div className="fld"><span>{tr("settings.paneColors.title")}</span></div>
+        <div className="fld">
+          <label htmlFor="pane-color-left">{tr("settings.paneColors.left")}</label>
+          <input id="pane-color-left" type="color" value={settings.paneColorLeft || "#1c2229"} onChange={e => set({ paneColorLeft: e.target.value })} />
+          <button type="button" className="tb" disabled={!settings.paneColorLeft} onClick={() => set({ paneColorLeft: "" })}>{tr("settings.paneColors.clear")}</button>
+        </div>
+        <div className="fld">
+          <label htmlFor="pane-color-right">{tr("settings.paneColors.right")}</label>
+          <input id="pane-color-right" type="color" value={settings.paneColorRight || "#1c2229"} onChange={e => set({ paneColorRight: e.target.value })} />
+          <button type="button" className="tb" disabled={!settings.paneColorRight} onClick={() => set({ paneColorRight: "" })}>{tr("settings.paneColors.clear")}</button>
+        </div>
         <div className="fld">
           <label htmlFor="verify-policy">{tr("settings.verifyPolicy")}</label>
           <select id="verify-policy" value={settings.verifyPolicy} aria-describedby="verify-help" onChange={e => set({ verifyPolicy: e.target.value as Settings["verifyPolicy"] })}>

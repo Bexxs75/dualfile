@@ -235,6 +235,11 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
             return Err(bad_settings("Lesezeichen"));
         }
     }
+    for c in [&s.pane_color_left, &s.pane_color_right] {
+        if !c.is_empty() && !valid_color(c) {
+            return Err(bad_settings("Fensterfarbe"));
+        }
+    }
     if s.keybindings.len() > 200 {
         return Err(bad_settings("zu viele Tastenkürzel"));
     }
@@ -512,6 +517,8 @@ mod tests {
             }],
             mirror: false,
             extension_column: false,
+            pane_color_left: String::new(),
+            pane_color_right: String::new(),
             keybindings: Default::default(),
             session: SessionDto {
                 windows: vec![WindowSessionDto {

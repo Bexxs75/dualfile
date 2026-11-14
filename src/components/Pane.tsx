@@ -284,11 +284,13 @@ export function Pane({ w }: { w: WinIdx }) {
     const entry = focusedEntry(state, source);
     return entry && entry.name !== ".." ? joinPath(folder, entry.name) : folder;
   });
+  const paneColor = useAppState((state) => (w === 0 ? state.settings.paneColorLeft : state.settings.paneColorRight));
   const preview = useAppState((state) => state.quickView && state.active !== w);
   return (
     <section
       className={`pane${active ? " active" : ""}${dropTarget ? " drop" : ""}`}
       data-pane={w}
+      {...(paneColor ? { "data-tint": "", style: { "--tint": paneColor } as React.CSSProperties } : {})}
       aria-label={tr(w === 0 ? "pane.left" : "pane.right")}
       onMouseDown={() => controller.setActive(w)}
       onDragOver={(event) => {

@@ -634,6 +634,10 @@ pub struct SettingsDto {
     #[serde(default)]
     pub extension_column: bool,
     #[serde(default)]
+    pub pane_color_left: String,
+    #[serde(default)]
+    pub pane_color_right: String,
+    #[serde(default)]
     pub keybindings: std::collections::BTreeMap<String, String>,
     pub session: SessionDto,
 }
@@ -673,6 +677,8 @@ impl From<&settings::Settings> for SettingsDto {
                 .collect(),
             mirror: s.mirror,
             extension_column: s.extension_column,
+            pane_color_left: s.pane_color_left.clone(),
+            pane_color_right: s.pane_color_right.clone(),
             keybindings: s.keybindings.clone(),
             session: SessionDto {
                 windows: s
@@ -729,6 +735,8 @@ impl From<&SettingsDto> for settings::Settings {
                 .collect(),
             mirror: s.mirror,
             extension_column: s.extension_column,
+            pane_color_left: s.pane_color_left.clone(),
+            pane_color_right: s.pane_color_right.clone(),
             keybindings: s.keybindings.clone(),
             session: settings::Session {
                 windows: s

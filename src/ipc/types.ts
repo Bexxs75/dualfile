@@ -417,6 +417,9 @@ export interface Settings {
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
   extensionColumn?: boolean;
+  /** Optional tint (hex) per window; missing/empty = no tint. */
+  paneColorLeft?: string;
+  paneColorRight?: string;
   /** Umbelegte Tastenkürzel: Befehl → Spec (z. B. "F9", "Ctrl+Shift+G"); fehlt ein Befehl, gilt die Standardtaste. */
   keybindings?: Record<string, string>;
   checkUpdatesOnStart?: boolean;

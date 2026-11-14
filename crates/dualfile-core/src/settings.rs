@@ -46,6 +46,9 @@ pub struct Settings {
     pub plugins: Vec<PluginEntry>,
     /// Show a separate file-extension column in the list (off by default).
     pub extension_column: bool,
+    /// Optional tint colour (hex) per window; empty means no tint.
+    pub pane_color_left: String,
+    pub pane_color_right: String,
     /// User-remapped keyboard shortcuts (command id → key spec); empty means all defaults.
     pub keybindings: BTreeMap<String, String>,
 }
@@ -74,6 +77,8 @@ impl Default for Settings {
             connections: vec![],
             plugins: vec![],
             extension_column: false,
+            pane_color_left: String::new(),
+            pane_color_right: String::new(),
             keybindings: BTreeMap::new(),
         }
     }
@@ -347,6 +352,8 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         plugins: Vec::new(),
         extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
         keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
+        pane_color_left: field(&mut obj, "pane_color_left", d.pane_color_left.clone(), &mut fixes),
+        pane_color_right: field(&mut obj, "pane_color_right", d.pane_color_right.clone(), &mut fixes),
     };
     s.connections = load_connections(&mut obj, &mut fixes);
     s.plugins = load_plugins(&mut obj, &mut fixes);
