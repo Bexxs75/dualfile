@@ -279,6 +279,11 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       if (!entry.brokenLink && (await navigateTo(w, path))) return;
       if (entry.brokenLink) return toast(tr("error.openFailed", { name: entry.name }), "error");
     }
+    if (parseRemotePath(path)) {
+      // Remote files cannot be handed to the system opener directly; say so clearly
+      // instead of letting xdg-open fail with an opaque error (tester report).
+      return toast(tr("error.openRemote", { name: entry.name }), "error");
+    }
     try {
       await api.openExternal(path);
     } catch (error) {
