@@ -26,6 +26,7 @@ function Tabs({ w }: { w: WinIdx }) {
           <span
             key={index}
             className={selected ? "tab on" : "tab"}
+            onContextMenu={(event) => { event.preventDefault(); controller.openTabMenu(w, index, event.clientX, event.clientY); }}
           >
             <button
               type="button"

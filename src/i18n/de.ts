@@ -371,6 +371,7 @@ const de = {
   "action.home": "Persönlicher Ordner",
   "action.newTab": "Neuer Tab",
   "action.closeTab": "Tab schließen",
+  "action.closeOtherTabs": "Andere Tabs schließen",
   "action.changeTarget": "Ziel ändern …",
   "action.close": "Schließen",
   "action.ok": "OK",

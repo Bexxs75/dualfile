@@ -44,6 +44,11 @@ export function closeTab(w: WindowState, index: number = w.activeTab): WindowSta
   return { tabs, activeTab: active };
 }
 
+export function closeOthers(w: WindowState, keep: number): WindowState {
+  if (keep < 0 || keep >= w.tabs.length || w.tabs.length <= 1) return w;
+  return { tabs: [w.tabs[keep]!], activeTab: 0 };
+}
+
 export const nextTab = (w: WindowState): WindowState => ({ ...w, activeTab: (w.activeTab + 1) % w.tabs.length });
 export const prevTab = (w: WindowState): WindowState => ({
   ...w,

@@ -17,6 +17,7 @@ export function ContextMenu() {
     const w = state.menu.w;
     return visibleEntries(state, w).filter(entry => activeTabOf(state, w).selection.selected.has(entry.name)).length > 1;
   });
+  const tabCount = useAppState(state => (state.menu ? state.windows[state.menu.w].tabs.length : 0));
 
   useEffect(() => {
     if (!menu) return;
@@ -32,7 +33,11 @@ export function ContextMenu() {
     controller.closeMenu();
     action();
   };
-  const items: { text: TranslationKey; action: () => void; disabled?: boolean }[] = menu.background ? [
+  const items: { text: TranslationKey; action: () => void; disabled?: boolean }[] = menu.tab !== undefined ? [
+    { text: "action.newTab", action: () => controller.newTab(menu.w) },
+    { text: "action.closeTab", action: () => controller.closeTab(menu.w, menu.tab), disabled: tabCount <= 1 },
+    { text: "action.closeOtherTabs", action: () => controller.closeOtherTabs(menu.w, menu.tab!), disabled: tabCount <= 1 },
+  ] : menu.background ? [
     { text: "action.newFolder", action: () => controller.command("makeDir"), disabled: readOnly },
     { text: "action.refresh", action: () => controller.command("refresh") },
     { text: "menu.view.hidden", action: () => controller.command("toggleHidden") },

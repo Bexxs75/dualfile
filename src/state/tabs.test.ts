@@ -5,6 +5,7 @@ import {
   activeTab,
   back,
   closeTab,
+  closeOthers,
   createWindow,
   forward,
   fromSession,
@@ -77,6 +78,16 @@ describe("Tabs anlegen und schließen", () => {
   it("closeTab mit ungültigem Index ändert nichts", () => {
     const w = newTab(createWindow("/a"));
     expect(closeTab(w, 7)).toBe(w);
+  });
+  it("closeOthers behält nur den gewählten Tab", () => {
+    const w = navigate(newTab(navigate(newTab(createWindow("/1")), "/2")), "/3");
+    const kept = closeOthers(w, 1);
+    expect(kept.tabs.map((t) => t.path)).toEqual(["/2"]);
+    expect(kept.activeTab).toBe(0);
+  });
+  it("closeOthers lässt einen einzelnen Tab unverändert", () => {
+    const w = createWindow("/a");
+    expect(closeOthers(w, 0)).toBe(w);
   });
 });
 

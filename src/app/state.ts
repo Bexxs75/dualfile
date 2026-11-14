@@ -56,6 +56,8 @@ export interface DragState {
 
 export interface ContextMenuState {
   background?: boolean;
+  /** Set when the menu was opened on a tab; its index. */
+  tab?: number;
   w: WinIdx;
   x: number;
   y: number;
