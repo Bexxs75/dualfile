@@ -13,6 +13,7 @@ import {
   defaultAccent,
 } from "../../themes/tokens";
 import { SystemSettings } from "./SystemDialogs";
+import { KeybindingsSettings } from "./KeybindingsSettings";
 import { Modal } from "../Modal";
 
 function Segmented<V extends string>({
@@ -169,6 +170,7 @@ export function SettingsDialog() {
             onChange={(language) => set({ language })}
           />
         </div>
+        <KeybindingsSettings />
         <SystemSettings />
       </div>
     </Modal>

@@ -72,7 +72,7 @@ export function useGlobalKeys(store: AppStore, controller: Controller): void {
 
       // Outside the file lists, Tab follows the native order (toolbar and toast buttons).
       if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey && target?.closest("button")) return;
-      const command = mapKey(event, context);
+      const command = mapKey(event, context, state.settings.keybindings);
       if (command) {
         event.preventDefault();
         controller.command(command);

@@ -417,6 +417,8 @@ export interface Settings {
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
   extensionColumn?: boolean;
+  /** Umbelegte Tastenkürzel: Befehl → Spec (z. B. "F9", "Ctrl+Shift+G"); fehlt ein Befehl, gilt die Standardtaste. */
+  keybindings?: Record<string, string>;
   checkUpdatesOnStart?: boolean;
   trayEnabled?: boolean;
   startMenuPrompted?: boolean;

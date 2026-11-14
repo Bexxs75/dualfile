@@ -3,6 +3,7 @@ use crate::error::{from_io, Error, Result};
 use crate::plugins::{validate_plugins, PluginEntry, MAX_PLUGINS};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
@@ -43,6 +44,10 @@ pub struct Settings {
     pub connections: Vec<ConnectionProfile>,
     /// Plugins the user confirmed (pinned manifest hash and granted options; no secrets).
     pub plugins: Vec<PluginEntry>,
+    /// Show a separate file-extension column in the list (off by default).
+    pub extension_column: bool,
+    /// User-remapped keyboard shortcuts (command id → key spec); empty means all defaults.
+    pub keybindings: BTreeMap<String, String>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -68,6 +73,8 @@ impl Default for Settings {
             session: Session::default(),
             connections: vec![],
             plugins: vec![],
+            extension_column: false,
+            keybindings: BTreeMap::new(),
         }
     }
 }
@@ -338,6 +345,8 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         session: field(&mut obj, "session", d.session.clone(), &mut fixes),
         connections: Vec::new(),
         plugins: Vec::new(),
+        extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
+        keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
     };
     s.connections = load_connections(&mut obj, &mut fixes);
     s.plugins = load_plugins(&mut obj, &mut fixes);

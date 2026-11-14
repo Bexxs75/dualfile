@@ -235,6 +235,14 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
             return Err(bad_settings("Lesezeichen"));
         }
     }
+    if s.keybindings.len() > 200 {
+        return Err(bad_settings("zu viele Tastenkürzel"));
+    }
+    for (command, spec) in &s.keybindings {
+        if !plain_text(command, 64) || !plain_text(spec, 64) {
+            return Err(bad_settings("Tastenkürzel"));
+        }
+    }
     let windows = &s.session.windows;
     if windows.len() > 8 || (!windows.is_empty() && s.session.active_window >= windows.len()) {
         return Err(bad_settings("Fenster"));
@@ -503,6 +511,8 @@ mod tests {
                 order: 0,
             }],
             mirror: false,
+            extension_column: false,
+            keybindings: Default::default(),
             session: SessionDto {
                 windows: vec![WindowSessionDto {
                     tabs: vec![TabDto {

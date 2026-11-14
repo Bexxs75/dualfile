@@ -631,6 +631,10 @@ pub struct SettingsDto {
     pub language: String,
     pub bookmarks: Vec<BookmarkDto>,
     pub mirror: bool,
+    #[serde(default)]
+    pub extension_column: bool,
+    #[serde(default)]
+    pub keybindings: std::collections::BTreeMap<String, String>,
     pub session: SessionDto,
 }
 
@@ -668,6 +672,8 @@ impl From<&settings::Settings> for SettingsDto {
                 })
                 .collect(),
             mirror: s.mirror,
+            extension_column: s.extension_column,
+            keybindings: s.keybindings.clone(),
             session: SessionDto {
                 windows: s
                     .session
@@ -722,6 +728,8 @@ impl From<&SettingsDto> for settings::Settings {
                 })
                 .collect(),
             mirror: s.mirror,
+            extension_column: s.extension_column,
+            keybindings: s.keybindings.clone(),
             session: settings::Session {
                 windows: s
                     .session

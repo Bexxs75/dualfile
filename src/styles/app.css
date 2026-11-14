@@ -466,3 +466,16 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .search-hit-line { color: var(--muted); font: 500 .85em var(--font-mono); }
 .search-hit-excerpt { grid-column: 1 / 3; color: var(--muted); font: .9em var(--font-mono); white-space: pre-wrap; overflow: hidden; }
 .search-summary { color: var(--muted); margin-top: 10px; display: flex; align-items: center; gap: 10px; }
+
+/* Tastenkürzel-Editor */
+.keys-group { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.keys-group h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.keys-list { display: flex; flex-direction: column; }
+.keys-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.keys-name { overflow: hidden; text-overflow: ellipsis; }
+.keys-key { font: 500 .9em var(--font-mono); padding: 2px 7px; border-radius: 4px; background: var(--raised); min-width: 4.5em; text-align: center; }
+.keys-key.custom { background: var(--accent-soft); color: var(--accent); }
+.keys-key.capturing { outline: 1px solid var(--accent); }
+.keys-actions { display: flex; gap: 6px; }
+.keys-msg { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--warn); }
+.keys-foot { display: flex; justify-content: flex-end; }
