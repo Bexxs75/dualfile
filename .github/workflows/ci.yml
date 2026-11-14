@@ -31,7 +31,8 @@ jobs:
       - run: npx vitest run
       - run: cargo fmt --check
       - run: cargo clippy --workspace -- -D warnings
-      - run: cargo test --workspace --all-targets   # --all-targets builds examples (askpass_helper) the tests rely on
+      - run: cargo build --workspace --examples      # plain runnable askpass_helper the askpass test exec()s
+      - run: cargo test --workspace
       # src-tauri deliberately has its own workspace.
       - name: Check Tauri workspace
         working-directory: src-tauri
