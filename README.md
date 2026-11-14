@@ -5,6 +5,7 @@
 <p align="center"><strong>Two panes, side by side. Browse local folders, archives and remote servers, and move files between them.</strong></p>
 
 <p align="center">
+  <a href="https://github.com/Bexxs75/dualfile/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Bexxs75/dualfile/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/Bexxs75/dualfile/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Bexxs75/dualfile"></a>
   <a href="https://github.com/Bexxs75/dualfile/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Bexxs75/dualfile/total?label=downloads&color=brightgreen"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
