@@ -6,6 +6,7 @@ pub mod dupes;
 pub mod error;
 pub mod jobs;
 pub mod lister;
+pub mod mediatags;
 pub mod multirename;
 pub mod names;
 pub mod ops;

@@ -3,7 +3,7 @@
 // werden hier nie ausgewertet, sondern vom Aufrufer über `api.regexReplace` (Kern, lineare Laufzeit)
 // beschafft und als `RegexOutcome` übergeben.
 import type { TranslationKey, TranslationParams } from "../i18n";
-import type { EntryKind, RegexResult, RenameItem } from "../ipc/types";
+import type { EntryKind, MediaTags, RegexResult, RenameItem } from "../ipc/types";
 import { nameError } from "./names";
 
 export type CaseMode = "keep" | "upper" | "lower" | "words" | "first";
@@ -50,7 +50,11 @@ export interface RenameSource {
   kind: EntryKind;
   /** Änderungszeit in Millisekunden seit 1970 oder null. */
   modified: number | null;
+  /** EXIF-/ID3-Tags für `[X..]`/`[T..]`; leere Werte, solange nichts geladen ist. */
+  tags: MediaTags;
 }
+
+export const emptyTags: MediaTags = { taken: "", camera: "", artist: "", title: "", album: "", track: 0 };
 
 export interface MultiRenameInput {
   /** In der Reihenfolge der Dateiliste; danach richtet sich der Zähler. */
@@ -60,6 +64,25 @@ export interface MultiRenameInput {
   parentName: string;
   /** Alle Namen des Ordners (auch die nicht ausgewählten, auch versteckte). */
   existingNames: readonly string[];
+  /** true, solange die EXIF-/ID3-Tags noch geladen werden: Masken mit `[X..]`/`[T..]` sperren. */
+  tagsPending?: boolean;
+}
+
+/** True, wenn eine Maske einen EXIF-/ID3-Platzhalter (`[X..]`/`[T..]`) nutzt; die braucht geladene Tags. */
+export function maskUsesTags(mask: string): boolean {
+  for (let i = 0; i < mask.length; i += 1) {
+    if (mask.charAt(i) !== "[") continue;
+    if (mask.charAt(i + 1) === "[") {
+      i += 1;
+      continue;
+    }
+    const close = mask.indexOf("]", i + 1);
+    if (close < 0) break;
+    const first = mask.charAt(i + 1);
+    if ((first === "X" || first === "T") && mask.charAt(i + 1) !== "=") return true;
+    i = close;
+  }
+  return false;
 }
 
 export type RowStatus = "unchanged" | "ok" | "error";
@@ -113,6 +136,7 @@ interface MaskContext {
   ext: string;
   index: number;
   modified: number | null;
+  tags: MediaTags;
   parentName: string;
   rules: MultiRenameRules;
 }
@@ -162,6 +186,17 @@ function dateText(letter: string, context: MaskContext, token: string): string {
   }
 }
 
+/** Tag-Werte dürfen keine Pfadtrenner oder Zeilenumbrüche in den Dateinamen bringen. */
+const safe = (text: string): string => text.replace(/[/\\\r\n]/g, "").trim();
+
+function exifText(letter: string, context: MaskContext, token: string): string {
+  const match = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/.exec(context.tags.taken);
+  if (!match) throw new MaskError("multirename.error.noExifDate", { token });
+  const index = "YMDhms".indexOf(letter);
+  if (index < 0) throw new MaskError("multirename.error.placeholder", { token });
+  return match[index + 1] as string;
+}
+
 function placeholder(token: string, context: MaskContext): string {
   if (token.startsWith("=")) return token.slice(1);
   const letter = token.charAt(0);
@@ -174,6 +209,19 @@ function placeholder(token: string, context: MaskContext): string {
     if (letter === "C") return counterText(context);
     if ("YMDhms".includes(letter) && letter !== "") return dateText(letter, context, token);
     if (letter === "P") return context.parentName;
+  }
+  if (letter === "X" && rest.length === 1) return rest === "c" ? safe(context.tags.camera) : exifText(rest, context, token);
+  if (letter === "T" && rest.length === 1) {
+    switch (rest) {
+      case "a":
+        return safe(context.tags.artist);
+      case "t":
+        return safe(context.tags.title);
+      case "b":
+        return safe(context.tags.album);
+      case "n":
+        return String(context.tags.track);
+    }
   }
   throw new MaskError("multirename.error.placeholder", { token });
 }
@@ -280,7 +328,7 @@ function maskStage(input: MultiRenameInput): Stage[] {
   const { rules, parentName } = input;
   return input.sources.map((source, index): Stage => {
     const { base, ext } = splitName(source.name, source.kind);
-    const context: MaskContext = { base, ext, index, modified: source.modified, parentName, rules };
+    const context: MaskContext = { base, ext, index, modified: source.modified, tags: source.tags, parentName, rules };
     try {
       const name = evaluateMask(rules.nameMask, context);
       if (source.kind === "dir") return { name };
@@ -308,6 +356,12 @@ export function planRename(input: MultiRenameInput, regex?: RegexOutcome): Renam
   if (problem) {
     const rows = sources.map((s): PreviewRow => ({ oldName: s.name, newName: "", status: "error", errorKey: problem }));
     return { rows, rulesError: { key: problem }, counts: { ok: 0, unchanged: 0, error: rows.length }, items: [], canApply: false };
+  }
+  // Masken mit EXIF-/ID3-Platzhaltern dürfen nicht angewandt werden, solange die Tags noch laden
+  // (sonst entstünden Namen aus leeren Werten); nach dem Laden greift die normale Zeilenprüfung.
+  if (input.tagsPending && (maskUsesTags(rules.nameMask) || maskUsesTags(rules.extMask))) {
+    const rows = sources.map((s): PreviewRow => ({ oldName: s.name, newName: "", status: "error", errorKey: "multirename.error.tagsLoading" }));
+    return { rows, rulesError: { key: "multirename.error.tagsLoading" }, counts: { ok: 0, unchanged: 0, error: rows.length }, items: [], canApply: false };
   }
 
   const stages = maskStage(input);
@@ -469,6 +523,14 @@ export const PLACEHOLDERS: readonly { insert: string; label: TranslationKey }[] 
   { insert: "[h]", label: "multirename.ph.hour" },
   { insert: "[m]", label: "multirename.ph.minute" },
   { insert: "[s]", label: "multirename.ph.second" },
+  { insert: "[XY]", label: "multirename.ph.exifYear" },
+  { insert: "[XM]", label: "multirename.ph.exifMonth" },
+  { insert: "[XD]", label: "multirename.ph.exifDay" },
+  { insert: "[Xc]", label: "multirename.ph.exifCamera" },
+  { insert: "[Ta]", label: "multirename.ph.id3Artist" },
+  { insert: "[Tt]", label: "multirename.ph.id3Title" },
+  { insert: "[Tb]", label: "multirename.ph.id3Album" },
+  { insert: "[Tn]", label: "multirename.ph.id3Track" },
   { insert: "[P]", label: "multirename.ph.parent" },
   { insert: "[=Text]", label: "multirename.ph.literal" },
   { insert: "[[", label: "multirename.ph.openBracket" },

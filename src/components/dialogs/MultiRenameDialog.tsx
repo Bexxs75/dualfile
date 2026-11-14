@@ -1,9 +1,11 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useAppState, useController, useT } from "../../app/context";
 import type { Dialog } from "../../app/state";
+import type { MediaTags } from "../../ipc/types";
 import {
   PLACEHOLDERS,
   defaultRules,
+  emptyTags,
   needsRegex,
   planRename,
   regexTargets,
@@ -13,7 +15,7 @@ import {
   type RegexOutcome,
   type RenamePreset,
 } from "../../state/multirename";
-import { baseName } from "../../state/paths";
+import { baseName, joinPath } from "../../state/paths";
 import { Modal } from "../Modal";
 
 /** Wartezeit, bis eine Regex-Vorschau beim Kern angefragt wird (Tippen löst nicht jeden Buchstaben aus). */
@@ -77,9 +79,31 @@ export function MultiRenameDialog({ dialog }: { dialog: MultiRenameState }) {
     }),
     [nameMask, extMask, start, step, digits, search, replace, searchMode, ignoreCase, all, caseMode],
   );
+  // EXIF-/ID3-Tags einmal beim Öffnen laden; bis dahin leere Tags, danach wird die Vorschau neu berechnet.
+  const [tags, setTags] = useState<readonly MediaTags[] | null>(null);
+  useEffect(() => {
+    let current = true;
+    controller.api
+      .mediaTags(dialog.sources.map((source) => joinPath(dialog.dir, source.name)))
+      .then((loaded) => {
+        if (current) setTags(loaded);
+      })
+      // Ein Ladefehler zählt wie „keine Tags vorhanden" (leere Werte, nicht mehr `pending`),
+      // damit Masken mit Tag-Platzhaltern nicht dauerhaft gesperrt bleiben.
+      .catch(() => {
+        if (current) setTags(dialog.sources.map(() => emptyTags));
+      });
+    return () => {
+      current = false;
+    };
+  }, [controller, dialog.dir, dialog.sources]);
+  const sources = useMemo(
+    () => (tags === null || tags.length !== dialog.sources.length ? dialog.sources : dialog.sources.map((source, i) => ({ ...source, tags: tags[i] ?? source.tags }))),
+    [dialog.sources, tags],
+  );
   const input: MultiRenameInput = useMemo(
-    () => ({ sources: dialog.sources, rules, parentName: baseName(dialog.dir) === "/" ? "" : baseName(dialog.dir), existingNames: dialog.existing }),
-    [dialog, rules],
+    () => ({ sources, rules, parentName: baseName(dialog.dir) === "/" ? "" : baseName(dialog.dir), existingNames: dialog.existing, tagsPending: tags === null }),
+    [dialog, sources, rules, tags],
   );
 
   // Regex: nur der Kern wertet aus. Anfrage entprellt; Antworten zu älteren Eingaben werden verworfen.

@@ -595,6 +595,21 @@ impl AppState {
         Ok(file_info_dto(&lister::file_info(&*vfs, &path)?))
     }
 
+    /// Reads EXIF/ID3 tags for the given files, for the multi-rename placeholders. Only local
+    /// files are read (metadata parsing needs a real path); remote, archive or unreadable paths
+    /// yield empty tags, and the batch never fails as a whole.
+    pub fn media_tags(&self, paths: Vec<String>) -> Vec<dualfile_core::mediatags::MediaTags> {
+        paths
+            .into_iter()
+            .map(|raw| match self.path(&raw) {
+                Ok(path) if path.scheme() == Scheme::Local => {
+                    dualfile_core::mediatags::read_tags(path.path())
+                }
+                _ => dualfile_core::mediatags::MediaTags::default(),
+            })
+            .collect()
+    }
+
     /// The core cuts `len` to `lister::MAX_BLOCK`; the UI's idea of sizes is never trusted.
     pub fn read_block(&self, path: &str, offset: u64, len: u64) -> Result<Vec<u8>, UiError> {
         let path = self.path(path)?;

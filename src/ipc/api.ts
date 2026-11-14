@@ -155,6 +155,8 @@ export interface DualfileApi extends SystemApi {
   watch(paths: string[]): Promise<void>;
   /** Größe, Art und Änderungszeit einer Datei für den Lister; folgt Links, nur reguläre Dateien. */
   fileInfo(path: string): Promise<FileInfo>;
+  /** EXIF-/ID3-Metadaten der Dateien (nur lokale; sonst leere Felder) für die Umbenennen-Platzhalter. */
+  mediaTags(paths: string[]): Promise<import("./types").MediaTags[]>;
   /**
    * Liest höchstens `len` Bytes ab `offset` (der Kern kürzt auf `MAX_BLOCK_BYTES`; am Dateiende
    * kürzer, dahinter leer). Rohe Bytes, die Dekodierung macht die Oberfläche.

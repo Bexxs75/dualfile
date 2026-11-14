@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { createMockApi } from "../ipc/mock";
-import type { EntryKind } from "../ipc/types";
+import type { EntryKind, MediaTags } from "../ipc/types";
 import {
   applyCase,
   defaultRules,
+  emptyTags,
   deletePreset,
   needsRegex,
   parseRules,
@@ -20,8 +21,8 @@ import {
 
 const MODIFIED = new Date(2026, 10, 5, 8, 7, 9).getTime(); // lokale Zeit: 05.11.2026 08:07:09
 
-const file = (name: string, modified: number | null = MODIFIED): RenameSource => ({ name, kind: "file", modified });
-const dir = (name: string): RenameSource => ({ name, kind: "dir" as EntryKind, modified: MODIFIED });
+const file = (name: string, modified: number | null = MODIFIED): RenameSource => ({ name, kind: "file", modified, tags: emptyTags });
+const dir = (name: string): RenameSource => ({ name, kind: "dir" as EntryKind, modified: MODIFIED, tags: emptyTags });
 
 function input(sources: RenameSource[], rules: Partial<MultiRenameRules> = {}, extra: Partial<MultiRenameInput> = {}): MultiRenameInput {
   return {
@@ -346,5 +347,35 @@ describe("Voreinstellungen", () => {
     const raw = [{ name: "gut", rules }, { name: "", rules }, { name: "schlecht", rules: { ...rules, all: "ja" } }, { name: "gut", rules }, 7, null];
     expect(sanitizePresets(raw).map((p) => p.name)).toEqual(["gut"]);
     expect(sanitizePresets("kein Array")).toEqual([]);
+  });
+});
+
+describe("Mehrfach-Umbenennen: EXIF-/ID3-Platzhalter", () => {
+  const tagged = (name: string, tags: Partial<MediaTags>): RenameSource => ({ ...file(name), tags: { ...emptyTags, ...tags } });
+  test("EXIF-Datum und Kamera", () => {
+    const s = tagged("a.jpg", { taken: "2021:07:15 14:32:08", camera: "Canon EOS R5" });
+    expect(names(input([s], { nameMask: "[XY]-[XM]-[XD]_[Xh][Xm][Xs] [Xc]" }))).toEqual(["2021-07-15_143208 Canon EOS R5.jpg"]);
+  });
+  test("fehlendes EXIF-Datum ist ein Fehler, leere Kamera nicht", () => {
+    const s = tagged("a.jpg", {});
+    expect(planRename(input([s], { nameMask: "[XY]" })).rows[0]).toMatchObject({ status: "error", errorKey: "multirename.error.noExifDate", errorParams: { token: "XY" } });
+    expect(planRename(input([s], { nameMask: "x[Xc]" })).rows[0]).toMatchObject({ newName: "x.jpg" });
+  });
+  test("unbekannter Buchstabe ist ein Platzhalterfehler", () => {
+    const s = tagged("a.jpg", { taken: "2021:07:15 14:32:08" });
+    expect(planRename(input([s], { nameMask: "[Xz]" })).rows[0]).toMatchObject({ errorKey: "multirename.error.placeholder" });
+    expect(planRename(input([s], { nameMask: "[Tz]" })).rows[0]).toMatchObject({ errorKey: "multirename.error.placeholder" });
+  });
+  test("ID3-Tags, pfadunsichere Zeichen werden entfernt", () => {
+    const s = tagged("a.mp3", { artist: "AC/DC", title: "Back\\In\nBlack", album: "Alb", track: 3 });
+    expect(names(input([s], { nameMask: "[Ta] - [Tt] - [Tb] - [Tn]" }))).toEqual(["ACDC - BackInBlack - Alb - 3.mp3"]);
+  });
+  test("solange die Tags laden, sperren Tag-Masken, andere nicht", () => {
+    const s = tagged("a.mp3", { artist: "X" });
+    const pending = planRename({ ...input([s], { nameMask: "[Ta]" }), tagsPending: true });
+    expect(pending.canApply).toBe(false);
+    expect(pending.rulesError?.key).toBe("multirename.error.tagsLoading");
+    // Eine Maske ohne Tag-Platzhalter bleibt auch während des Ladens anwendbar.
+    expect(planRename({ ...input([s], { nameMask: "neu" }), tagsPending: true }).canApply).toBe(true);
   });
 });

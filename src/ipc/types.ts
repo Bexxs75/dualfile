@@ -35,6 +35,18 @@ export interface FileInfo {
   mimeGuess: string;
 }
 
+/** EXIF-/ID3-Metadaten einer Datei für die Umbenennen-Platzhalter; leere Felder bei Fehlen. */
+export interface MediaTags {
+  /** EXIF-Aufnahmezeitpunkt als "YYYY:MM:DD HH:MM:SS", leer wenn nicht vorhanden. */
+  taken: string;
+  camera: string;
+  artist: string;
+  title: string;
+  album: string;
+  /** ID3-Titelnummer, 0 wenn nicht vorhanden. */
+  track: number;
+}
+
 export type SearchDirection = "forward" | "backward";
 
 /**

@@ -8,7 +8,7 @@ import type { Command } from "../state/keymap";
 import { bookmarkNumber } from "../state/keymap";
 import * as bookmarkOps from "../state/bookmarks";
 import { nameError } from "../state/names";
-import { deletePreset, sanitizePresets, savePreset, type MultiRenameRules } from "../state/multirename";
+import { deletePreset, emptyTags, sanitizePresets, savePreset, type MultiRenameRules } from "../state/multirename";
 import {
   confirmDelete as confirmDeleteToken,
   deleteDialogModel,
@@ -559,7 +559,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const names = new Set(targetNames(w));
     const sources = entriesOf(w)
       .filter((entry) => names.has(entry.name))
-      .map((entry) => ({ name: entry.name, kind: entry.kind, modified: entry.modified }));
+      .map((entry) => ({ name: entry.name, kind: entry.kind, modified: entry.modified, tags: emptyTags }));
     dispatch({
       type: "dialog",
       dialog: { kind: "multiRename", w, dir: activeTabOf(get(), w).path, sources, existing: get().listings[w].entries.map((e) => e.name) },

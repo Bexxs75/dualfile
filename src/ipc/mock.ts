@@ -52,6 +52,7 @@ import type {
   EntryKind,
   FileInfo,
   FileKind,
+  MediaTags,
   JobStatus,
   JobTitle,
   Listing,
@@ -2619,6 +2620,21 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       const { node, name } = regularFile(path);
       const { kind, mime } = mockKind(mockFileBytes(name, node.entry.size, 0, 4096), name);
       return { size: node.entry.size, kind, modified: node.entry.modified, mimeGuess: mime };
+    },
+
+    async mediaTags(paths): Promise<MediaTags[]> {
+      // Sample tags by extension so the rename placeholders can be exercised without real files.
+      const empty = (): MediaTags => ({ taken: "", camera: "", artist: "", title: "", album: "", track: 0 });
+      return paths.map((p) => {
+        const name = (p.split("/").pop() ?? "").toLowerCase();
+        if (/\.(jpe?g|png|tiff?|heic|webp)$/.test(name)) {
+          return { taken: "2021:07:15 14:32:08", camera: "Canon EOS R5", artist: "", title: "", album: "", track: 0 };
+        }
+        if (/\.(mp3|flac|m4a|ogg)$/.test(name)) {
+          return { taken: "", camera: "", artist: "Beispielkünstler", title: "Beispieltitel", album: "Beispielalbum", track: 3 };
+        }
+        return empty();
+      });
     },
 
     async readBlock(path, offset, len): Promise<Uint8Array> {

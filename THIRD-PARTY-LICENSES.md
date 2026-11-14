@@ -8,7 +8,7 @@ platform-specific dependencies. This is an inventory, not a list of files shippe
 Rust metadata: `vendor/*/Cargo.toml`; npm: lockfile, falling back to matching installed package metadata.
 Use `--vendor DIR` for an offline metadata mirror. No downloads or dependency resolution are performed.
 
-Packages: **847**. Unknown: **0**.
+Packages: **850**. Unknown: **0**.
 
 UNKNOWN is a release-review blocker: provide matching source metadata and regenerate before distribution.
 License expressions are upstream declarations; alternatives (OR) and exceptions need individual review.
@@ -253,6 +253,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | icu_properties | 2.4.0 | Unicode-3.0 |
 | Cargo | icu_properties_data | 2.4.0 | Unicode-3.0 |
 | Cargo | icu_provider | 2.4.0 | Unicode-3.0 |
+| Cargo | id3 | 1.17.3 | MIT |
 | Cargo | ident_case | 1.0.1 | MIT/Apache-2.0 |
 | Cargo | idna | 1.1.0 | MIT OR Apache-2.0 |
 | Cargo | idna_adapter | 1.2.2 | Apache-2.0 OR MIT |
@@ -282,6 +283,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | js-sys | 0.3.107 | MIT OR Apache-2.0 |
 | Cargo | json-patch | 4.2.0 | MIT/Apache-2.0 |
 | Cargo | jsonptr | 0.7.1 | MIT OR Apache-2.0 |
+| Cargo | kamadak-exif | 0.6.2 | BSD-2-Clause |
 | Cargo | keccak | 0.2.2 | Apache-2.0 OR MIT |
 | Cargo | kem | 0.3.0 | Apache-2.0 OR MIT |
 | Cargo | keyboard-types | 0.8.3 | MIT OR Apache-2.0 |
@@ -319,6 +321,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | module-lattice | 0.2.3 | Apache-2.0 OR MIT |
 | Cargo | moxcms | 0.8.1 | BSD-3-Clause OR Apache-2.0 |
 | Cargo | muda | 0.20.0 | Apache-2.0 OR MIT |
+| Cargo | mutate_once | 0.1.2 | BSD-2-Clause |
 | Cargo | ndk | 0.9.0 | MIT OR Apache-2.0 |
 | Cargo | ndk-context | 0.1.1 | MIT OR Apache-2.0 |
 | Cargo | ndk-sys | 0.6.0+11769913 | MIT OR Apache-2.0 |

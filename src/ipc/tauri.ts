@@ -126,6 +126,7 @@ export function createTauriApi(): DualfileApi {
     saveSettings: (settings) => call("save_settings", { settings }),
     watch: (paths) => call("watch", { paths }),
     fileInfo: (path) => call("file_info", { path }),
+    mediaTags: (paths) => call("media_tags", { paths }),
     readBlock: async (path, offset, len) => toBytes(await call("read_block", { path, offset, len })),
     // Die Suchbytes gehen als Zahlenfeld (klein, höchstens 4 KiB); ein Uint8Array würde zu einem Objekt.
     findInFile: (path, needle, start, direction, ignoreCase) =>

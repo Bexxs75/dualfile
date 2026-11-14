@@ -177,6 +177,7 @@ pub fn run() {
             commands::save_settings,
             commands::watch,
             commands::file_info,
+            commands::media_tags,
             commands::read_block,
             commands::find_in_file,
             commands::cancel_search,

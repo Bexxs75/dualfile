@@ -197,6 +197,14 @@ pub async fn file_info(state: Shared<'_>, path: String) -> Result<FileInfoDto, U
     run(state, move |s| s.file_info(&path)).await
 }
 
+#[tauri::command]
+pub async fn media_tags(
+    state: Shared<'_>,
+    paths: Vec<String>,
+) -> Result<Vec<dualfile_core::mediatags::MediaTags>, UiError> {
+    run(state, move |s| Ok(s.media_tags(paths))).await
+}
+
 /// Returns the bytes as a raw binary IPC response (JS: `ArrayBuffer`). The alternatives are
 /// worse: a serialized `Vec<u8>` becomes a JSON number array (several bytes of text per byte,
 /// slow to parse for 1 MiB blocks), and Base64 would cost 33 % more size plus an extra
