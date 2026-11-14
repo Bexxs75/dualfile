@@ -710,6 +710,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     windowCommand(w, (win) => tabs.closeTab(win, index), true);
   const closeOtherTabs = (w: WinIdx, keep: number): void =>
     windowCommand(w, (win) => tabs.closeOthers(win, keep), true);
+  const toggleTabLock = (w: WinIdx, index: number): void =>
+    windowCommand(w, (win) => tabs.toggleLock(win, index), false);
   const openTabMenu = (w: WinIdx, index: number, x: number, y: number): void => {
     dispatch({ type: "active", w });
     dispatch({ type: "menu", menu: { w, x, y, tab: index } });
@@ -1212,6 +1214,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     newTab,
     closeTab,
     closeOtherTabs,
+    toggleTabLock,
     openTabMenu,
     selectTab,
     setPathEditing: (w: WinIdx | null): void => dispatch({ type: "pathEdit", w }),

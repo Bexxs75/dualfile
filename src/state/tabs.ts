@@ -14,8 +14,29 @@ export interface WindowState {
   activeTab: number;
 }
 
-export function createTab(path: string, sort = "name", filter = ""): Tab {
-  return { path: normalizePath(path), sort, filter, selection: createSelection(), back: [], forward: [] };
+export function createTab(path: string, sort = "name", filter = "", lockRoot?: string): Tab {
+  const tab: Tab = { path: normalizePath(path), sort, filter, selection: createSelection(), back: [], forward: [] };
+  if (lockRoot) tab.lockRoot = normalizePath(lockRoot);
+  return tab;
+}
+
+/** A locked tab may only reach its lock root and folders below it. */
+function withinLock(tab: Tab, target: string): boolean {
+  if (!tab.lockRoot) return true;
+  const root = tab.lockRoot;
+  return target === root || target.startsWith(root === "/" ? "/" : root + "/");
+}
+
+/** Toggle the folder lock of the tab at `index`: lock to its current folder, or unlock. */
+export function toggleLock(w: WindowState, index: number): WindowState {
+  const tab = w.tabs[index];
+  if (!tab) return w;
+  const next = { ...tab };
+  if (tab.lockRoot) delete next.lockRoot;
+  else next.lockRoot = tab.path;
+  const tabs = w.tabs.slice();
+  tabs[index] = next;
+  return { ...w, tabs };
 }
 
 export const createWindow = (path: string): WindowState => ({ tabs: [createTab(path)], activeTab: 0 });
@@ -66,7 +87,7 @@ export function selectTab(w: WindowState, index: number): WindowState {
 export function navigate(w: WindowState, path: string): WindowState {
   const target = normalizePath(path);
   return replaceActive(w, (tab) =>
-    target === tab.path
+    target === tab.path || !withinLock(tab, target)
       ? tab
       : { ...tab, path: target, filter: "", selection: createSelection(), back: [...tab.back, tab.path], forward: [] },
   );
@@ -120,7 +141,7 @@ export const setSelection = (w: WindowState, selection: SelectionState): WindowS
 
 export function toSession(w: WindowState): WindowSession {
   return {
-    tabs: w.tabs.map(({ path, sort, filter }) => ({ path, sort, filter })),
+    tabs: w.tabs.map(({ path, sort, filter, lockRoot }) => (lockRoot ? { path, sort, filter, lockRoot } : { path, sort, filter })),
     activeTab: w.activeTab,
   };
 }
@@ -130,7 +151,7 @@ export function toSession(w: WindowState): WindowSession {
  * Tab auf `fallbackPath`, ein ungültiger Aktiv-Index wird auf den ersten Tab gesetzt.
  */
 export function fromSession(session: WindowSession, fallbackPath: string): WindowState {
-  const tabs = session.tabs.map((t) => createTab(t.path || fallbackPath, t.sort, t.filter));
+  const tabs = session.tabs.map((t) => createTab(t.path || fallbackPath, t.sort, t.filter, t.lockRoot));
   if (tabs.length === 0) return createWindow(fallbackPath);
   const valid = Number.isInteger(session.activeTab) && session.activeTab >= 0 && session.activeTab < tabs.length;
   return { tabs, activeTab: valid ? session.activeTab : 0 };

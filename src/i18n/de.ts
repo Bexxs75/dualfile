@@ -372,6 +372,8 @@ const de = {
   "action.newTab": "Neuer Tab",
   "action.closeTab": "Tab schließen",
   "action.closeOtherTabs": "Andere Tabs schließen",
+  "action.lockTab": "Auf diesen Ordner beschränken",
+  "action.unlockTab": "Beschränkung aufheben",
   "action.changeTarget": "Ziel ändern …",
   "action.close": "Schließen",
   "action.ok": "OK",

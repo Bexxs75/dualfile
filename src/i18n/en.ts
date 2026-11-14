@@ -375,6 +375,8 @@ const en: Record<keyof typeof de, string> = {
   "action.newTab": "New tab",
   "action.closeTab": "Close tab",
   "action.closeOtherTabs": "Close other tabs",
+  "action.lockTab": "Lock to this folder",
+  "action.unlockTab": "Remove folder lock",
   "action.changeTarget": "Change destination …",
   "action.close": "Close",
   "action.ok": "OK",

@@ -18,6 +18,7 @@ export function ContextMenu() {
     return visibleEntries(state, w).filter(entry => activeTabOf(state, w).selection.selected.has(entry.name)).length > 1;
   });
   const tabCount = useAppState(state => (state.menu ? state.windows[state.menu.w].tabs.length : 0));
+  const tabLocked = useAppState(state => (state.menu?.tab !== undefined ? Boolean(state.windows[state.menu.w].tabs[state.menu.tab]?.lockRoot) : false));
 
   useEffect(() => {
     if (!menu) return;
@@ -34,6 +35,7 @@ export function ContextMenu() {
     action();
   };
   const items: { text: TranslationKey; action: () => void; disabled?: boolean }[] = menu.tab !== undefined ? [
+    { text: tabLocked ? "action.unlockTab" : "action.lockTab", action: () => controller.toggleTabLock(menu.w, menu.tab!) },
     { text: "action.newTab", action: () => controller.newTab(menu.w) },
     { text: "action.closeTab", action: () => controller.closeTab(menu.w, menu.tab), disabled: tabCount <= 1 },
     { text: "action.closeOtherTabs", action: () => controller.closeOtherTabs(menu.w, menu.tab!), disabled: tabCount <= 1 },

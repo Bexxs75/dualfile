@@ -6,6 +6,7 @@ import {
   back,
   closeTab,
   closeOthers,
+  toggleLock,
   createWindow,
   forward,
   fromSession,
@@ -88,6 +89,20 @@ describe("Tabs anlegen und schließen", () => {
   it("closeOthers lässt einen einzelnen Tab unverändert", () => {
     const w = createWindow("/a");
     expect(closeOthers(w, 0)).toBe(w);
+  });
+  it("toggleLock sperrt den Tab auf den Ordner und verhindert das Hochgehen", () => {
+    let w = navigate(createWindow("/a"), "/a/b");
+    w = toggleLock(w, 0);
+    expect(w.tabs[0]!.lockRoot).toBe("/a/b");
+    w = goUp(w); // nach /a wäre oberhalb der Sperre → bleibt
+    expect(activeTab(w).path).toBe("/a/b");
+    w = navigate(w, "/a/b/c"); // tiefer ist erlaubt
+    expect(activeTab(w).path).toBe("/a/b/c");
+    w = navigate(w, "/other"); // außerhalb der Sperre → blockiert
+    expect(activeTab(w).path).toBe("/a/b/c");
+    w = toggleLock(w, 0); // entsperren
+    expect(w.tabs[0]!.lockRoot).toBeUndefined();
+    expect(navigate(w, "/other").tabs[0]!.path).toBe("/other");
   });
 });
 

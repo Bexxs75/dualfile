@@ -38,6 +38,7 @@ function Tabs({ w }: { w: WinIdx }) {
               onClick={() => controller.selectTab(w, index)}
             >
               {remoteTab ? <Icon name="server" className="tab-remote" /> : null}
+              {tab.lockRoot ? <Icon name="pin" className="tab-remote" /> : null}
               {label}
             </button>
             {windowState.tabs.length > 1 ? (

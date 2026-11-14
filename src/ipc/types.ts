@@ -398,6 +398,8 @@ export interface TabState {
   path: string;
   sort: string;
   filter: string;
+  /** When set, the tab is locked to this folder: it cannot navigate above it. */
+  lockRoot?: string;
 }
 
 export interface WindowSession {
