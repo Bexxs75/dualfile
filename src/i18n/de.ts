@@ -367,6 +367,7 @@ const de = {
   "places.home": "Home-Ordner",
   "places.choose": "Ort wählen",
   "action.up": "Eine Ebene höher",
+  "action.reload": "Neu laden",
   "action.home": "Persönlicher Ordner",
   "action.newTab": "Neuer Tab",
   "action.closeTab": "Tab schließen",
@@ -523,7 +524,6 @@ const de = {
   "toast.pathCopied": "Pfad kopiert.",
   "toast.nothingToUndo": "Es gibt nichts zum Rückgängigmachen.",
   "toast.noUndoForCopyMove": "Kopieren und Verschieben lassen sich nicht rückgängig machen.",
-  "toast.followingPhase": "Folgt in Phase 2.",
   "toast.mirrorOn": "Panels gekoppelt: beide Fenster wechseln gemeinsam bei Lesezeichen.",
   "toast.mirrorOff": "Panels entkoppelt.",
 
@@ -614,6 +614,7 @@ const de = {
 
   // Tooltips
   "tip.up": "Eine Ebene höher (Alt+↑ / Rücktaste)",
+  "tip.reload": "Neu laden",
   "tip.home": "Persönlicher Ordner",
   "tip.refresh": "Aktualisieren (Strg+R)",
   "tip.mirror": "Beide Fenster folgen einander",
@@ -626,7 +627,6 @@ const de = {
   "tip.swapPanes": "Fenster tauschen (Strg+U)",
   "tip.sortBy": "Sortieren nach {column}",
   "tip.settings": "Einstellungen",
-  "tip.followingPhase": "Folgt in Phase 2",
 
   // Ergänzungen B1 (Oberfläche)
   "ui.drag.copy": "Kopieren nach {target}",

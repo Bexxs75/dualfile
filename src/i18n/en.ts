@@ -370,6 +370,7 @@ const en: Record<keyof typeof de, string> = {
   "places.home": "Home folder",
   "places.choose": "Choose location",
   "action.up": "Go up",
+  "action.reload": "Reload",
   "action.home": "Home folder",
   "action.newTab": "New tab",
   "action.closeTab": "Close tab",
@@ -526,7 +527,6 @@ const en: Record<keyof typeof de, string> = {
   "toast.pathCopied": "Path copied.",
   "toast.nothingToUndo": "There is nothing to undo.",
   "toast.noUndoForCopyMove": "Copy and move cannot be undone.",
-  "toast.followingPhase": "Coming in phase 2.",
   "toast.mirrorOn": "Panes linked: both panes change together for bookmarks.",
   "toast.mirrorOff": "Panes unlinked.",
 
@@ -617,6 +617,7 @@ const en: Record<keyof typeof de, string> = {
 
   // Tooltips
   "tip.up": "Go up (Alt+↑ / Backspace)",
+  "tip.reload": "Reload",
   "tip.home": "Home folder",
   "tip.refresh": "Refresh (Ctrl+R)",
   "tip.mirror": "Both panes follow each other",
@@ -629,7 +630,6 @@ const en: Record<keyof typeof de, string> = {
   "tip.swapPanes": "Swap panes (Ctrl+U)",
   "tip.sortBy": "Sort by {column}",
   "tip.settings": "Settings",
-  "tip.followingPhase": "Coming in phase 2",
 
   // Additions B1 (UI)
   "ui.drag.copy": "Copy to {target}",

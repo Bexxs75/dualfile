@@ -156,6 +156,7 @@ function PathBar({ w }: { w: WinIdx }) {
       <button type="button" className="header-icon" aria-label={tr("action.back")} title={`${tr("action.back")} (Alt+←)`} disabled={!backPaths.length} onClick={() => void controller.goBack(w)}><Icon name="back" /></button>
       <button type="button" className="header-icon" aria-label={tr("action.forward")} title={`${tr("action.forward")} (Alt+→)`} disabled={!forwardPaths.length} onClick={() => void controller.goForward(w)}><Icon name="forward" /></button>
       <button type="button" className="header-icon" aria-label={tr("action.up")} title={tr("tip.up")} disabled={path === "/"} onClick={() => void controller.goUp(w)}><Icon name="up" /></button>
+      <button type="button" className="header-icon" aria-label={tr("action.reload")} title={tr("tip.reload")} onClick={() => void controller.reload(w)}><Icon name="reload" /></button>
       <HeaderMenu label={`${tr("places.choose")}: ${placeName}`} title={connection ? `${placeName} · ${connection.endpoint}` : placeName} className="place-menu" portal items={items}>
         <span aria-hidden="true" className={`connection-dot ${!remote || connection?.connected ? "connected" : "disconnected"}`} />
         <Icon name={remote ? "server" : "computer"} /><span className="place-name">{placeName}</span>

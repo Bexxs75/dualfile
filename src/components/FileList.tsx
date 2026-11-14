@@ -132,14 +132,23 @@ export function FileList({ w }: { w: WinIdx }) {
   }, [active]);
 
   // Fokuszeile sichtbar halten und die Seitengröße für Bild auf/ab messen.
+  // Wichtig: nur scrollen, wenn sich der Fokus bewegt hat oder der Ordner wechselte.
+  // Sonst würde jede Neuzeichnung (neue entries-Referenz) die manuelle Mausrad-Position
+  // in großen Ordnern immer wieder auf die Auswahl zurückreißen.
+  const prevFocus = useRef(focusIndex);
+  const prevPath = useRef(listing.path);
   useEffect(() => {
     const list = ref.current;
     if (!list || entries.length === 0) return;
     const row = document.getElementById(rowId(w, focusIndex));
-    row?.scrollIntoView?.({ block: "nearest" });
+    if (prevFocus.current !== focusIndex || prevPath.current !== listing.path) {
+      row?.scrollIntoView?.({ block: "nearest" });
+      prevFocus.current = focusIndex;
+      prevPath.current = listing.path;
+    }
     const rowHeight = row?.getBoundingClientRect().height ?? 0;
     if (rowHeight > 0 && list.clientHeight > 0) controller.setPageSize(w, Math.floor(list.clientHeight / rowHeight) - 1);
-  }, [controller, entries, focusIndex, w]);
+  }, [controller, entries, focusIndex, w, listing.path]);
 
   const realCount = entries.filter((e) => e.name !== "..").length;
   const message = listing.error
