@@ -505,7 +505,7 @@ mod tests {
         )
         .unwrap();
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
-        // cargo test builds examples alongside the integration tests.
+        // Needs the askpass_helper example built: run `cargo test --all-targets` (CI does).
         let helper = std::env::current_exe()
             .unwrap()
             .parent()
