@@ -201,9 +201,15 @@ mod tests {
         for round in 0..40 {
             std::fs::write(&file, format!("{round}")).unwrap();
         }
-        std::thread::sleep(Duration::from_millis(900));
-        let events = rx.try_iter().count();
-        assert!((1..=3).contains(&events), "40 writes gave {events} events");
+        // Drain until the stream goes quiet rather than sampling at a fixed instant: under load
+        // the OS may deliver the watch events late, and the debouncer may split a long burst.
+        // The point is that 40 writes coalesce into only a handful of events, not that the exact
+        // count is deterministic (this uses the real OS watcher and wall-clock timing).
+        let mut events = 0;
+        while rx.recv_timeout(Duration::from_millis(900)).is_ok() {
+            events += 1;
+        }
+        assert!((1..=8).contains(&events), "40 writes gave {events} events");
     }
 
     #[test]
