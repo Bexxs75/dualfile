@@ -17,7 +17,6 @@ Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and b
 
 ## Screenshots
 
-
 <table>
   <tr>
     <td align="center"><img src="docs/screenshots/dual-pane.png" alt="Dualfile main window with two panes"><br><sub>The two-pane main window</sub></td>
@@ -29,6 +28,26 @@ Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and b
     <td align="center"><img src="docs/screenshots/settings.png" alt="Dualfile settings screen"><br><sub>The settings screen</sub></td>
   </tr>
 </table>
+
+## What it is for
+
+- **Move files between a local folder and a server.** Keep a folder in one pane and an SFTP, FTP/FTPS or SMB location in the other; copy or move in background jobs with optional SHA-256 verification.
+- **Open an archive like a folder.** Browse ZIP, 7Z and TAR (including GZ/BZ2/XZ) archives, preview files and extract only what you need. RAR is read through an external helper.
+- **Compare and synchronize two folders.** Use directory comparison and synchronization in the two panes, and compare two text files.
+- **Tidy up in bulk.** Batch rename with preview, duplicate-file and similar-image search, and disk-usage inspection.
+- **Work from the keyboard.** Tabs, bookmarks, function-key shortcuts and a command palette (`Ctrl+K`); trash and permanent deletion are separate actions, with undo where supported.
+
+## Features
+
+- Two panes with tabs, bookmarks, filtering, hidden-file controls and keyboard navigation.
+- Copy, move, rename and delete with background jobs, pause/resume, progress and configurable SHA-256 transfer verification. Trash and permanent deletion are separate actions.
+- Undo and operation history where supported; not every operation is reversible.
+- ZIP, 7Z and TAR archives (including GZ/BZ2/XZ); RAR read support through an external helper. Search and file previews.
+- Native SFTP, FTP/FTPS and SMB connections, saved profiles and imports from Dolphin/GNOME system places.
+- Command palette (`Ctrl+K`), batch rename with preview, directory comparison and synchronization, text comparison.
+- Duplicate-file search, similar-image search and disk-usage inspection.
+- Light/dark themes, accent colors, density settings and English/German interface text.
+- Process-plugin interface with explicit permissions; not compatible with Total Commander DLLs.
 
 ## Download
 
@@ -63,18 +82,6 @@ Run this in the directory containing the checksum file and downloaded assets. A 
 ## Updates
 
 Settings → Updates shows the installed version and offers a manual check with its result and time. The optional startup check runs once without blocking the app. An available update shows a banner with release notes, Update and Later; Later suppresses that version until a newer one arrives (a manual check shows it again). Installation requires an explicit click and no active file jobs. AppImage updates show progress, support cancellation before installation, and restart after installation. Other launch formats open the release page instead. The release workflow signs the final repacked AppImage and requires a signing key before generating `latest.json`. The interface and startup checks are connected; native installation and tray behavior still need live verification.
-
-## Features
-
-- Two panes with tabs, bookmarks, filtering, hidden-file controls and keyboard navigation.
-- Copy, move, rename and delete with background jobs, pause/resume, progress and configurable SHA-256 transfer verification. Trash and permanent deletion are separate actions.
-- Undo and operation history where supported; not every operation is reversible.
-- ZIP, 7Z and TAR archives (including GZ/BZ2/XZ); RAR read support through an external helper. Search and file previews.
-- Native SFTP, FTP/FTPS and SMB connections, saved profiles and imports from Dolphin/GNOME system places.
-- Command palette (`Ctrl+K`), batch rename with preview, directory comparison and synchronization, text comparison.
-- Duplicate-file search, similar-image search and disk-usage inspection.
-- Light/dark themes, accent colors, density settings and English/German interface text.
-- Process-plugin interface with explicit permissions; not compatible with Total Commander DLLs.
 
 ## Keyboard shortcuts
 
