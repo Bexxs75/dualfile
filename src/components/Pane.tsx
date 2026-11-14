@@ -20,7 +20,8 @@ function Tabs({ w }: { w: WinIdx }) {
     <div className="tabs" role="tablist" aria-label={tr("pane.tabsLabel")}>
       {windowState.tabs.map((tab, index) => {
         const selected = index === windowState.activeTab;
-        const label = parseRemotePath(tab.path)?.inner === "/" ? crumbsOf(tab.path, connections)[0]!.label : baseName(tab.path);
+        const remoteTab = parseRemotePath(tab.path);
+        const label = remoteTab?.inner === "/" ? crumbsOf(tab.path, connections)[0]!.label : baseName(tab.path);
         return (
           <span
             key={index}
@@ -35,6 +36,7 @@ function Tabs({ w }: { w: WinIdx }) {
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => controller.selectTab(w, index)}
             >
+              {remoteTab ? <Icon name="server" className="tab-remote" /> : null}
               {label}
             </button>
             {windowState.tabs.length > 1 ? (

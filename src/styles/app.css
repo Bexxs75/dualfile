@@ -68,6 +68,7 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .pane.active { border-color: var(--accent); box-shadow: none; }
 .pane.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .tabs { display: flex; gap: 0; padding: 0 4px; background: var(--bg); overflow-x: auto; border-top: 2px solid transparent; min-height: max(30px, var(--rowh)); align-items: stretch; }
+.tab .tab-remote { width: 12px; height: 12px; margin-right: 4px; vertical-align: -1px; opacity: .75; flex: none; }
 .tab { flex: none; display: flex; align-items: center; border-radius: 0; color: var(--muted); border: 0; border-bottom: 2px solid transparent; }
 .tab button { padding: 5px 8px; display: inline-flex; align-items: center; }
 .tab.on { background: var(--panel); color: var(--fg); border-top-color: transparent; border-bottom-color: var(--line); }
