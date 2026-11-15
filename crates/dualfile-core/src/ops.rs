@@ -1023,6 +1023,19 @@ fn copy_one_inner(
                     return Err((src.clone(), e));
                 }
             };
+        // A non-local source (a server or plugin) could advertise one size and then stream an
+        // arbitrarily long body, filling the destination through the staging file before the
+        // post-copy size check runs. Cap the reader at the advertised length plus one byte: the
+        // staging file can never exceed the advertised size, and the `copied != entry_size` check
+        // below still rejects both over- and under-delivery.
+        if !sv.is_local() {
+            let remaining = if hashing {
+                entry_size
+            } else {
+                entry_size.saturating_sub(start)
+            };
+            input = Box::new(input.take(remaining.saturating_add(1)));
+        }
         let mut buf = vec![0u8; 1024 * 1024];
         let mut copied = if hashing { 0 } else { start };
         loop {
@@ -3431,6 +3444,116 @@ mod tests {
             LocalVfs.capabilities()
         }
     }
+    /// A reader that records how many bytes were actually pulled from it.
+    struct CountingRead {
+        inner: std::io::Cursor<Vec<u8>>,
+        read: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    }
+    impl Read for CountingRead {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let n = self.inner.read(buf)?;
+            self.read
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
+            Ok(n)
+        }
+    }
+
+    /// A non-local source that reports one size but streams a longer body — a lying server. The
+    /// `read` counter records how many bytes the copy loop pulled, so a test can assert the bound.
+    struct LyingSizeVfs {
+        reported: u64,
+        actual: Vec<u8>,
+        read: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    }
+    impl Vfs for LyingSizeVfs {
+        fn list(&self, _p: &VPath) -> Result<Vec<Entry>> {
+            unimplemented!()
+        }
+        fn stat(&self, p: &VPath) -> Result<Entry> {
+            Ok(Entry {
+                name: p
+                    .path()
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+                kind: EntryKind::File,
+                size: self.reported,
+                modified: None,
+                mode: None,
+                hidden: false,
+                link_target: None,
+                broken_link: false,
+                error: None,
+            })
+        }
+        fn open_read(&self, _p: &VPath) -> Result<Box<dyn Read + Send>> {
+            Ok(Box::new(CountingRead {
+                inner: std::io::Cursor::new(self.actual.clone()),
+                read: self.read.clone(),
+            }))
+        }
+        fn create_write(&self, _p: &VPath, _m: WriteMode) -> Result<Box<dyn WriteFinish>> {
+            unimplemented!()
+        }
+        fn mkdir(&self, _p: &VPath) -> Result<()> {
+            unimplemented!()
+        }
+        fn rename(&self, _a: &VPath, _b: &VPath, _m: ReplaceMode) -> Result<()> {
+            unimplemented!()
+        }
+        fn read_link(&self, _p: &VPath) -> Result<String> {
+            unimplemented!()
+        }
+        fn create_symlink(&self, _t: &str, _p: &VPath) -> Result<()> {
+            unimplemented!()
+        }
+        fn trash(&self, _p: &VPath) -> Result<()> {
+            unimplemented!()
+        }
+        fn remove_permanent(&self, _p: &VPath) -> Result<()> {
+            unimplemented!()
+        }
+        fn capabilities(&self) -> Caps {
+            Caps::default()
+        }
+    }
+
+    #[test]
+    fn a_remote_source_longer_than_it_reports_is_rejected_and_the_staging_file_is_bounded() {
+        let dstdir = tempfile::tempdir().unwrap();
+        let src = VPath::local("/egal/data").unwrap(); // the fake ignores the path
+        let dst = VPath::local(dstdir.path()).unwrap();
+        let reported = 4u64;
+        let read = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let sv = LyingSizeVfs {
+            reported,
+            actual: vec![b'x'; 10 * 1024 * 1024], // 10 MiB sent for a "4-byte" file
+            read: read.clone(),
+        };
+        let job = JobHandle::new(Arc::new(VerifyEvents::default()));
+        let report = copy_verified(
+            &sv,
+            std::slice::from_ref(&src),
+            &LocalVfs,
+            &dst,
+            None,
+            &job,
+            VerifyMode::Off,
+        );
+        assert_eq!(report.failed.len(), 1);
+        assert!(matches!(report.failed[0].1, Error::SizeMismatch(_)));
+        // The copy was refused, so no visible destination file remains.
+        assert!(!dstdir.path().join("data").exists());
+        // The point of the fix: the loop pulled at most reported+1 bytes, not the whole 10 MiB, so
+        // a lying server cannot fill the staging file. (Without the `take`, this would be 10 MiB.)
+        assert!(
+            read.load(std::sync::atomic::Ordering::Relaxed) <= reported + 1,
+            "read {} bytes, expected at most {}",
+            read.load(std::sync::atomic::Ordering::Relaxed),
+            reported + 1
+        );
+    }
+
     #[derive(Default)]
     struct VerifyEvents(Mutex<Vec<ProgressEvent>>);
     impl ProgressSink for VerifyEvents {
