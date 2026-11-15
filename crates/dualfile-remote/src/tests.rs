@@ -1209,7 +1209,13 @@ fn manager_connects_a_webdav_profile_and_registers_it() {
         allow_plaintext: true,
         start_folder: Some("/docs".into()),
     };
-    let info = m.connect_webdav(profile.clone(), Secret::new("")).unwrap();
+    let info = m
+        .connect_webdav(
+            profile.clone(),
+            Secret::new(""),
+            Arc::new(Ask(TrustDecision::TrustOnce, Default::default())),
+        )
+        .unwrap();
     assert_eq!(info.protocol, Protocol::Webdav);
     assert_eq!(info.root, VPath::webdav(&info.id, "/docs").unwrap());
     assert!(m.is_connected(&info.id));
@@ -1220,14 +1226,22 @@ fn manager_connects_a_webdav_profile_and_registers_it() {
     let mut bad = profile.clone();
     bad.allow_plaintext = false;
     assert!(matches!(
-        m.connect_webdav(bad, Secret::new("")),
+        m.connect_webdav(
+            bad,
+            Secret::new(""),
+            Arc::new(Ask(TrustDecision::TrustOnce, Default::default()))
+        ),
         Err(ConnectError::Invalid(_))
     ));
     // An unreachable host fails the connect probe instead of reporting a false success.
     let mut dead = profile;
     dead.port = 1;
     assert!(matches!(
-        m.connect_webdav(dead, Secret::new("")),
+        m.connect_webdav(
+            dead,
+            Secret::new(""),
+            Arc::new(Ask(TrustDecision::TrustOnce, Default::default()))
+        ),
         Err(ConnectError::Invalid(_))
     ));
 
@@ -1280,7 +1294,11 @@ fn manager_webdav_wrong_password_fails_connect_with_auth_message() {
         allow_plaintext: true,
         start_folder: None,
     };
-    match m.connect_webdav(profile, Secret::new("wrong")) {
+    match m.connect_webdav(
+        profile,
+        Secret::new("wrong"),
+        Arc::new(Ask(TrustDecision::TrustOnce, Default::default())),
+    ) {
         Err(ConnectError::Invalid(msg)) => {
             assert_eq!(msg, "WebDAV-Anmeldung fehlgeschlagen")
         }

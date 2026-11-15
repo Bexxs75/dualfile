@@ -8,7 +8,7 @@ platform-specific dependencies. This is an inventory, not a list of files shippe
 Rust metadata: `vendor/*/Cargo.toml`; npm: lockfile, falling back to matching installed package metadata.
 Use `--vendor DIR` for an offline metadata mirror. No downloads or dependency resolution are performed.
 
-Packages: **855**. Unknown: **0**.
+Packages: **858**. Unknown: **0**.
 
 UNKNOWN is a release-review blocker: provide matching source metadata and regenerate before distribution.
 License expressions are upstream declarations; alternatives (OR) and exceptions need individual review.
@@ -376,6 +376,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
 | Cargo | password-hash | 0.6.1 | MIT OR Apache-2.0 |
 | Cargo | pbkdf2 | 0.13.0 | MIT OR Apache-2.0 |
+| Cargo | pem | 3.0.6 | MIT |
 | Cargo | pem-rfc7468 | 1.0.0 | Apache-2.0 OR MIT |
 | Cargo | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
 | Cargo | phc | 0.6.1 | Apache-2.0 OR MIT |
@@ -428,6 +429,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | rand_core | 0.10.1 | MIT OR Apache-2.0 |
 | Cargo | rand_core | 0.6.4 | MIT OR Apache-2.0 |
 | Cargo | raw-window-handle | 0.6.2 | MIT OR Apache-2.0 OR Zlib |
+| Cargo | rcgen | 0.13.2 | MIT OR Apache-2.0 |
 | Cargo | redox_syscall | 0.5.18 | MIT |
 | Cargo | redox_users | 0.5.3 | MIT |
 | Cargo | ref-cast | 1.0.27 | MIT OR Apache-2.0 |
@@ -666,6 +668,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | x11 | 2.21.0 | MIT |
 | Cargo | x11-dl | 2.21.0 | MIT |
 | Cargo | xdg-home | 1.3.0 | MIT |
+| Cargo | yasna | 0.5.2 | MIT OR Apache-2.0 |
 | Cargo | yoke | 0.8.4 | Unicode-3.0 |
 | Cargo | yoke-derive | 0.8.4 | Unicode-3.0 |
 | Cargo | zbus | 4.4.0 | MIT |

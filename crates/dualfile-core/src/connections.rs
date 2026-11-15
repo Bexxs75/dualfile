@@ -86,6 +86,7 @@ pub enum ConnectionAuth {
 pub enum PinProtocol {
     Ftps,
     Sftp,
+    Webdav,
 }
 
 /// A trusted certificate / host key: SHA-256 as 64 lower-case hex digits, for SFTP also the
@@ -332,14 +333,13 @@ impl ConnectionProfile {
         }
         for pin in &self.pins {
             let expected = match self.protocol {
-                ConnectionProtocol::System
-                | ConnectionProtocol::Ftp
-                | ConnectionProtocol::Smb
-                | ConnectionProtocol::Webdav => {
+                ConnectionProtocol::System | ConnectionProtocol::Ftp | ConnectionProtocol::Smb => {
                     return Err("FTP ohne TLS hat keine Fingerabdrücke")
                 }
                 ConnectionProtocol::Ftps => PinProtocol::Ftps,
                 ConnectionProtocol::Sftp => PinProtocol::Sftp,
+                // WebDAV over https pins the certificate exactly like FTPS/SFTP.
+                ConnectionProtocol::Webdav => PinProtocol::Webdav,
             };
             let hex_ok = pin.sha256.len() == 64
                 && pin
@@ -497,9 +497,29 @@ mod tests {
         p = dav.clone();
         p.share = "dav".into();
         assert!(p.validate().is_err());
-        p = dav;
+        p = dav.clone();
         p.user.clear();
         assert_eq!(p.validate(), Ok(()));
+        // WDAV-TLS-001: an https WebDAV connection pins the certificate like FTPS, so a well-formed
+        // WebDAV pin must validate (it did not before), and a pin of the wrong protocol is rejected.
+        p = dav.clone();
+        p.pins = vec![PinEntry {
+            protocol: PinProtocol::Webdav,
+            host: "h".into(),
+            port: 443,
+            sha256: "a".repeat(64),
+            key_type: None,
+        }];
+        assert_eq!(p.validate(), Ok(()));
+        p = dav;
+        p.pins = vec![PinEntry {
+            protocol: PinProtocol::Ftps,
+            host: "h".into(),
+            port: 443,
+            sha256: "a".repeat(64),
+            key_type: None,
+        }];
+        assert!(p.validate().is_err());
     }
 
     fn sftp(id: &str, name: &str) -> ConnectionProfile {

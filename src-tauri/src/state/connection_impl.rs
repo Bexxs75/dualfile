@@ -465,6 +465,7 @@ impl AppState {
                     start_folder: profile.start_folder.clone(),
                 },
                 secret,
+                confirm,
             ),
             ConnectionProtocol::Sftp => {
                 self.connections

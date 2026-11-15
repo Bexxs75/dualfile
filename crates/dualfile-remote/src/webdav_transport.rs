@@ -1,15 +1,21 @@
-//! Real HTTP(S) transport for the WebDAV backend — increment 3a. A thin [`WebdavTransport`] over
-//! `ureq`, which runs on the same rustls + ring stack as the FTP/SFTP back ends (no OpenSSL, no
-//! native-tls). It adds Basic authentication, percent-encodes the request path, follows no redirects
-//! (so a hostile server cannot bounce the client to another host or leak the credentials), and bounds
-//! every call with a timeout. TLS trust uses the bundled Mozilla root set; native-root and
-//! self-signed (fingerprint) trust follow in increment 3b, and wiring into the connector/router
-//! (profile, DTO, secret store, frontend) follows after that. Nothing here runs in production yet.
+//! Real HTTP(S) transport for the WebDAV backend. A thin [`WebdavTransport`] over `ureq`, which runs
+//! on the same rustls + ring stack as the FTP/SFTP back ends (no OpenSSL, no native-tls). It adds
+//! Basic authentication, percent-encodes the request path, follows no redirects (so a hostile server
+//! cannot bounce the client to another host or leak the credentials), and bounds every call with a
+//! timeout. For `https`, the agent is built with a rustls `ClientConfig` that carries the shared
+//! pinning/trust verifier (`tls::client_config`, the same one FTPS uses — system roots plus a
+//! fingerprint pin with user confirmation); plain `http` carries no TLS.
 //!
-//! Security notes: `http_status_as_error(false)` hands 4xx/5xx back to [`WebdavVfs`], which maps them
-//! itself; `max_redirects(0)` with `max_redirects_will_error(false)` returns a 3xx as a plain
-//! response instead of following it; the response body stays streamed and is bounded by the caller
-//! (`read_bounded` for PROPFIND, the shared copy loop for GET), so a lying server cannot flood memory.
+//! Security notes: 4xx/5xx come back as responses (`ureq::Error::Status`), which [`WebdavVfs`] maps
+//! itself; `redirects(0)` returns a 3xx as a plain response instead of following it; the response
+//! body stays streamed and is bounded by the caller (`read_bounded` for PROPFIND, the shared copy
+//! loop for GET), so a lying server cannot flood memory. A refused certificate fails the request;
+//! the connect probe recovers the trust reason via the verifier's `take_error`.
+//!
+//! Known limitation (WDAV-TLS-002): a certificate refused on a *later* request (e.g. after the server
+//! rotated its cert and a pooled connection re-handshakes) surfaces only as `Disconnected`, not as a
+//! distinct trust error — fail-safe (the bad cert is still refused), but the operation-level reason
+//! is coarse. Carrying the trust reason through every operation is a follow-up.
 
 use crate::webdavvfs::{WebdavResponse, WebdavTransport};
 use dualfile_core::error::{Error, Result};
@@ -36,19 +42,33 @@ pub struct UreqTransport {
 
 impl UreqTransport {
     /// `origin` is `scheme://host[:port]` (a trailing slash is trimmed). Credentials, when given, are
-    /// sent as HTTP Basic auth on every request.
+    /// sent as HTTP Basic auth on every request. Plain transport: `https` uses ureq's default roots.
     pub fn new(origin: &str, user: Option<&str>, pass: Option<&str>) -> Self {
-        let agent = ureq::AgentBuilder::new()
+        Self::new_tls(origin, user, pass, None)
+    }
+
+    /// Like [`new`](Self::new), but with an explicit rustls `ClientConfig` for TLS — carrying the
+    /// pinning/trust verifier (`tls::client_config`). `None` keeps ureq's default TLS (used for
+    /// plain `http`, where it is never consulted).
+    pub fn new_tls(
+        origin: &str,
+        user: Option<&str>,
+        pass: Option<&str>,
+        tls_config: Option<Arc<rustls::ClientConfig>>,
+    ) -> Self {
+        let mut builder = ureq::AgentBuilder::new()
             .redirects(0) // never follow: no cross-host bounce, no credential leak
             .timeout(CALL_TIMEOUT)
-            .user_agent(USER_AGENT)
-            .build();
+            .user_agent(USER_AGENT);
+        if let Some(config) = tls_config {
+            builder = builder.tls_config(config);
+        }
         let auth = user.map(|u| {
             let raw = format!("{u}:{}", pass.unwrap_or(""));
             format!("Basic {}", base64_encode(raw.as_bytes()))
         });
         Self {
-            agent,
+            agent: builder.build(),
             origin: origin.trim_end_matches('/').to_owned(),
             auth,
             closed: Arc::new(AtomicBool::new(false)),
@@ -401,6 +421,134 @@ mod tests {
                 other.map(|_| "ok")
             ),
         }
+    }
+
+    #[test]
+    fn https_with_a_pinned_self_signed_certificate_connects_over_real_tls() {
+        // End-to-end TLS: a self-signed cert is pinned, and the real ureq -> rustls -> pinning
+        // verifier -> fingerprint path must complete a genuine TLS handshake and return the body.
+        // This is the one piece the verifier's own unit tests (tls.rs) cannot cover: the wiring of
+        // tls_config into ureq and the pin being honoured across a real handshake.
+        use crate::tls;
+        use crate::trust::{
+            hex, CertVerifier, ConfirmTrust, MemoryPins, Pin, PinKey, PinStore, PolicyVerifier,
+            Protocol, TrustDecision, TrustRequest,
+        };
+        use sha2::{Digest, Sha256};
+
+        let issued = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+        let cert_der = issued.cert.der().clone();
+        let fingerprint = hex(&Sha256::digest(cert_der.as_ref()));
+        let key_der = issued.key_pair.serialize_der();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server_config = std::sync::Arc::new(
+            rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(
+                rustls::crypto::ring::default_provider(),
+            ))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![cert_der],
+                rustls::pki_types::PrivateKeyDer::Pkcs8(key_der.into()),
+            )
+            .unwrap(),
+        );
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut conn = rustls::ServerConnection::new(server_config).unwrap();
+            let mut tls = rustls::Stream::new(&mut conn, &mut sock);
+            // Read the WHOLE request (headers until CRLFCRLF, then the Content-Length body) before
+            // replying. Otherwise the thread could close the connection while ureq is still writing
+            // its body, racing `Connection: close` and flaking the test.
+            let mut data = Vec::new();
+            let mut chunk = [0u8; 512];
+            let mut header_end: Option<usize> = None;
+            let mut content_len = 0usize;
+            loop {
+                match tls.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => data.extend_from_slice(&chunk[..n]),
+                }
+                if header_end.is_none() {
+                    if let Some(pos) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+                        header_end = Some(pos + 4);
+                        for line in String::from_utf8_lossy(&data[..pos]).lines() {
+                            if let Some(v) =
+                                line.to_ascii_lowercase().strip_prefix("content-length:")
+                            {
+                                content_len = v.trim().parse().unwrap_or(0);
+                            }
+                        }
+                    }
+                }
+                if header_end.is_some_and(|he| data.len() >= he + content_len) {
+                    break;
+                }
+            }
+            let xml = concat!(
+                r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>/</d:href>"#,
+                r#"<d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>"#,
+                r#"<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#,
+            );
+            let resp = format!(
+                "HTTP/1.1 207 Multi-Status\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                xml.len(),
+                xml
+            );
+            let _ = tls.write_all(resp.as_bytes());
+            let _ = tls.flush();
+            // Graceful TLS shutdown so the client reliably sees the full response before the socket
+            // drops.
+            conn.send_close_notify();
+            let _ = conn.complete_io(&mut sock);
+        });
+
+        struct NeverConfirm;
+        impl ConfirmTrust for NeverConfirm {
+            fn confirm(&self, _: &TrustRequest) -> TrustDecision {
+                TrustDecision::Reject
+            }
+        }
+        // A matching pin trusts the fingerprint on its own, so the confirmation is never consulted.
+        let pins: std::sync::Arc<dyn PinStore> = std::sync::Arc::new(MemoryPins::new());
+        pins.set(Pin {
+            protocol: Protocol::Webdav,
+            host: "localhost".to_owned(),
+            port,
+            sha256: fingerprint,
+            key_type: None,
+        });
+        let verifier: Arc<dyn CertVerifier> =
+            Arc::new(PolicyVerifier::new(pins, Arc::new(NeverConfirm)));
+        let pinning = tls::PinningServerVerifier::new(
+            verifier,
+            PinKey::new(Protocol::Webdav, "localhost", port),
+            tls::system_roots(),
+        );
+        let config = tls::client_config(pinning.clone());
+
+        let t = UreqTransport::new_tls(
+            &format!("https://localhost:{port}"),
+            None,
+            None,
+            Some(config),
+        );
+        let resp = t
+            .request(
+                "PROPFIND",
+                "/",
+                &[("Depth", "0")],
+                Some(b"<propfind/>".to_vec()),
+            )
+            .unwrap();
+        assert_eq!(resp.status, 207);
+        assert!(
+            pinning.take_error().is_none(),
+            "a matching pin must not record a trust error"
+        );
     }
 
     #[test]

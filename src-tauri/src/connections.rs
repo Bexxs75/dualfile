@@ -244,12 +244,11 @@ pub fn sftp_profile(p: &ConnectionProfile) -> SftpProfile {
 /// The pin protocol a profile's server is pinned under (plain FTP has no pin).
 pub fn pin_protocol(p: &ConnectionProfile) -> Option<PinProtocol> {
     match p.protocol {
-        ConnectionProtocol::System
-        | ConnectionProtocol::Ftp
-        | ConnectionProtocol::Smb
-        | ConnectionProtocol::Webdav => None,
+        ConnectionProtocol::System | ConnectionProtocol::Ftp | ConnectionProtocol::Smb => None,
         ConnectionProtocol::Ftps => Some(PinProtocol::Ftps),
         ConnectionProtocol::Sftp => Some(PinProtocol::Sftp),
+        // WebDAV over https pins the certificate; http never produces pins.
+        ConnectionProtocol::Webdav => Some(PinProtocol::Webdav),
     }
 }
 
@@ -257,6 +256,7 @@ fn remote_protocol(protocol: PinProtocol) -> Protocol {
     match protocol {
         PinProtocol::Ftps => Protocol::Ftps,
         PinProtocol::Sftp => Protocol::Sftp,
+        PinProtocol::Webdav => Protocol::Webdav,
     }
 }
 
@@ -264,7 +264,8 @@ fn core_protocol(protocol: Protocol) -> Option<PinProtocol> {
     match protocol {
         Protocol::Ftps => Some(PinProtocol::Ftps),
         Protocol::Sftp => Some(PinProtocol::Sftp),
-        Protocol::Smb | Protocol::Webdav => None,
+        Protocol::Webdav => Some(PinProtocol::Webdav),
+        Protocol::Smb => None,
     }
 }
 
@@ -426,6 +427,7 @@ pub trait ConnectionBackend: Send + Sync {
         &self,
         profile: dualfile_remote::profile::WebdavProfile,
         secret: Secret,
+        confirm: Arc<dyn ConfirmTrust>,
     ) -> Result<ConnectionInfo, ConnectError>;
     fn disconnect(&self, id: &str) -> bool;
     fn disconnect_all(&self);
@@ -461,8 +463,9 @@ impl<C: Connector, S: SftpConnector> ConnectionBackend for ConnectionManager<C, 
         &self,
         profile: dualfile_remote::profile::WebdavProfile,
         secret: Secret,
+        confirm: Arc<dyn ConfirmTrust>,
     ) -> Result<ConnectionInfo, ConnectError> {
-        ConnectionManager::connect_webdav(self, profile, secret)
+        ConnectionManager::connect_webdav(self, profile, secret, confirm)
     }
     fn disconnect(&self, id: &str) -> bool {
         ConnectionManager::disconnect(self, id)

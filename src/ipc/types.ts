@@ -476,9 +476,9 @@ export type ConnectionProtocol = "ftp" | "ftps" | "sftp" | "smb" | "webdav" | "s
 export type TlsModeKind = "none" | "explicit" | "implicit";
 export type SftpAuthMethod = { kind: "password" } | { kind: "keyFile"; path: string };
 
-/** Gemerkter Fingerabdruck (SHA-256) eines Zertifikats (FTPS) bzw. Serverschlüssels (SFTP). */
+/** Gemerkter Fingerabdruck (SHA-256) eines Zertifikats (FTPS/WebDAV) bzw. Serverschlüssels (SFTP). */
 export interface PinInfo {
-  protocol: "ftps" | "sftp";
+  protocol: "ftps" | "sftp" | "webdav";
   host: string;
   port: number;
   sha256: string;

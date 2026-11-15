@@ -13,7 +13,7 @@ use crate::secret::Secret;
 use crate::sftp_transport::SftpTransport;
 use crate::sftpvfs::{SftpConfig, SftpVfs};
 use crate::transport::FtpTransport;
-use crate::trust::{CertVerifier, ConfirmTrust, PinStore, PolicyVerifier, Protocol};
+use crate::trust::{CertVerifier, ConfirmTrust, PinKey, PinStore, PolicyVerifier, Protocol};
 use dualfile_core::vfs::{VPath, Vfs};
 use dualfile_core::VfsRouter;
 use std::collections::BTreeMap;
@@ -290,6 +290,7 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         &self,
         profile: crate::profile::WebdavProfile,
         secret: Secret,
+        confirm: Arc<dyn ConfirmTrust>,
     ) -> Result<ConnectionInfo, ConnectError> {
         profile.validate().map_err(ConnectError::Invalid)?;
         self.reserve()?;
@@ -298,8 +299,22 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
             let origin = format!("{scheme_str}://{}:{}", profile.host, profile.port);
             let user = (!profile.user.is_empty()).then_some(profile.user.as_str());
             let password = user.map(|_| secret.expose());
-            let transport = Arc::new(crate::webdav_transport::UreqTransport::new(
-                &origin, user, password,
+            // For https, pin and confirm the certificate through the same verifier the FTPS path
+            // uses (system roots + fingerprint pin + user confirmation); http carries no TLS.
+            let pinning = profile.tls.then(|| {
+                let verifier: Arc<dyn CertVerifier> =
+                    Arc::new(PolicyVerifier::new(self.pins.clone(), confirm));
+                crate::tls::PinningServerVerifier::new(
+                    verifier,
+                    PinKey::new(Protocol::Webdav, &profile.host, profile.port),
+                    crate::tls::system_roots(),
+                )
+            });
+            let tls_config = pinning
+                .as_ref()
+                .map(|p| crate::tls::client_config(p.clone()));
+            let transport = Arc::new(crate::webdav_transport::UreqTransport::new_tls(
+                &origin, user, password, tls_config,
             ));
             let id = self.next_id();
             let vfs = Arc::new(
@@ -313,11 +328,19 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
             // corrected credentials builds a fresh transport instead of reusing a failed one.
             let base = VPath::webdav(&id, "/")
                 .map_err(|_| ConnectError::Invalid("Ungültiger WebDAV-Basispfad"))?;
-            vfs.stat(&base).map_err(|e| match e {
-                dualfile_core::error::Error::PermissionDenied(_) => {
-                    ConnectError::Invalid("WebDAV-Anmeldung fehlgeschlagen")
+            vfs.stat(&base).map_err(|e| {
+                // A refused certificate surfaces here as a generic transport failure (rustls only
+                // reports a general error); recover the real trust reason so the connect flow can
+                // prompt the user to confirm the fingerprint, exactly like FTPS/SFTP.
+                if let Some(trust) = pinning.as_ref().and_then(|p| p.take_error()) {
+                    return ConnectError::Transport(TransportError::Trust(trust));
                 }
-                _ => ConnectError::Invalid("WebDAV-Server nicht erreichbar"),
+                match e {
+                    dualfile_core::error::Error::PermissionDenied(_) => {
+                        ConnectError::Invalid("WebDAV-Anmeldung fehlgeschlagen")
+                    }
+                    _ => ConnectError::Invalid("WebDAV-Server nicht erreichbar"),
+                }
             })?;
             self.router.register_remote(&id, vfs.clone()).map_err(|_| {
                 ConnectError::Invalid("Die Verbindung konnte nicht angemeldet werden")

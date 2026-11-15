@@ -38,3 +38,6 @@ rustix = { version = "1", features = ["fs"] }
 
 [dev-dependencies]
 tempfile = "3"
+# Generates a throwaway self-signed cert+key at test time for the in-process TLS server that
+# exercises the WebDAV pinning transport. Dev-only (pure Rust, ring back end); no key is committed.
+rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"] }
