@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { setupApp } from "./test-utils";
 import type { UpdateProgress } from "./ipc/system";
+import config from "../src-tauri/tauri.conf.json";
 
 const available = { version: "0.2.0", notes: "Fixed files\n<script>unsafe()</script>" };
 const settingsDialog = async (app: Awaited<ReturnType<typeof setupApp>>) => {
@@ -17,7 +18,8 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   expect(check).not.toHaveBeenCalled();
   const dlg = await settingsDialog(app);
   expect(dlg.getByRole("region", { name: "System" })).toBeInTheDocument();
-  expect(dlg.getByRole("region", { name: "Updates" })).toHaveTextContent("Installierte Version 0.1.0");
+  // Reads the version from the same source the dialog does, so a version bump never breaks this test.
+  expect(dlg.getByRole("region", { name: "Updates" })).toHaveTextContent(`Installierte Version ${config.version}`);
   await app.user.click(dlg.getByRole("checkbox", { name: /Symbol im Infobereich/ }));
   expect(tray).toHaveBeenLastCalledWith(true, "de");
   expect(app.runtime.store.getState().settings.trayEnabled).toBe(true);
