@@ -1325,6 +1325,20 @@ fn remove_tree(
     }
     let e = retry_io(j, p, || v.stat(p))?;
     if e.kind == EntryKind::Dir {
+        // A local directory is removed with the standard library's hardened remove_dir_all,
+        // which walks the tree through openat/unlinkat and never follows a directory symlink
+        // swapped in mid-walk (CVE-2022-21658). The manual path walk below follows such a swap
+        // via list(), so it is kept only for remote backends, where that local race cannot
+        // happen. The trade-off is no per-entry cancellation/progress during a local removal,
+        // acceptable for the final source cleanup of a move.
+        if p.scheme() == Scheme::Local {
+            retry_io(j, p, || {
+                std::fs::remove_dir_all(p.path())
+                    .map_err(|e| crate::error::from_io("Ordner löschen", p.path(), e))
+            })?;
+            removed.push(p.clone());
+            return Ok(());
+        }
         for c in retry_io(j, p, || v.list(p))? {
             let cp = join(p, &c.name)?;
             remove_tree(v, &cp, j, r, removed)?;
@@ -1744,6 +1758,39 @@ pub fn make_dir(v: &dyn Vfs, parent: &VPath, name: &str) -> Result<VPath> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_tree_removal_unlinks_a_symlink_without_deleting_its_target() {
+        // Removing a source tree must unlink a directory symlink inside it, never follow it and
+        // delete the files it points at outside the tree (CVE-2022-21658 class, finding F3).
+        let tmp = tempfile::tempdir().unwrap();
+        let victim = tmp.path().join("victim");
+        std::fs::create_dir(&victim).unwrap();
+        std::fs::write(victim.join("keep.txt"), b"important").unwrap();
+        let src = tmp.path().join("src");
+        std::fs::create_dir(&src).unwrap();
+        std::os::unix::fs::symlink(&victim, src.join("link")).unwrap();
+        std::fs::write(src.join("own.txt"), b"x").unwrap();
+        let mut removed = Vec::new();
+        let mut report = OpReport::default();
+        remove_tree(
+            &LocalVfs,
+            &VPath::local(&src).unwrap(),
+            &JobHandle::silent(),
+            &mut report,
+            &mut removed,
+        )
+        .unwrap();
+        assert!(!src.exists(), "the source tree is gone");
+        assert!(
+            victim.join("keep.txt").exists(),
+            "the symlink target must survive"
+        );
+        assert_eq!(
+            std::fs::read(victim.join("keep.txt")).unwrap(),
+            b"important"
+        );
+    }
     use crate::vfs::LocalVfs;
     use crate::vfs::{Caps, WriteFinish};
     use std::fs;

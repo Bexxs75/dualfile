@@ -11,6 +11,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Security
 
+- Removing a local source tree during a move now uses the hardened directory removal that never follows a directory symlink swapped in during the walk, so a local race cannot redirect the deletion outside the source tree (F3).
+- A remote file opened externally is never handed to the desktop as a launchable `.desktop` entry: the private local copy of such a file is renamed so it opens as text instead of being executed (F11).
 - A saved password is discarded when a profile is changed to another server (host, port or protocol), so it is never sent to the new server.
 - Resetting trust now also closes the open session that still used the forgotten certificate.
 
