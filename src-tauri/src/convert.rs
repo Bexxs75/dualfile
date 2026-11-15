@@ -615,6 +615,8 @@ pub struct SettingsDto {
     pub show_parent_entry: bool,
     #[serde(default)]
     pub show_quick_access: bool,
+    #[serde(default = "default_terminal_height")]
+    pub terminal_height: u32,
     #[serde(default = "default_show_parent_entry")]
     pub check_updates_on_start: bool,
     #[serde(default)]
@@ -650,6 +652,10 @@ fn default_show_parent_entry() -> bool {
     true
 }
 
+fn default_terminal_height() -> u32 {
+    260
+}
+
 impl From<&settings::Settings> for SettingsDto {
     fn from(s: &settings::Settings) -> Self {
         Self {
@@ -660,6 +666,7 @@ impl From<&settings::Settings> for SettingsDto {
             accent_automatic: s.accent_automatic,
             show_parent_entry: s.show_parent_entry,
             show_quick_access: s.show_quick_access,
+            terminal_height: s.terminal_height,
             check_updates_on_start: s.check_updates_on_start,
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
@@ -720,6 +727,7 @@ impl From<&SettingsDto> for settings::Settings {
             accent_automatic: s.accent_automatic,
             show_parent_entry: s.show_parent_entry,
             show_quick_access: s.show_quick_access,
+            terminal_height: s.terminal_height,
             check_updates_on_start: s.check_updates_on_start,
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
@@ -1328,6 +1336,7 @@ mod tests {
             font_size: 15,
             show_parent_entry: false,
             show_quick_access: true,
+            terminal_height: 420,
             mirror: true,
             ..settings::Settings::default()
         };
@@ -1350,6 +1359,7 @@ mod tests {
         assert_eq!(value["fontSize"], 15);
         assert_eq!(value["showParentEntry"], false);
         assert_eq!(value["showQuickAccess"], true);
+        assert_eq!(value["terminalHeight"], 420);
         let mut legacy = value.clone();
         legacy.as_object_mut().unwrap().remove("showParentEntry");
         assert!(

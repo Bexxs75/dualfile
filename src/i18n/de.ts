@@ -762,6 +762,7 @@ const de = {
   "lister.quick.paused": "Der Lister ist geöffnet.",
   "toast.viewFolder": "Ordner lassen sich nicht ansehen.",
   "menu.view.terminal": "Terminal",
+  "terminal.resize": "Terminalhöhe ziehen",
   "tip.terminal": "Terminal ein-/ausschalten (Strg+`)",
   "keys.cmd.terminal": "Terminal",
   "terminal.exited": "[Prozess beendet]",

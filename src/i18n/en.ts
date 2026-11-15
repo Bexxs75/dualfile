@@ -765,6 +765,7 @@ const en: Record<keyof typeof de, string> = {
   "lister.quick.paused": "The viewer is open.",
   "toast.viewFolder": "Folders cannot be viewed.",
   "menu.view.terminal": "Terminal",
+  "terminal.resize": "Resize terminal",
   "tip.terminal": "Toggle terminal (Ctrl+`)",
   "keys.cmd.terminal": "Terminal",
   "terminal.exited": "[process exited]",

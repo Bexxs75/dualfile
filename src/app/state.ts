@@ -124,6 +124,7 @@ export const defaultSettings: Settings = {
   accentAutomatic: true,
   showParentEntry: true,
   showQuickAccess: false,
+  terminalHeight: 260,
   extensionColumn: false,
   checkUpdatesOnStart: true,
   trayEnabled: false,

@@ -103,6 +103,35 @@ test("buffers early binary output and exit, filters other IDs and stops input", 
   expect(unlisten).toHaveBeenCalledTimes(2);
 });
 
+test("resize handle drags up to persist a clamped height, resets on double-click, steps with arrows", async () => {
+  const { rt, view } = setup();
+  fireEvent.click(screen.getByText("toggle"));
+  await act(async () => {});
+  const handle = screen.getByRole("separator", { name: "Resize terminal" });
+  const panel = screen.getByRole("region", { name: "Terminal" });
+  expect(panel.style.height).toBe("260px");
+  fireEvent.pointerDown(handle, { clientY: 500 });
+  fireEvent.pointerMove(window, { clientY: 400 });
+  expect(panel.style.height).toBe("360px");
+  expect(rt.store.getState().settings.terminalHeight).toBe(260);
+  fireEvent.pointerUp(window, { clientY: 400 });
+  expect(rt.store.getState().settings.terminalHeight).toBe(360);
+  fireEvent.pointerDown(handle, { clientY: 500 });
+  fireEvent.pointerUp(window, { clientY: -5000 });
+  expect(rt.store.getState().settings.terminalHeight).toBe(Math.min(800, Math.round(window.innerHeight * 0.8)));
+  fireEvent.pointerDown(handle, { clientY: 0 });
+  fireEvent.pointerUp(window, { clientY: 5000 });
+  expect(rt.store.getState().settings.terminalHeight).toBe(100);
+  fireEvent.doubleClick(handle);
+  expect(rt.store.getState().settings.terminalHeight).toBe(260);
+  fireEvent.keyDown(handle, { key: "ArrowUp" });
+  expect(rt.store.getState().settings.terminalHeight).toBe(276);
+  fireEvent.keyDown(handle, { key: "ArrowDown" });
+  fireEvent.keyDown(handle, { key: "ArrowDown" });
+  expect(rt.store.getState().settings.terminalHeight).toBe(244);
+  view.unmount();
+});
+
 test("shortcut is unique and can close the focused terminal", async () => {
   expect(mapKey({ key: "`", ctrlKey: true })).toBe("terminal");
   expect(Object.values(REBINDABLE).filter(spec => spec === "Ctrl+`")).toHaveLength(1);

@@ -429,6 +429,8 @@ export interface Settings {
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
   showQuickAccess?: boolean;
+  /** Höhe (px) des eingebetteten Terminals; fehlt der Wert, gilt 260. */
+  terminalHeight?: number;
   extensionColumn?: boolean;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };

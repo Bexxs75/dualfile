@@ -503,6 +503,7 @@ mod tests {
             accent_automatic: false,
             show_parent_entry: true,
             show_quick_access: false,
+            terminal_height: 260,
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,

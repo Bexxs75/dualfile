@@ -7,6 +7,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Added
 
+- The height of the embedded terminal can be changed by dragging its top edge (double-click resets); it is remembered.
 - Optional quick-access bar above the panes with local drives and bookmarks; one click opens the place in the active pane. Off by default (Settings).
 
 ### Security

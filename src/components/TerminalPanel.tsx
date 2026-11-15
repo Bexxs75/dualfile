@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { useController, useRuntime, useT } from "../app/context";
+import { useAppState, useController, useRuntime, useT } from "../app/context";
 import type { DualfileApi, TerminalOutput, TerminalExit } from "../ipc/api";
 import { mapKey } from "../state/keymap";
 import { isArchivePath, parseRemotePath } from "../state/paths";
@@ -14,6 +14,30 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
   const controller = useController();
   const { store } = useRuntime();
   const tr = useT();
+  const settingsHeight = useAppState(s => s.settings.terminalHeight);
+  const [dragHeight, setDragHeight] = useState<number | null>(null);
+  const clamp = (h: number) => Math.max(100, Math.min(h, Math.min(800, Math.round(window.innerHeight * 0.8))));
+  const height = clamp(dragHeight ?? settingsHeight ?? 260);
+  const persist = (terminalHeight: number) => controller.updateSettings(s => ({ ...s, terminalHeight }));
+  const onDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startY = e.clientY, start = height;
+    const move = (ev: PointerEvent) => setDragHeight(clamp(start - (ev.clientY - startY)));
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const final = clamp(start - (ev.clientY - startY));
+      setDragHeight(null);
+      persist(final);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    persist(clamp(height + (e.key === "ArrowUp" ? 16 : -16)));
+  };
   const exitedText = useRef(tr("terminal.exited"));
   useEffect(() => {
     const element = host.current;
@@ -95,5 +119,12 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
       term.dispose();
     };
   }, [api, controller, store]);
-  return <section className="terminal-panel" aria-label={tr("menu.view.terminal")}><div className="terminal-host" ref={host} /></section>;
+  return (
+    <section className="terminal-panel" style={{ height, flex: `0 0 ${height}px` }} aria-label={tr("menu.view.terminal")}>
+      <div className="terminal-resize" role="separator" aria-orientation="horizontal" tabIndex={0}
+        aria-label={tr("terminal.resize")} title={tr("terminal.resize")}
+        onPointerDown={onDown} onDoubleClick={() => persist(260)} onKeyDown={onKey} />
+      <div className="terminal-host" ref={host} />
+    </section>
+  );
 }
