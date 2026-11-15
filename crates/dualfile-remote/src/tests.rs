@@ -940,6 +940,68 @@ fn real_ftp_round_trip() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// Manual integration test against a real SMB server (never run by plain `cargo test`).
+/// `DUALFILE_SMB_TEST=host:port:user:pass:share:workdir` (workdir must exist under the share).
+/// Run with `cargo test -p dualfile-remote -- --ignored real_smb`.
+#[test]
+#[ignore = "needs a real SMB server, see DUALFILE_SMB_TEST"]
+fn real_smb_round_trip() {
+    use crate::smb::SmbProfile;
+    use std::io::Read;
+    let spec = std::env::var("DUALFILE_SMB_TEST").expect("DUALFILE_SMB_TEST");
+    let parts: Vec<&str> = spec.splitn(6, ':').collect();
+    let [host, port, user, pass, share, work] = parts[..] else {
+        panic!("host:port:user:pass:share:workdir")
+    };
+    let (m, router, _) = manager(&FakeServer::new(), 2);
+    let profile = SmbProfile {
+        name: "it".into(),
+        host: host.into(),
+        port: port.parse().unwrap(),
+        user: user.into(),
+        domain: "WORKGROUP".into(),
+        share: share.into(),
+        guest: false,
+        start_folder: Some(work.into()),
+    };
+    let info = m.connect_smb(profile, Secret::new(pass)).unwrap();
+    let vfs = router.vfs_for(&info.root).unwrap();
+    let at = |name: &str| VPath::smb(&info.id, &format!("{work}/{name}")).unwrap();
+    let _ = vfs.remove_permanent(&at("t.bin"));
+    let _ = vfs.remove_permanent(&at("dir"));
+    vfs.mkdir(&at("dir")).unwrap();
+    let tmp = std::env::temp_dir().join(format!("df-smb-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let data: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
+    std::fs::write(tmp.join("t.bin"), &data).unwrap();
+    let report = ops::copy(
+        &dualfile_core::LocalVfs,
+        &[VPath::local(tmp.join("t.bin")).unwrap()],
+        &*vfs,
+        &VPath::smb(&info.id, work).unwrap(),
+        None,
+        &JobHandle::silent(),
+    );
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    let names: Vec<String> = vfs
+        .list(&VPath::smb(&info.id, work).unwrap())
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    assert!(names.contains(&"t.bin".to_string()), "{names:?}");
+    assert!(names.contains(&"dir".to_string()), "{names:?}");
+    let mut got = Vec::new();
+    vfs.open_read(&at("t.bin"))
+        .unwrap()
+        .read_to_end(&mut got)
+        .unwrap();
+    assert_eq!(got, data);
+    let _ = vfs.remove_permanent(&at("t.bin"));
+    let _ = vfs.remove_permanent(&at("dir"));
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn manager_registers_and_removes_connections_and_caps_them() {
     let server = FakeServer::new();

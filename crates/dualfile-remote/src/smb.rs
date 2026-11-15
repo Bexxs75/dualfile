@@ -160,6 +160,10 @@ enum Handle {
         writer: Box<FileWriter>,
         path: String,
         tree: Arc<Tree>,
+        /// Bytes handed to `write_chunk` so far. `FileWriter::bytes_written` counts only what the
+        /// server has acknowledged, which lags behind the pipelined writes, so the sequential-write
+        /// check below must compare against the accepted count, not the acknowledged one.
+        accepted: u64,
     },
 }
 
@@ -346,6 +350,7 @@ impl SftpTransport for SmbTransport {
             writer: Box::new(writer),
             path,
             tree,
+            accepted: 0,
         }))
     }
     fn read(&mut self, h: SftpHandle, offset: u64, buf: &mut [u8]) -> TResult<usize> {
@@ -357,18 +362,27 @@ impl SftpTransport for SmbTransport {
         Ok(data.len())
     }
     fn write(&mut self, h: SftpHandle, offset: u64, data: &[u8]) -> TResult<()> {
-        let Some(Handle::Writer { writer, .. }) = self.handles.get_mut(&h.0) else {
+        let Some(Handle::Writer {
+            writer, accepted, ..
+        }) = self.handles.get_mut(&h.0)
+        else {
             return Err(TransportError::Rejected);
         };
-        if offset != writer.bytes_written() {
+        // Writes must be sequential; compare against what we have accepted, not the server's
+        // acknowledged count (which lags behind the pipelined chunks and would reject chunk 2+).
+        if offset != *accepted {
             return Err(TransportError::Rejected);
         }
-        run(self.timeout, writer.write_chunk(data))
+        run(self.timeout, writer.write_chunk(data))?;
+        *accepted += data.len() as u64;
+        Ok(())
     }
     fn fstat(&mut self, h: SftpHandle) -> TResult<RawAttrs> {
         match self.handles.get_mut(&h.0) {
             Some(Handle::Reader(reader)) => Ok(attrs(reader.info())),
-            Some(Handle::Writer { writer, tree, path }) => {
+            Some(Handle::Writer {
+                writer, tree, path, ..
+            }) => {
                 run(self.timeout, writer.flush_checkpoint())?;
                 run(self.timeout, tree.stat(&mut self.conn, path)).map(|i| attrs(&i))
             }

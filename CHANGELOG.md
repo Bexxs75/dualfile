@@ -19,6 +19,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Fixed
 
+- SMB: uploading a file larger than a single transfer chunk no longer fails — the sequential-write check compared the write offset against the server-acknowledged byte count (which lags behind the pipelined writes) instead of the bytes accepted, rejecting the second chunk.
 - WebDAV: subfolders on servers that redirect a collection path without a trailing slash (e.g. Apache mod_dav) are now browsable — a PROPFIND that is 301/308-redirected is retried once with a trailing slash (the server's redirect target is still never followed).
 - The embedded terminal now starts the shell with a clean environment in the AppImage build: it no longer inherits the bundle's LD_LIBRARY_PATH/PATH, so the shell loads system libraries (e.g. fish/libpcre2) and finds system commands instead of the bundled ones.
 - Large entries in a plain (uncompressed) tar are no longer wrongly rejected as a possible zip bomb past 100 MiB (the compression-ratio guard was not fed the bytes read).
