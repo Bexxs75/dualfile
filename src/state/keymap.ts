@@ -51,6 +51,9 @@ export type Command =
 
 export interface KeyboardEventLike {
   key: string;
+  /** Physische Taste (layoutunabhängig), z.B. "Backquote". Für Tasten, die auf manchen Layouts
+   *  (z.B. deutsch) als Tot-/Akzenttaste nicht direkt tippbar sind. */
+  code?: string;
   ctrlKey?: boolean;
   shiftKey?: boolean;
   altKey?: boolean;
@@ -126,10 +129,11 @@ export const RESERVED_SPECS: ReadonlySet<string> = new Set(["Ctrl+K", "Ctrl+P", 
  * Strg-Kombinationen nur mit Buchstaben/Ziffern; Satzzeichen (Strg+, u. a.) bleiben unbelegbar.
  */
 export function eventToSpec(event: KeyboardEventLike): string | null {
-  const { key, ctrlKey = false, shiftKey = false, altKey = false, metaKey = false } = event;
+  const { key, code, ctrlKey = false, shiftKey = false, altKey = false, metaKey = false } = event;
   if (altKey || metaKey) return null;
   if (/^F([1-9]|1[0-2])$/.test(key)) return ctrlKey ? null : shiftKey ? `Shift+${key}` : key;
-  if (ctrlKey && key === "`" && !shiftKey) return "Ctrl+`";
+  // Backtick is a dead/accent key on several layouts (e.g. German), so match the physical key too.
+  if (ctrlKey && !shiftKey && (key === "`" || code === "Backquote")) return "Ctrl+`";
   if (ctrlKey && /^[a-z0-9]$/i.test(key)) return `Ctrl+${shiftKey ? "Shift+" : ""}${key.toUpperCase()}`;
   return null;
 }

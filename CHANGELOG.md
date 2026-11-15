@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- The terminal keyboard shortcut (Ctrl+`) now works on keyboard layouts where the backtick is a dead/accent key (e.g. German): the physical top-left key is matched regardless of layout.
+
 ## [0.2.4] - 2026-11-15
 
 ### Security

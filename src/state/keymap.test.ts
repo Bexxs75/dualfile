@@ -198,4 +198,10 @@ describe("Vergleichen (Phase 5c)", () => {
     expect(mapDiffKey(k("N", { shiftKey: true }))).toBeNull();
     expect(mapDiffKey(k("x"))).toBeNull();
   });
+  test("terminal toggle works via the physical backtick key on any layout", () => {
+    expect(mapKey({ key: "`", ctrlKey: true }, "list")).toBe("terminal"); // US backtick
+    expect(mapKey({ key: "^", code: "Backquote", ctrlKey: true }, "list")).toBe("terminal"); // German ^° key
+    expect(mapKey({ key: "Dead", code: "Backquote", ctrlKey: true }, "list")).toBe("terminal"); // dead-key variant
+    expect(mapKey({ key: "^", code: "Backquote", ctrlKey: true, shiftKey: true }, "list")).not.toBe("terminal");
+  });
 });
