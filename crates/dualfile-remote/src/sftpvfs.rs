@@ -1091,6 +1091,9 @@ impl<T: SftpTransport> Vfs for SftpVfs<T> {
         p: &VPath,
         expected_source: SourceIdentity,
     ) -> Result<ResumableWrite> {
+        if self.shared.scheme == Scheme::Nfs {
+            return Err(Error::Unsupported("NFS resume"));
+        }
         if self.shared.scheme == Scheme::Smb {
             return Err(Error::Unsupported("SMB resume"));
         }

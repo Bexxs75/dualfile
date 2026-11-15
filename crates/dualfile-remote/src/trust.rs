@@ -20,6 +20,7 @@ pub enum Protocol {
     Ftps,
     Sftp,
     Smb,
+    Nfs,
     Webdav,
 }
 

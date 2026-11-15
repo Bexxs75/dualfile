@@ -265,7 +265,7 @@ fn core_protocol(protocol: Protocol) -> Option<PinProtocol> {
         Protocol::Ftps => Some(PinProtocol::Ftps),
         Protocol::Sftp => Some(PinProtocol::Sftp),
         Protocol::Webdav => Some(PinProtocol::Webdav),
-        Protocol::Smb => None,
+        Protocol::Smb | Protocol::Nfs => None,
     }
 }
 

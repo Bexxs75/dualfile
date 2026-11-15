@@ -88,6 +88,7 @@ impl AppState {
         };
         Ok(match info.protocol {
             Protocol::Smb => VPath::smb(&info.id, &path)?,
+            Protocol::Nfs => VPath::nfs(&info.id, &path)?,
             Protocol::Webdav => VPath::webdav(&info.id, &path)?,
             Protocol::Sftp => VPath::sftp(&info.id, &path)?,
             Protocol::Ftps => VPath::ftp(&info.id, &path)?,

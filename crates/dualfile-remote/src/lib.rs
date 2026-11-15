@@ -9,6 +9,7 @@ pub mod ftpvfs;
 pub mod listing;
 pub mod manager;
 pub mod names;
+pub mod nfs;
 #[cfg(unix)]
 pub mod openssh_transport;
 pub mod passive;

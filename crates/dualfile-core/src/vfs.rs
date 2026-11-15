@@ -24,6 +24,8 @@ pub enum Scheme {
     Sftp,
     /// A folder on an SMB2/3 connection (`smb:<connection id>!<path>`).
     Smb,
+    /// A folder on an NFSv3 export (`nfs:<connection id>!<path>`).
+    Nfs,
     /// A folder on a WebDAV server (`webdav:<connection id>!<path>`).
     Webdav,
     /// A folder in a file system served by a plugin process (`plugin:<plugin id>!<path>`). The
@@ -38,7 +40,12 @@ impl Scheme {
     pub fn is_remote(self) -> bool {
         matches!(
             self,
-            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav | Scheme::Plugin
+            Scheme::Ftp
+                | Scheme::Sftp
+                | Scheme::Smb
+                | Scheme::Nfs
+                | Scheme::Webdav
+                | Scheme::Plugin
         )
     }
 
@@ -46,7 +53,7 @@ impl Scheme {
     pub fn is_server(self) -> bool {
         matches!(
             self,
-            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav
+            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Nfs | Scheme::Webdav
         )
     }
 }
@@ -60,6 +67,7 @@ pub const MAX_ARCHIVE_NAME_LEN: usize = 255;
 const ARCHIVE_PREFIX: &str = "archive:";
 const FTP_PREFIX: &str = "ftp:";
 const SMB_PREFIX: &str = "smb:";
+const NFS_PREFIX: &str = "nfs:";
 const WEBDAV_PREFIX: &str = "webdav:";
 const SFTP_PREFIX: &str = "sftp:";
 const PLUGIN_PREFIX: &str = "plugin:";
@@ -222,6 +230,11 @@ impl VPath {
         Self::remote(Scheme::Smb, conn, path)
     }
 
+    /// A path on the NFSv3 export of the connection `conn`.
+    pub fn nfs(conn: &str, path: &str) -> Result<Self> {
+        Self::remote(Scheme::Nfs, conn, path)
+    }
+
     /// A path on the WebDAV connection `conn`.
     pub fn webdav(conn: &str, path: &str) -> Result<Self> {
         Self::remote(Scheme::Webdav, conn, path)
@@ -361,6 +374,7 @@ pub fn format_ipc_path(path: &VPath) -> String {
         let prefix = match path.scheme {
             Scheme::Ftp => FTP_PREFIX,
             Scheme::Smb => SMB_PREFIX,
+            Scheme::Nfs => NFS_PREFIX,
             Scheme::Webdav => WEBDAV_PREFIX,
             Scheme::Plugin => PLUGIN_PREFIX,
             _ => SFTP_PREFIX,
@@ -387,6 +401,7 @@ pub fn parse_ipc_path(text: &str) -> Result<VPath> {
             (FTP_PREFIX, Scheme::Ftp),
             (SFTP_PREFIX, Scheme::Sftp),
             (SMB_PREFIX, Scheme::Smb),
+            (NFS_PREFIX, Scheme::Nfs),
             (WEBDAV_PREFIX, Scheme::Webdav),
             (PLUGIN_PREFIX, Scheme::Plugin),
         ] {

@@ -306,6 +306,48 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         self.finish(outcome)
     }
 
+    pub fn connect_nfs(
+        &self,
+        profile: crate::nfs::NfsProfile,
+    ) -> Result<ConnectionInfo, ConnectError> {
+        profile.validate().map_err(ConnectError::Invalid)?;
+        self.reserve()?;
+        let outcome = (|| {
+            let cfg = self.cfg.sftp.clone();
+            let first = crate::nfs::NfsTransport::connect(&profile, cfg.timeouts)?;
+            let id = self.next_id();
+            let p = profile.clone();
+            let timeouts = cfg.timeouts;
+            let opener = Arc::new(move || crate::nfs::NfsTransport::connect(&p, timeouts));
+            let vfs = crate::nfs::NfsVfs::with_scheme(
+                &id,
+                first,
+                opener,
+                cfg,
+                None,
+                dualfile_core::vfs::Scheme::Nfs,
+            )
+            .map_err(|_| ConnectError::Invalid("Ungültige Verbindungskennung"))?;
+            let root = VPath::nfs(&id, profile.start_folder.as_deref().unwrap_or("/"))
+                .map_err(|_| ConnectError::Invalid("Ungültiger Startordner"))?;
+            self.router.register_remote(&id, vfs.clone()).map_err(|_| {
+                ConnectError::Invalid("Die Verbindung konnte nicht angemeldet werden")
+            })?;
+            let info = ConnectionInfo {
+                id,
+                name: profile.name,
+                host: profile.host,
+                port: profile.port,
+                user: format!("{}:{}", profile.uid, profile.gid),
+                protocol: Protocol::Nfs,
+                tls: None,
+                root,
+            };
+            Ok((info, vfs as Arc<dyn Closable>))
+        })();
+        self.finish(outcome)
+    }
+
     pub fn connect_webdav(
         &self,
         profile: crate::profile::WebdavProfile,
