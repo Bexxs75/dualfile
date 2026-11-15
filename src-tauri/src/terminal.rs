@@ -13,7 +13,7 @@ use std::{
         Arc, Mutex, MutexGuard,
     },
 };
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 const MAX_SESSIONS: usize = 8;
 
@@ -109,18 +109,41 @@ fn apply_clean_env(command: &mut CommandBuilder) {
 
 /// The embedded terminal runs a plain shell on purpose: it ignores the user's
 /// `$SHELL` and interactive startup files so it stays simple (no greeting, no
-/// custom prompt, no login banner). bash with `--norc` when available,
-/// otherwise `/bin/sh`.
-fn plain_shell(bash_exists: bool) -> (&'static str, &'static [&'static str]) {
-    if bash_exists {
-        ("/bin/bash", &["--norc"])
+/// custom prompt, no login banner). fish with `--no-config` when installed (for
+/// inline command suggestions, still without the user's config), otherwise bash
+/// with `--norc`, otherwise `/bin/sh`.
+fn plain_shell(fish: Option<&str>, bash_exists: bool) -> (String, Vec<&'static str>) {
+    if let Some(fish) = fish {
+        (fish.to_string(), vec!["--no-config"])
+    } else if bash_exists {
+        ("/bin/bash".to_string(), vec!["--norc"])
     } else {
-        ("/bin/sh", &[])
+        ("/bin/sh".to_string(), vec![])
     }
 }
 
-fn shell_command(cwd: Option<String>) -> CommandBuilder {
-    let (program, args) = plain_shell(std::path::Path::new("/bin/bash").is_file());
+fn find_fish() -> Option<&'static str> {
+    ["/usr/bin/fish", "/usr/local/bin/fish", "/bin/fish"]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).is_file())
+}
+
+/// The user's own `$SHELL` (so their config, prompt and greeting run), falling
+/// back to the plain shell when `$SHELL` is unset or missing.
+fn login_shell() -> (String, Vec<&'static str>) {
+    match std::env::var("SHELL") {
+        Ok(s) if !s.is_empty() && std::path::Path::new(&s).is_file() => (s, vec![]),
+        _ => plain_shell(find_fish(), std::path::Path::new("/bin/bash").is_file()),
+    }
+}
+
+fn shell_command(cwd: Option<String>, mode: &str) -> CommandBuilder {
+    let bash = std::path::Path::new("/bin/bash").is_file();
+    let (program, args) = match mode {
+        "login" => login_shell(),
+        "bash" => plain_shell(None, bash),
+        _ => plain_shell(find_fish(), bash),
+    };
     let mut command = CommandBuilder::new(program);
     command.args(args);
     command.arg("-i");
@@ -349,8 +372,13 @@ pub async fn terminal_open(
     rows: u16,
     cols: u16,
 ) -> Result<u64, UiError> {
+    let shell = app
+        .state::<Arc<crate::state::AppState>>()
+        .load_settings()
+        .settings
+        .terminal_shell;
     run(manager, move |manager| {
-        manager.open(shell_command(cwd), rows, cols, Arc::new(TauriSink(app)))
+        manager.open(shell_command(cwd, &shell), rows, cols, Arc::new(TauriSink(app)))
     })
     .await
 }
@@ -408,9 +436,13 @@ mod tests {
         command
     }
     #[test]
-    fn plain_shell_prefers_bash_norc_then_sh() {
-        assert_eq!(plain_shell(true), ("/bin/bash", &["--norc"][..]));
-        assert_eq!(plain_shell(false), ("/bin/sh", &[][..]));
+    fn plain_shell_prefers_fish_then_bash_then_sh() {
+        assert_eq!(
+            plain_shell(Some("/usr/bin/fish"), true),
+            ("/usr/bin/fish".to_string(), vec!["--no-config"])
+        );
+        assert_eq!(plain_shell(None, true), ("/bin/bash".to_string(), vec!["--norc"]));
+        assert_eq!(plain_shell(None, false), ("/bin/sh".to_string(), vec![]));
     }
     #[test]
     fn shell_env_drops_appimage_runtime_paths() {

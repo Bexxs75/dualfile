@@ -3,6 +3,20 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [0.2.9] - 2026-11-15
+
+### Added
+
+- A **Terminal shell** setting (Settings → System) lets you choose which shell the embedded terminal launches: *Automatic* (fish with inline command suggestions when fish is installed, otherwise a plain `bash`/`sh`), *Plain bash*, or *My shell (`$SHELL`)* with your own config, prompt and greeting.
+
+### Changed
+
+- When fish is installed, the embedded terminal now opens it with `--no-config` (so still no custom prompt or greeting), giving inline command suggestions as you type; without fish it falls back to the plain `bash --norc` / `/bin/sh` as before. This is the new *Automatic* default and can be changed in the new Terminal shell setting.
+
+### Fixed
+
+- The embedded terminal's cursor is now a steady block instead of blinking, so it stays visible. The blink animation did not run in the app's webview, which left the cursor invisible.
+
 ## [0.2.8] - 2026-11-15
 
 ### Changed

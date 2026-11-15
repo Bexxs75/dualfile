@@ -42,7 +42,8 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    const term = new Terminal({ cursorBlink: true, fontSize: 13, fontFamily: '"IBM Plex Mono", monospace' });
+    // Steady cursor: the blink animation never runs in the WebKitGTK webview, leaving the cursor stuck invisible.
+    const term = new Terminal({ cursorBlink: false, fontSize: 13, fontFamily: '"IBM Plex Mono", monospace' });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(element);

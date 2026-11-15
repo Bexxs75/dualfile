@@ -615,6 +615,8 @@ pub struct SettingsDto {
     pub show_parent_entry: bool,
     #[serde(default = "default_terminal_height")]
     pub terminal_height: u32,
+    #[serde(default = "default_terminal_shell")]
+    pub terminal_shell: String,
     #[serde(default = "default_show_parent_entry")]
     pub check_updates_on_start: bool,
     #[serde(default)]
@@ -654,6 +656,10 @@ fn default_terminal_height() -> u32 {
     260
 }
 
+fn default_terminal_shell() -> String {
+    "auto".into()
+}
+
 impl From<&settings::Settings> for SettingsDto {
     fn from(s: &settings::Settings) -> Self {
         Self {
@@ -664,6 +670,7 @@ impl From<&settings::Settings> for SettingsDto {
             accent_automatic: s.accent_automatic,
             show_parent_entry: s.show_parent_entry,
             terminal_height: s.terminal_height,
+            terminal_shell: s.terminal_shell.clone(),
             check_updates_on_start: s.check_updates_on_start,
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
@@ -724,6 +731,7 @@ impl From<&SettingsDto> for settings::Settings {
             accent_automatic: s.accent_automatic,
             show_parent_entry: s.show_parent_entry,
             terminal_height: s.terminal_height,
+            terminal_shell: s.terminal_shell.clone(),
             check_updates_on_start: s.check_updates_on_start,
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
@@ -1332,6 +1340,7 @@ mod tests {
             font_size: 15,
             show_parent_entry: false,
             terminal_height: 420,
+            terminal_shell: "login".into(),
             mirror: true,
             ..settings::Settings::default()
         };
@@ -1354,6 +1363,7 @@ mod tests {
         assert_eq!(value["fontSize"], 15);
         assert_eq!(value["showParentEntry"], false);
         assert_eq!(value["terminalHeight"], 420);
+        assert_eq!(value["terminalShell"], "login");
         let mut legacy = value.clone();
         legacy.as_object_mut().unwrap().remove("showParentEntry");
         assert!(

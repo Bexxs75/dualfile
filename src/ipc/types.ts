@@ -430,6 +430,8 @@ export interface Settings {
   showParentEntry?: boolean;
   /** Höhe (px) des eingebetteten Terminals; fehlt der Wert, gilt 260. */
   terminalHeight?: number;
+  /** Shell des eingebetteten Terminals: "auto" (fish mit Vorschlägen, sonst bash/sh), "bash" (immer schlichte bash/sh) oder "login" (eigene $SHELL mit Konfiguration). Fehlt der Wert, gilt "auto". */
+  terminalShell?: "auto" | "bash" | "login";
   extensionColumn?: boolean;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };

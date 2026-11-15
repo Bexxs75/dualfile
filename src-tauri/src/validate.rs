@@ -220,6 +220,9 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     if !["de", "en", "auto"].contains(&s.language.as_str()) {
         return Err(bad_settings("Sprache"));
     }
+    if !["auto", "bash", "login"].contains(&s.terminal_shell.as_str()) {
+        return Err(bad_settings("Terminal-Shell"));
+    }
     if !valid_color(&s.accent) {
         return Err(bad_settings("Akzentfarbe"));
     }
@@ -503,6 +506,7 @@ mod tests {
             accent_automatic: false,
             show_parent_entry: true,
             terminal_height: 260,
+            terminal_shell: "auto".into(),
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,

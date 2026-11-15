@@ -27,6 +27,10 @@ pub struct Settings {
     pub accent_automatic: bool,
     pub show_parent_entry: bool,
     pub terminal_height: u32,
+    /// Which shell the embedded terminal launches: "auto" (fish with suggestions
+    /// when installed, else bash/sh), "bash" (always plain bash/sh), or "login"
+    /// (the user's own `$SHELL` with their config, prompt and greeting).
+    pub terminal_shell: String,
     pub check_updates_on_start: bool,
     pub tray_enabled: bool,
     pub start_menu_prompted: bool,
@@ -75,6 +79,7 @@ impl Default for Settings {
             accent_automatic: true,
             show_parent_entry: true,
             terminal_height: 260,
+            terminal_shell: "auto".into(),
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,
@@ -346,6 +351,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         accent_automatic: field(&mut obj, "accent_automatic", false, &mut fixes),
         show_parent_entry: field(&mut obj, "show_parent_entry", true, &mut fixes),
         terminal_height: field(&mut obj, "terminal_height", 260, &mut fixes),
+        terminal_shell: field(&mut obj, "terminal_shell", d.terminal_shell.clone(), &mut fixes),
         check_updates_on_start: field(&mut obj, "check_updates_on_start", true, &mut fixes),
         tray_enabled: field(&mut obj, "tray_enabled", false, &mut fixes),
         start_menu_prompted: field(&mut obj, "start_menu_prompted", false, &mut fixes),
@@ -417,6 +423,13 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         &mut fixes,
     ) {
         s.language = d.language.clone();
+    }
+    if !bad(
+        ["auto", "bash", "login"].contains(&s.terminal_shell.as_str()),
+        "terminal_shell",
+        &mut fixes,
+    ) {
+        s.terminal_shell = d.terminal_shell.clone();
     }
     for b in &mut s.bookmarks {
         if !bad(valid_color(&b.color), "bookmarks.color", &mut fixes) {
@@ -603,6 +616,21 @@ mod tests {
         settings.terminal_height = 400;
         save(dir.path(), &settings, false).unwrap();
         assert_eq!(load(dir.path()).0.terminal_height, 400);
+    }
+
+    #[test]
+    fn terminal_shell_defaults_to_auto_roundtrips_and_rejects_unknown() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), r#"{"version":6}"#);
+        let (mut settings, _) = load(dir.path());
+        assert_eq!(settings.terminal_shell, "auto");
+        settings.terminal_shell = "login".into();
+        save(dir.path(), &settings, false).unwrap();
+        assert_eq!(load(dir.path()).0.terminal_shell, "login");
+        write(dir.path(), r#"{"version":6,"terminal_shell":"zsh"}"#);
+        let (bad, outcome) = load(dir.path());
+        assert_eq!(bad.terminal_shell, "auto");
+        assert!(matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_shell".to_string())));
     }
 
     fn sample() -> Settings {
