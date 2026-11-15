@@ -623,6 +623,8 @@ fn decide(
         }
         Resolution::Cancel => {
             report.cancelled = true;
+            // Stop the siblings too, and keep a move from treating the rest as complete.
+            job.cancel();
             None
         }
         Resolution::KeepBoth | Resolution::KeepBothAll => {
@@ -1251,7 +1253,8 @@ pub fn move_with_strategy(
         report.cancelled |= copied.cancelled;
         // A partial directory copy is safe to keep, but is not enough evidence to
         // remove any part of its source tree.
-        if job.verify == VerifyMode::Sha256 && (!complete_copy || copied.cancelled || skipped_copy)
+        if copied.cancelled
+            || (job.verify == VerifyMode::Sha256 && (!complete_copy || skipped_copy))
         {
             continue;
         }
@@ -2718,6 +2721,40 @@ mod tests {
             );
             assert_eq!(fs::read(b.path().join("folder/move")).unwrap(), b"copied");
             assert!(!a.path().join("folder/move").exists());
+        }
+    }
+
+    #[test]
+    fn directory_move_cancel_keeps_entire_source_tree() {
+        for strategy in [MoveStrategy::Auto, MoveStrategy::ForceCopy] {
+            let a = tempfile::tempdir().unwrap();
+            let b = tempfile::tempdir().unwrap();
+            fs::create_dir_all(a.path().join("folder/nested")).unwrap();
+            fs::create_dir_all(b.path().join("folder/nested")).unwrap();
+            fs::write(a.path().join("folder/nested/clash"), b"source").unwrap();
+            fs::write(b.path().join("folder/nested/clash"), b"destination").unwrap();
+            fs::write(a.path().join("folder/other"), b"other").unwrap();
+            let job = JobHandle::silent();
+            assert_ne!(job.verify, VerifyMode::Sha256);
+            let report = move_with_strategy(
+                &LocalVfs,
+                &[VPath::local(a.path().join("folder")).unwrap()],
+                &LocalVfs,
+                &VPath::local(b.path()).unwrap(),
+                Some(&Choose(Resolution::Cancel)),
+                &job,
+                strategy,
+            );
+            assert!(report.cancelled);
+            assert_eq!(
+                fs::read(a.path().join("folder/nested/clash")).unwrap(),
+                b"source"
+            );
+            assert_eq!(fs::read(a.path().join("folder/other")).unwrap(), b"other");
+            assert_eq!(
+                fs::read(b.path().join("folder/nested/clash")).unwrap(),
+                b"destination"
+            );
         }
     }
 

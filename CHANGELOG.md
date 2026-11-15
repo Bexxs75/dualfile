@@ -5,6 +5,16 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Security
+
+- Cancelling a conflict prompt during a folder move no longer deletes the source folder: the job now stops, and a cancelled copy never removes source files in any verify mode.
+- The plugin sandbox no longer allows `fcntl` unconditionally; owner/signal commands and `O_ASYNC` (which could signal other processes of the same user) are denied.
+- The release workflow pins appimagetool to a fixed release and verifies its SHA-256.
+
+### Fixed
+
+- Starting the update replacement re-checks for running file jobs after the download, so a job started meanwhile is not killed by the restart.
+
 ## [0.2.3] - 2026-11-15
 
 ### Added

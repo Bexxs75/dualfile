@@ -266,7 +266,15 @@ pub async fn update_install(
     });
     // Download finished: now lock file operations for the actual replace and the short
     // window until the frontend triggers the restart. InstallGuard clears it on failure.
-    *INSTALLING.write().map_err(|_| "Update gate unavailable")? = true;
+    // A file job may have started during the download: re-check under the gate's write lock so
+    // none can be killed by the restart.
+    {
+        let mut gate = INSTALLING.write().map_err(|_| "Update gate unavailable")?;
+        if state.active_jobs_count() != 0 {
+            return Err("File jobs are active".into());
+        }
+        *gate = true;
+    }
     update.install(bytes).map_err(|e| e.to_string())?;
     // Keep file operations locked until the frontend invokes the process plugin restart.
     std::mem::forget(guard);

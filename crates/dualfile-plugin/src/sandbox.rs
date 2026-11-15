@@ -169,7 +169,6 @@ mod imp {
             SYS_dup,
             SYS_dup2,
             SYS_dup3,
-            SYS_fcntl,
             SYS_poll,
             SYS_ppoll,
             SYS_select,
@@ -225,6 +224,13 @@ mod imp {
     }
 
     /// Prctl options a runtime needs: thread names, anonymous memory names, no_new_privs.
+    const FCNTL_ALLOWED: [u32; 5] = [
+        libc::F_DUPFD as u32,
+        libc::F_GETFD as u32,
+        libc::F_SETFD as u32,
+        libc::F_GETFL as u32,
+        libc::F_DUPFD_CLOEXEC as u32,
+    ];
     const PRCTL_ALLOWED: [u32; 5] = [15, 16, 0x5356_4d41, 38, 39];
     /// ioctl requests: terminal attributes, bytes available, close-on-exec flags.
     const IOCTL_ALLOWED: [u32; 4] = [0x5401, 0x541b, 0x5451, 0x5450];
@@ -308,6 +314,25 @@ mod imp {
                 ret_errno(libc::EPERM),
             ],
         );
+        // fcntl(fd, cmd, arg): F_SETOWN/F_SETSIG together with O_ASYNC would make the kernel
+        // signal other processes of the same user. Only plain descriptor housekeeping passes;
+        // F_SETFL passes only without the O_ASYNC bit.
+        {
+            let mut body = vec![stmt(BPF_LD_W_ABS, off_arg(1))];
+            for cmd in FCNTL_ALLOWED {
+                body.push(jump(BPF_JEQ_K, cmd, 0, 1));
+                body.push(stmt(BPF_RET_K, SECCOMP_RET_ALLOW));
+            }
+            body.extend([
+                jump(BPF_JEQ_K, libc::F_SETFL as u32, 0, 4), // not F_SETFL: skip to EPERM
+                stmt(BPF_LD_W_ABS, off_arg(2)),
+                stmt(BPF_ALU_AND_K, libc::O_ASYNC as u32),
+                jump(BPF_JEQ_K, 0, 0, 1), // no O_ASYNC bit: allow, else EPERM
+                stmt(BPF_RET_K, SECCOMP_RET_ALLOW),
+                ret_errno(libc::EPERM),
+            ]);
+            block(&mut prog, libc::SYS_fcntl, body);
+        }
         for (nr, allowed, arg) in [
             (libc::SYS_prctl, &PRCTL_ALLOWED[..], 0),
             (libc::SYS_ioctl, &IOCTL_ALLOWED[..], 1),
@@ -580,6 +605,67 @@ mod tests {
                         new_limit,
                         &mut old,
                     ) != -1
+                        || *libc::__errno_location() != libc::EPERM
+                    {
+                        libc::_exit(3);
+                    }
+                }
+                libc::_exit(0);
+            }
+            let mut status = 0;
+            assert_eq!(libc::waitpid(child, &mut status, 0), child);
+            assert_eq!(status, 0, "sandbox child failed: {status}");
+        }
+    }
+
+    #[test]
+    fn fcntl_blocks_signal_ownership_and_async() {
+        let (mut filter, slots) = super::imp::build_filter(-1);
+        // SAFETY: the child uses only syscalls and stack storage after fork, then _exit.
+        // No filter is installed in the test runner or its other threads.
+        unsafe {
+            let child = libc::fork();
+            assert!(child >= 0);
+            if child == 0 {
+                let own = libc::getpid();
+                for slot in slots {
+                    filter[slot].k = own as u32;
+                }
+                let program = libc::sock_fprog {
+                    len: filter.len() as u16,
+                    filter: filter.as_mut_ptr(),
+                };
+                if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0
+                    || libc::syscall(libc::SYS_seccomp, 1, 0, &program) != 0
+                {
+                    libc::_exit(1);
+                }
+                let fd = 0;
+                // allowed
+                for (cmd, arg) in [
+                    (libc::F_GETFL, 0),
+                    (libc::F_GETFD, 0),
+                    (libc::F_SETFD, libc::FD_CLOEXEC as libc::c_long),
+                    (libc::F_DUPFD_CLOEXEC, 10),
+                    (libc::F_DUPFD, 10),
+                    (libc::F_SETFL, libc::O_NONBLOCK as libc::c_long),
+                ] {
+                    if libc::syscall(libc::SYS_fcntl, fd, cmd, arg) == -1 {
+                        libc::_exit(2);
+                    }
+                }
+                // denied with EPERM (owner/signal commands, F_SETFL with O_ASYNC)
+                for (cmd, arg) in [
+                    (libc::F_SETOWN, own as libc::c_long),
+                    (10 /* F_SETSIG */, libc::SIGKILL as libc::c_long),
+                    (15 /* F_SETOWN_EX */, 0),
+                    (libc::F_SETFL, libc::O_ASYNC as libc::c_long),
+                    (
+                        libc::F_SETFL,
+                        (libc::O_ASYNC | libc::O_NONBLOCK) as libc::c_long,
+                    ),
+                ] {
+                    if libc::syscall(libc::SYS_fcntl, fd, cmd, arg) != -1
                         || *libc::__errno_location() != libc::EPERM
                     {
                         libc::_exit(3);

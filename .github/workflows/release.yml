@@ -20,10 +20,12 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-22.04
-            appimagetool: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            appimagetool: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
+            appimagetool_sha256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
           - arch: aarch64
             runner: ubuntu-22.04-arm
-            appimagetool: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
+            appimagetool: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-aarch64.AppImage
+            appimagetool_sha256: f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target-tauri
       OUTPUT_DIR: ${{ github.workspace }}/dist-appimage
@@ -52,8 +54,10 @@ jobs:
       - name: Download appimagetool for CI
         env:
           APPIMAGETOOL_URL: ${{ matrix.appimagetool }}
+          APPIMAGETOOL_SHA256: ${{ matrix.appimagetool_sha256 }}
         run: |
           curl --fail --location --retry 3 "$APPIMAGETOOL_URL" -o "$RUNNER_TEMP/appimagetool"
+          echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/appimagetool"
       - name: Build final AppImage and tarball
         env:
