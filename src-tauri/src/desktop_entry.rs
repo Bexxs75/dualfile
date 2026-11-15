@@ -128,11 +128,12 @@ impl DesktopEntry {
             return Err(invalid("Desktop entry belongs to another application"));
         }
         self.safe(&self.icon())?;
+        // The icon path is unique to Dualfile (ID-named), and we only reach this step once the
+        // desktop entry is absent or owned by us, so an icon already here is our own. Refresh it
+        // when its bytes differ (e.g. an older version's icon) instead of refusing the install.
         match fs::read(self.icon()) {
-            Ok(bytes) if bytes != ICON => {
-                return Err(invalid("Icon belongs to another application"))
-            }
-            Ok(_) => {}
+            Ok(bytes) if bytes == ICON => {}
+            Ok(_) => self.write(&self.icon(), ICON)?,
             Err(e) if e.kind() == io::ErrorKind::NotFound => self.write(&self.icon(), ICON)?,
             Err(e) => return Err(e),
         }
@@ -192,6 +193,17 @@ mod tests {
             fs::read_to_string(d.entry()).unwrap(),
             "[Desktop Entry]\nName=Other\n"
         );
+    }
+    #[test]
+    fn install_refreshes_an_outdated_own_icon_instead_of_failing() {
+        let home = tempfile::tempdir().unwrap();
+        let d = DesktopEntry::new(home.path().to_owned()).unwrap();
+        d.install(Path::new("/tmp/app")).unwrap();
+        // Simulate an icon left by an earlier version with different bytes.
+        fs::write(d.icon(), b"old version icon").unwrap();
+        // Re-adding the entry must succeed and restore the current icon, not report a foreign icon.
+        d.install(Path::new("/tmp/app")).unwrap();
+        assert_eq!(fs::read(d.icon()).unwrap(), ICON);
     }
     #[test]
     fn retains_foreign_icon_when_removing_own_entry() {

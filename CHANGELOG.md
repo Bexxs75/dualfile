@@ -19,6 +19,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Fixed
 
+- Adding the start-menu entry no longer fails with "Icon belongs to another application" when an icon from an earlier version is present; the entry's own outdated icon is refreshed.
 - The pane color pickers start from the current theme's panel color instead of a fixed dark color.
 - Update errors are shown as a toast and no longer grow the update banner or shift the window layout.
 
