@@ -24,6 +24,7 @@ import { SettingsDialog } from "./components/dialogs/SettingsDialog";
 import { SearchDialog } from "./components/dialogs/SearchDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { DragHint } from "./components/DragHint";
+import { QuickAccessBar } from "./components/QuickAccessBar";
 import { FKeys } from "./components/FKeys";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { activeTabOf } from "./app/state";
@@ -106,6 +107,7 @@ function Shell({ api }: { api: DualfileApi }) {
       <NoticeBar />
       <SystemUpdates />
       <Ribbon />
+      <QuickAccessBar />
       <div className="panes">
         <Pane w={0} />
         <Pane w={1} />

@@ -428,6 +428,7 @@ export interface Settings {
   accent: string;
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
+  showQuickAccess?: boolean;
   extensionColumn?: boolean;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };

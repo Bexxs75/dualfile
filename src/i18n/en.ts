@@ -441,6 +441,8 @@ const en: Record<keyof typeof de, string> = {
 
   // Status line
   "status.selected": "{selected} of {total} selected",
+  "settings.showQuickAccess": "Show quick-access bar",
+  "quickAccess.label": "Quick access",
   "settings.showParentEntry": "Show “..” entry",
   "settings.extensionColumn": "File extension in its own column",
   "settings.paneColors.title": "Pane colors",

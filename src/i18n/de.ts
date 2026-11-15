@@ -438,6 +438,8 @@ const de = {
 
   // Statuszeile
   "status.selected": "{selected} von {total} markiert",
+  "settings.showQuickAccess": "Schnellzugriff-Leiste anzeigen",
+  "quickAccess.label": "Schnellzugriff",
   "settings.showParentEntry": "Eintrag „..“ anzeigen",
   "settings.extensionColumn": "Dateiendung in eigener Spalte",
   "settings.paneColors.title": "Fensterfarben",

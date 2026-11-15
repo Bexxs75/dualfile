@@ -123,6 +123,7 @@ export const defaultSettings: Settings = {
   accent: "#e0a45c",
   accentAutomatic: true,
   showParentEntry: true,
+  showQuickAccess: false,
   extensionColumn: false,
   checkUpdatesOnStart: true,
   trayEnabled: false,

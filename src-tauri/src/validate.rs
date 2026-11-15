@@ -502,6 +502,7 @@ mod tests {
             accent: "#4f8cff".into(),
             accent_automatic: false,
             show_parent_entry: true,
+            show_quick_access: false,
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,

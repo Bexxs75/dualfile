@@ -92,6 +92,7 @@ export function SettingsDialog() {
       </div>
       <div className="settings" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
         {tab === "appearance" && <>
+        <label className="fld"><span>{tr("settings.showQuickAccess")}</span><input type="checkbox" checked={settings.showQuickAccess === true} onChange={event => set({ showQuickAccess: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.showParentEntry")}</span><input type="checkbox" checked={settings.showParentEntry !== false} onChange={event => set({ showParentEntry: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.extensionColumn")}</span><input type="checkbox" checked={settings.extensionColumn === true} onChange={event => set({ extensionColumn: event.target.checked })} /></label>
         <div className="fld"><span>{tr("settings.paneColors.title")}</span></div>

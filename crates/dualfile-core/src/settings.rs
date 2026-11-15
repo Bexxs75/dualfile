@@ -26,6 +26,7 @@ pub struct Settings {
     #[serde(default)]
     pub accent_automatic: bool,
     pub show_parent_entry: bool,
+    pub show_quick_access: bool,
     pub check_updates_on_start: bool,
     pub tray_enabled: bool,
     pub start_menu_prompted: bool,
@@ -73,6 +74,7 @@ impl Default for Settings {
             accent: "#4f8cff".into(),
             accent_automatic: true,
             show_parent_entry: true,
+            show_quick_access: false,
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,
@@ -343,6 +345,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         accent: field(&mut obj, "accent", d.accent.clone(), &mut fixes),
         accent_automatic: field(&mut obj, "accent_automatic", false, &mut fixes),
         show_parent_entry: field(&mut obj, "show_parent_entry", true, &mut fixes),
+        show_quick_access: field(&mut obj, "show_quick_access", false, &mut fixes),
         check_updates_on_start: field(&mut obj, "check_updates_on_start", true, &mut fixes),
         tray_enabled: field(&mut obj, "tray_enabled", false, &mut fixes),
         start_menu_prompted: field(&mut obj, "start_menu_prompted", false, &mut fixes),
@@ -588,6 +591,18 @@ mod tests {
         settings.show_parent_entry = false;
         save(dir.path(), &settings, false).unwrap();
         assert!(!load(dir.path()).0.show_parent_entry);
+    }
+
+    #[test]
+    fn quick_access_defaults_off_and_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), r#"{"version":6}"#);
+        let (mut settings, outcome) = load(dir.path());
+        assert!(!settings.show_quick_access);
+        assert_eq!(outcome, LoadOutcome::Loaded);
+        settings.show_quick_access = true;
+        save(dir.path(), &settings, false).unwrap();
+        assert!(load(dir.path()).0.show_quick_access);
     }
 
     fn sample() -> Settings {
