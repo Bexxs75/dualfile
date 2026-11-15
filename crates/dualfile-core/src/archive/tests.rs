@@ -1401,6 +1401,26 @@ mod rar_tests {
     }
 
     #[test]
+    fn reads_a_real_rar_archive_with_the_system_tool() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        // Needs a real unrar/7z on PATH; skip where none is installed (e.g. a minimal CI image).
+        if rar::find_tool(&RarConfig::default()).is_none() {
+            return;
+        }
+        let fixture = Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/archive/testdata/sample.rar"
+        ));
+        let vfs = open_rar(fixture, RarConfig::default()).unwrap();
+        assert!(names(&vfs, "/").contains(&"docs".to_string()));
+        assert!(names(&vfs, "/").contains(&"top.txt".to_string()));
+        assert_eq!(names(&vfs, "/docs"), vec!["readme.txt".to_string()]);
+        assert_eq!(vfs.stat(&ap(&vfs, "/docs/readme.txt")).unwrap().size, 5);
+        assert_eq!(read_all(&vfs, "/docs/readme.txt"), b"hello");
+        assert_eq!(read_all(&vfs, "/top.txt"), b"AB");
+    }
+
+    #[test]
     fn finds_unrar_first_then_7zz_then_7z_and_none() {
         let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let tools = tempfile::tempdir().unwrap();
