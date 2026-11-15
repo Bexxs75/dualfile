@@ -28,6 +28,7 @@ pub mod suppa;
 pub mod tls;
 pub mod transport;
 pub mod trust;
+pub mod webdavvfs;
 
 #[cfg(test)]
 mod tests;

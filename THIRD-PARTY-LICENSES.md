@@ -8,7 +8,7 @@ platform-specific dependencies. This is an inventory, not a list of files shippe
 Rust metadata: `vendor/*/Cargo.toml`; npm: lockfile, falling back to matching installed package metadata.
 Use `--vendor DIR` for an offline metadata mirror. No downloads or dependency resolution are performed.
 
-Packages: **850**. Unknown: **0**.
+Packages: **851**. Unknown: **0**.
 
 UNKNOWN is a release-review blocker: provide matching source metadata and regenerate before distribution.
 License expressions are upstream declarations; alternatives (OR) and exceptions need individual review.
@@ -416,6 +416,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
 | Cargo | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 |
 | Cargo | quick-error | 2.0.1 | MIT/Apache-2.0 |
+| Cargo | quick-xml | 0.38.4 | MIT |
 | Cargo | quick-xml | 0.42.0 | MIT |
 | Cargo | quote | 1.0.47 | MIT OR Apache-2.0 |
 | Cargo | r-efi | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later |
