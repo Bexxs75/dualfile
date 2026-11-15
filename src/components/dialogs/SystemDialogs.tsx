@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAppState, useLanguage, useRuntime, useT } from "../../app/context";
 import { isFinished } from "../../state/operations";
 import { useDialogFocus } from "./useDialogFocus";
@@ -44,6 +44,30 @@ export function SystemSettings() {
       <div><button className="tb" disabled={busy || !state.status} onClick={() => void run(() => system.setStartMenu(!state.status?.startMenuExists))}>{tr(state.status?.startMenuExists ? "system.remove" : "system.add")}</button></div>
       {error && <p role="alert" className="field-error">{error}</p>}
     </section>
+  </>;
+}
+
+const REPO_URL = "https://github.com/Bexxs75/dualfile";
+
+export function AboutSettings() {
+  const { api } = useRuntime();
+  const tr = useT();
+  const { error, run } = useAction();
+  return <section className="system-group" aria-labelledby="about-heading">
+    <h3 id="about-heading">{tr("settings.about.heading")}</h3>
+    <p>Dualfile <span className="system-version">{config.version}</span> · {tr("settings.about.license")}</p>
+    <div><button className="tb" onClick={() => void run(() => api.openUrl(REPO_URL))}>{tr("settings.about.github")}</button></div>
+    {error && <p role="alert" className="field-error">{error}</p>}
+  </section>;
+}
+
+export function UpdateSettings() {
+  const { system, state } = useSystem();
+  const { controller } = useRuntime();
+  const settings = useAppState(s => s.settings);
+  const language = useLanguage();
+  const tr = useT();
+  return <>
     <section className="system-group" aria-labelledby="updates-heading">
       <h3 id="updates-heading">{tr("updates.title")}</h3>
       <p>{tr("updates.version")} <span className="system-version">{config.version}</span></p>
@@ -77,14 +101,28 @@ export function SystemUpdates() {
   const busyJobs = useAppState(s => s.jobs.jobs.some(job => !isFinished(job.state)));
   const otherDialog = useAppState(s => !!(s.dialog || s.lister || s.compare || s.diff || s.conflicts.length));
   const [notes, setNotes] = useState(false);
+  const { controller } = useRuntime();
   const { busy, error, run } = useAction();
   const cancellation = useAction();
+  const [manualFailed, setManualFailed] = useState<boolean | null>(null);
   const update = state.update;
   const progress = state.progress;
   const progressRef = useRef<HTMLProgressElement>(null);
   useDialogFocus(progressRef, `${progress?.phase}:${state.installed}`);
   const percent = progress?.total ? Math.min(100, Math.floor(100 * progress.downloaded / progress.total)) : undefined;
   const cancel = () => { if (state.installing && !state.installed && progress?.phase === "download") void cancellation.run(system.cancel); };
+  // Fehler erscheinen als Toast: das Banner behält seine Höhe und schiebt das Layout nicht.
+  const message = error || cancellation.error || state.error;
+  useEffect(() => { if (message) controller.toast(message, "error"); }, [message, controller]);
+  // Ein-Klick-Update: `system.install` startet nach der Installation selbst neu. Nur wenn das scheitert, bleibt der Knopf.
+  const relaunchFailed = state.installed && (manualFailed ?? !!state.error);
+  const relaunch = () => {
+    setManualFailed(false);
+    system.restart().catch((e: unknown) => {
+      setManualFailed(true);
+      controller.toast(e instanceof Error ? e.message : String(e), "error");
+    });
+  };
   return <>
     {update && !state.installing && <div className="update-banner" role="region" aria-label={tr("updates.available")}>
       <span><b>{tr("updates.banner", { version: update.version })}</b> {tr(state.status?.appImage ? "updates.signature" : "updates.noAppImage")}</span>
@@ -92,18 +130,16 @@ export function SystemUpdates() {
       <button className="tb primary" disabled={busyJobs || !state.status || busy} aria-describedby={busyJobs ? "update-jobs" : undefined} onClick={() => void run(system.install)}>{tr(state.status?.appImage ? "updates.install" : "updates.release")}</button>
       <button className="tb" onClick={() => system.dismiss()}>{tr("updates.later")}</button>
       {busyJobs && <p id="update-jobs" className="field-error">{tr("updates.jobs")}</p>}
-      {(error || cancellation.error || state.error) && <p role="alert" className="field-error">{error || cancellation.error || state.error}</p>}
     </div>}
     {notes && update && <Modal title={`${tr("updates.notes")} · ${update.version}`} onClose={() => setNotes(false)} footer={<button className="tb primary" data-autofocus onClick={() => setNotes(false)}>{tr("action.close")}</button>}>
       <div className="update-notes">{update.notes || tr("updates.noNotes")}</div>
     </Modal>}
     {state.installing && update && <Modal title={tr("updates.progressTitle", { version: update.version })} onClose={cancel} closeDisabled={state.installed || progress?.phase !== "download"} footer={<>
-      {state.installed ? <button className="tb primary" onClick={() => void run(system.restart)}>{tr("updates.restart")}</button> : <button className="tb" disabled={cancellation.busy || progress?.phase !== "download"} onClick={cancel}>{tr("action.cancel")}</button>}
+      {state.installed ? (relaunchFailed ? <button className="tb primary" onClick={relaunch}>{tr("updates.restart")}</button> : null) : <button className="tb" disabled={cancellation.busy || progress?.phase !== "download"} onClick={cancel}>{tr("action.cancel")}</button>}
     </>}>
       <p className="muted">{tr("updates.progressHelp")}</p>
       <progress ref={progressRef} className="update-progress" aria-label={tr("updates.downloading")} max={100} value={percent} />
-      <p role="status" className="muted">{state.installed ? tr("updates.installed") : progress?.phase === "install" ? tr("updates.installing") : <>{percent !== undefined ? `${percent} % · ` : ""}{tr(progress?.total ? "updates.bytes" : "updates.bytesUnknown", { downloaded: ((progress?.downloaded ?? 0) / 1e6).toFixed(1), total: ((progress?.total ?? 0) / 1e6).toFixed(1) })}</>}</p>
-      {(error || cancellation.error || state.error) && <p role="alert" className="field-error">{error || cancellation.error || state.error}</p>}
+      <p role="status" className="muted">{state.installed ? tr(relaunchFailed ? "updates.restartFailed" : "updates.installed") : progress?.phase === "install" ? tr("updates.installing") : <>{percent !== undefined ? `${percent} % · ` : ""}{tr(progress?.total ? "updates.bytes" : "updates.bytesUnknown", { downloaded: ((progress?.downloaded ?? 0) / 1e6).toFixed(1), total: ((progress?.total ?? 0) / 1e6).toFixed(1) })}</>}</p>
     </Modal>}
     {state.prompt && !otherDialog && !notes && !state.installing && <StartMenuPrompt />}
   </>;

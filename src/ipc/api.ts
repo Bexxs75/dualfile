@@ -147,6 +147,8 @@ export interface DualfileApi extends SystemApi {
   ): Promise<RegexResult[]>;
   makeDir(parent: string, name: string): Promise<string>;
   openExternal(path: string): Promise<void>; // nur xdg-open
+  /** Öffnet eine https-Adresse im Standardbrowser. */
+  openUrl(url: string): Promise<void>;
   appCloseNow(): Promise<void>;
   appConfirmClose(): Promise<void>;
   answerItemError(jobId: number, decision: import("./types").ItemErrorDecision): Promise<void>;

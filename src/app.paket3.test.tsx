@@ -70,12 +70,13 @@ test("B14 German design group and names", async () => {
 
 test("B15 checksum help spans columns and warning slot always exists", async () => {
   const app = await settings();
-  expect(app.dialog().querySelector("#verify-help")).toHaveClass("field-help");
   expect(app.dialog().querySelector(".warning-slot")).toBeInTheDocument();
   expect(css).toMatch(/\.settings \.field-help\s*\{[^}]*grid-column: 1 \/ -1/);
   const slot = app.dialog().querySelector(".warning-slot");
   await app.user.clear(screen.getByLabelText("Eigener Farbwert (#rrggbb)"));
   expect(app.dialog().querySelector(".warning-slot")).toBe(slot);
+  await app.user.click(within(app.dialog()).getByRole("tab", { name: "System" }));
+  expect(app.dialog().querySelector("#verify-help")).toHaveClass("field-help");
 });
 
 test("B17 selection size explicitly excludes folders, including folder-only selection", async () => {

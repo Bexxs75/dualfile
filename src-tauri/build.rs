@@ -35,6 +35,7 @@ const COMMANDS: &[&str] = &[
     "regex_replace",
     "make_dir",
     "open_external",
+    "open_url",
     "app_confirm_close",
     "app_close_now",
     "answer_item_error",

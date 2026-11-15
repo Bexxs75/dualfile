@@ -33,6 +33,7 @@
     "allow-regex-replace",
     "allow-make-dir",
     "allow-open-external",
+    "allow-open-url",
     "allow-app-confirm-close",
     "allow-app-close-now",
     "allow-answer-item-error",

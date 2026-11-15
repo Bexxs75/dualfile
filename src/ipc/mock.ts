@@ -2537,6 +2537,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       return join(parentPath, name);
     },
 
+    async openUrl(): Promise<void> {},
+
     async openExternal(path): Promise<void> {
       if (isRemotePath(path)) {
         throw new CoreError("Dateien auf einem Server können nicht direkt geöffnet werden; erst kopieren", "unsupported");

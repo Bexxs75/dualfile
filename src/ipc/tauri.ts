@@ -140,6 +140,7 @@ export function createTauriApi(): DualfileApi {
       call("regex_replace", { names, pattern, replacement, ignoreCase, all }),
     makeDir: (parent, name) => call("make_dir", { parent, name }),
     openExternal: (path) => call("open_external", { path }),
+    openUrl: (url) => call("open_url", { url }),
     jobPause: (id) => call("job_pause", { id }),
     jobResume: (id) => call("job_resume", { id }),
     cancelJob: (id) => call("cancel_job", { id }),

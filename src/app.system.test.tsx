@@ -17,9 +17,8 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   const app = await setupApp({ settings: { checkUpdatesOnStart: false }, wrap: api => ({ ...api, traySet: tray, startMenuSet: menu, updateCheck: check }) });
   expect(check).not.toHaveBeenCalled();
   const dlg = await settingsDialog(app);
+  await app.user.click(dlg.getByRole("tab", { name: "System" }));
   expect(dlg.getByRole("region", { name: "System" })).toBeInTheDocument();
-  // Reads the version from the same source the dialog does, so a version bump never breaks this test.
-  expect(dlg.getByRole("region", { name: "Updates" })).toHaveTextContent(`Installierte Version ${config.version}`);
   await app.user.click(dlg.getByRole("checkbox", { name: /Symbol im Infobereich/ }));
   expect(tray).toHaveBeenLastCalledWith(true, "de");
   expect(app.runtime.store.getState().settings.trayEnabled).toBe(true);
@@ -28,6 +27,9 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   expect(menu).toHaveBeenLastCalledWith(false);
   await app.user.click(dlg.getByRole("button", { name: "Eintragen" }));
   expect(menu).toHaveBeenLastCalledWith(true);
+  await app.user.click(dlg.getByRole("tab", { name: "Info" }));
+  // Reads the version from the same source the dialog does, so a version bump never breaks this test.
+  expect(dlg.getByRole("region", { name: "Updates" })).toHaveTextContent(`Installierte Version ${config.version}`);
   await app.user.click(dlg.getByRole("button", { name: "Jetzt prüfen" }));
   expect(dlg.getByText(/Zuletzt geprüft:/)).toHaveTextContent("aktuell");
   check.mockRejectedValueOnce(new Error("Offline"));
@@ -55,6 +57,7 @@ test("banner: notes are plain text, Escape restores focus, Later persists and ma
   await act(async () => app.runtime.system.check());
   expect(screen.queryByRole("region", { name: "Update verfügbar" })).toBeNull();
   const settings = await settingsDialog(app);
+  await app.user.click(settings.getByRole("tab", { name: "Info" }));
   await app.user.click(settings.getByRole("button", { name: "Jetzt prüfen" }));
   expect(screen.getByRole("region", { name: "Update verfügbar" })).toBeInTheDocument();
   expect(install).not.toHaveBeenCalled();
@@ -139,7 +142,7 @@ test("progress cancellation calls the native boundary and does not restart", asy
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-test("install phase blocks Escape/cancel; restart failure offers retry", async () => {
+test("install phase blocks Escape/cancel; installed relaunches automatically, failure offers retry via toast", async () => {
   let report!: (p: UpdateProgress) => void, finish!: () => void;
   const restart = vi.fn(async () => {}).mockRejectedValueOnce(new Error("Restart failed"));
   const cancel = vi.fn(async () => true);
@@ -152,15 +155,18 @@ test("install phase blocks Escape/cancel; restart failure offers retry", async (
   expect(screen.getByRole("button", { name: "Abbrechen" })).toBeDisabled();
   await app.user.keyboard("{Escape}"); expect(cancel).not.toHaveBeenCalled();
   await act(async () => finish());
-  expect(screen.getByRole("alert")).toHaveTextContent("Restart failed");
-  await app.user.click(screen.getByRole("button", { name: "Erneut starten" }));
+  await waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Restart failed");
+  await app.user.click(screen.getByRole("button", { name: "Jetzt neu starten" }));
   expect(restart).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("button", { name: "Jetzt neu starten" })).toBeNull();
 });
 
 test("English groups and banner use English controls", async () => {
   const app = await setupApp({ language: "en", wrap: api => ({ ...api, updateCheck: async () => available }) });
   expect(await screen.findByRole("button", { name: "Open release page" })).toBeInTheDocument();
   act(() => app.runtime.controller.openDialog({ kind: "settings" }));
+  await app.user.click(screen.getByRole("tab", { name: "About" }));
   expect(screen.getByRole("region", { name: "Updates" })).toHaveTextContent("Installed version");
   expect(screen.getByRole("checkbox", { name: /Check for updates on startup/ })).toBeChecked();
 });
@@ -171,6 +177,7 @@ test("startup is nonblocking and only checks once even when settings reopen", as
   const app = await setupApp({ wrap: api => ({ ...api, updateCheck: check }) });
   expect(screen.getAllByRole("grid")).toHaveLength(2);
   const settings = await settingsDialog(app);
+  await app.user.click(settings.getByRole("tab", { name: "Info" }));
   expect(settings.getByRole("button", { name: "Jetzt prüfen" })).toBeDisabled();
   await app.user.click(settings.getByRole("button", { name: "Fertig" }));
   await settingsDialog(app);
@@ -189,5 +196,34 @@ test("failed settings persistence prevents native installation", async () => {
   await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
   await waitFor(() => expect(app.runtime.system.getSnapshot().installing).toBe(false));
   expect(install).not.toHaveBeenCalled();
-  expect(screen.getByRole("region", { name: "Update verfügbar" })).toHaveTextContent("Disk full");
+  expect((await screen.findAllByRole("alert"))[0]).toHaveTextContent("Disk full");
+  expect(screen.getByRole("region", { name: "Update verfügbar" })).not.toHaveTextContent("Disk full");
+});
+
+test("successful install relaunches automatically without a manual click", async () => {
+  const restart = vi.fn(async () => {});
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), restart, updateInstall: async () => {} }) });
+  await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
+  await waitFor(() => expect(restart).toHaveBeenCalledOnce());
+  expect(screen.queryByRole("button", { name: "Jetzt neu starten" })).toBeNull();
+});
+
+test("update errors appear as toast and leave the banner unchanged", async () => {
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), updateInstall: async () => { throw new Error("Download broke"); } }) });
+  const banner = screen.getByRole("region", { name: "Update verfügbar" }).textContent;
+  await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Download broke");
+  const region = screen.getByRole("region", { name: "Update verfügbar" });
+  expect(region.textContent).toBe(banner);
+  expect(region.querySelector("[role=alert]")).toBeNull();
+});
+
+test("Info tab shows version, license and a GitHub button that opens the repository", async () => {
+  const openUrl = vi.fn(async () => {});
+  const app = await setupApp({ wrap: api => ({ ...api, openUrl }) });
+  const dlg = await settingsDialog(app);
+  await app.user.click(dlg.getByRole("tab", { name: "Info" }));
+  expect(dlg.getByRole("region", { name: "Über Dualfile" })).toHaveTextContent(`Dualfile ${config.version} · Lizenz: MIT`);
+  await app.user.click(dlg.getByRole("button", { name: "Projekt auf GitHub" }));
+  expect(openUrl).toHaveBeenCalledWith("https://github.com/Bexxs75/dualfile");
 });

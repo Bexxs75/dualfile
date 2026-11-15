@@ -177,6 +177,10 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .props { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 10px; margin: 0; }
 .props dt { color: var(--muted); }
 .props dd { margin: 0; overflow-wrap: anywhere; }
+.settings-tabs { display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+.settings-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 6px 12px; color: var(--muted); cursor: pointer; font: inherit; }
+.settings-tabs button:hover { color: var(--fg); }
+.settings-tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
 .settings { display: flex; flex-direction: column; gap: 14px; }
 .accent { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .swatches { display: inline-flex; gap: 6px; }

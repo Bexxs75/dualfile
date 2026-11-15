@@ -7,7 +7,18 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Added
 
+- Only one Dualfile instance runs at a time; launching it again focuses the existing window.
 - Toggle a single embedded local shell terminal below the file panes with Ctrl+` or the toolbar button.
+
+### Changed
+
+- Updating is one click: after installing, Dualfile restarts into the new version by itself; the "Restart now" button only appears if the automatic restart fails.
+- Settings are split into tabs (Appearance, System, Info, Keyboard) instead of one long list. The Info tab holds the update controls, the version, the license and a GitHub link.
+
+### Fixed
+
+- The pane color pickers start from the current theme's panel color instead of a fixed dark color.
+- Update errors are shown as a toast and no longer grow the update banner or shift the window layout.
 
 ## [0.2.1] - 2026-11-15
 

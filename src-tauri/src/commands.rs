@@ -153,6 +153,25 @@ pub async fn make_dir(state: Shared<'_>, parent: String, name: String) -> Result
     run(state, move |s| s.make_dir(&parent, &name)).await
 }
 
+/// Only plain https links may leave the app through `open_url`.
+pub(crate) fn is_safe_external_url(url: &str) -> bool {
+    url.starts_with("https://") && url.len() <= 2048 && !url.chars().any(|c| c.is_control())
+}
+
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), UiError> {
+    if !is_safe_external_url(&url) {
+        return Err(UiError::new("invalidInput", "Ungültige Adresse"));
+    }
+    let mut child = crate::state::xdg_open_command(std::path::Path::new(&url))
+        .spawn()
+        .map_err(|_| UiError::new("unsupported", "xdg-open konnte nicht gestartet werden"))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn open_external(state: Shared<'_>, path: String) -> Result<(), UiError> {
     run(state, move |s| s.open_external(&path)).await
@@ -890,4 +909,27 @@ pub async fn space_free(
     .ok()
     .flatten();
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_external_url;
+
+    #[test]
+    fn only_short_https_urls_without_control_characters_pass() {
+        assert!(is_safe_external_url("https://github.com/Bexxs75/dualfile"));
+        for bad in [
+            "http://github.com",
+            "ftp://x.org/a",
+            "file:///etc/passwd",
+            "-https://x",
+            "",
+            "https://x.org/\n",
+            "https://x.org/\0",
+        ] {
+            assert!(!is_safe_external_url(bad), "{bad:?}");
+        }
+        let long = format!("https://x.org/{}", "a".repeat(2048));
+        assert!(!is_safe_external_url(&long));
+    }
 }

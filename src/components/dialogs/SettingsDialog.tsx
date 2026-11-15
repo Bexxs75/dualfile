@@ -10,9 +10,10 @@ import {
   FONT_SIZE_MIN,
   isValidHex,
   themeNames,
+  themes,
   defaultAccent,
 } from "../../themes/tokens";
-import { SystemSettings } from "./SystemDialogs";
+import { AboutSettings, SystemSettings, UpdateSettings } from "./SystemDialogs";
 import { KeybindingsSettings } from "./KeybindingsSettings";
 import { Modal } from "../Modal";
 
@@ -54,6 +55,8 @@ export function SettingsDialog() {
   const set = (patch: Partial<Settings>) => controller.updateSettings((s) => ({ ...s, ...patch }));
   const currentAccent = settings.accentAutomatic ? defaultAccent(settings.theme) : settings.accent;
   const warnings = accentWarning(hex, settings.theme);
+  const tabs = ["appearance", "system", "info", "keyboard"] as const;
+  const [tab, setTab] = useState<(typeof tabs)[number]>("appearance");
 
   function onHex(value: string): void {
     setHex(value);
@@ -71,26 +74,36 @@ export function SettingsDialog() {
         </button>
       }
     >
-      <div className="settings">
+      <div className="settings-tabs" role="tablist" aria-label={tr("settings.tabs")}>
+        {tabs.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`settings-tab-${id}`}
+            aria-selected={tab === id}
+            aria-controls="settings-panel"
+            className={tab === id ? "on" : undefined}
+            onClick={() => setTab(id)}
+          >
+            {tr(`settings.tab.${id}` as TranslationKey)}
+          </button>
+        ))}
+      </div>
+      <div className="settings" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
+        {tab === "appearance" && <>
         <label className="fld"><span>{tr("settings.showParentEntry")}</span><input type="checkbox" checked={settings.showParentEntry !== false} onChange={event => set({ showParentEntry: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.extensionColumn")}</span><input type="checkbox" checked={settings.extensionColumn === true} onChange={event => set({ extensionColumn: event.target.checked })} /></label>
         <div className="fld"><span>{tr("settings.paneColors.title")}</span></div>
         <div className="fld">
           <label htmlFor="pane-color-left">{tr("settings.paneColors.left")}</label>
-          <input id="pane-color-left" type="color" value={settings.paneColorLeft || "#1c2229"} onChange={e => set({ paneColorLeft: e.target.value })} />
+          <input id="pane-color-left" type="color" value={settings.paneColorLeft || themes[settings.theme].panel} onChange={e => set({ paneColorLeft: e.target.value })} />
           <button type="button" className="tb" disabled={!settings.paneColorLeft} onClick={() => set({ paneColorLeft: "" })}>{tr("settings.paneColors.clear")}</button>
         </div>
         <div className="fld">
           <label htmlFor="pane-color-right">{tr("settings.paneColors.right")}</label>
-          <input id="pane-color-right" type="color" value={settings.paneColorRight || "#1c2229"} onChange={e => set({ paneColorRight: e.target.value })} />
+          <input id="pane-color-right" type="color" value={settings.paneColorRight || themes[settings.theme].panel} onChange={e => set({ paneColorRight: e.target.value })} />
           <button type="button" className="tb" disabled={!settings.paneColorRight} onClick={() => set({ paneColorRight: "" })}>{tr("settings.paneColors.clear")}</button>
-        </div>
-        <div className="fld">
-          <label htmlFor="verify-policy">{tr("settings.verifyPolicy")}</label>
-          <select id="verify-policy" value={settings.verifyPolicy} aria-describedby="verify-help" onChange={e => set({ verifyPolicy: e.target.value as Settings["verifyPolicy"] })}>
-            {(["auto", "always", "never"] as const).map(value => <option key={value} value={value}>{tr(`settings.verifyPolicy.${value}`)}</option>)}
-          </select>
-          <p id="verify-help" className="field-help">{tr("settings.verifyPolicy.help")}</p>
         </div>
         <div className="fld">
           <span id="set-theme">{tr("settings.theme")}</span>
@@ -181,8 +194,19 @@ export function SettingsDialog() {
             onChange={(language) => set({ language })}
           />
         </div>
-        <KeybindingsSettings />
-        <SystemSettings />
+        </>}
+        {tab === "system" && <>
+        <div className="fld">
+          <label htmlFor="verify-policy">{tr("settings.verifyPolicy")}</label>
+          <select id="verify-policy" value={settings.verifyPolicy} aria-describedby="verify-help" onChange={e => set({ verifyPolicy: e.target.value as Settings["verifyPolicy"] })}>
+            {(["auto", "always", "never"] as const).map(value => <option key={value} value={value}>{tr(`settings.verifyPolicy.${value}`)}</option>)}
+          </select>
+          <p id="verify-help" className="field-help">{tr("settings.verifyPolicy.help")}</p>
+        </div>
+          <SystemSettings />
+        </>}
+        {tab === "info" && <><AboutSettings /><UpdateSettings /></>}
+        {tab === "keyboard" && <KeybindingsSettings />}
       </div>
     </Modal>
   );

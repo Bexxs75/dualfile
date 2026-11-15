@@ -67,6 +67,14 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     gtk::glib::set_prgname(Some("de.thebexxs.dualfile"));
     let app = tauri::Builder::default()
+        // Muss als erstes Plugin stehen: ein zweiter Start holt das vorhandene Fenster nach vorn.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
@@ -171,6 +179,7 @@ pub fn run() {
             commands::regex_replace,
             commands::make_dir,
             commands::open_external,
+            commands::open_url,
             commands::app_confirm_close,
             commands::app_close_now,
             commands::answer_item_error,
