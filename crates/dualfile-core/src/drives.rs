@@ -1,16 +1,48 @@
-//! Locally mounted removable media (USB sticks, external disks, cards).
+//! Locally mounted filesystems shown in the quick-access bar.
 //!
-//! udisks2 and most desktops auto-mount removable volumes under `/run/media/<user>/<label>`
-//! or `/media/<user>/<label>`. We read `/proc/mounts`, keep the mount points below those
-//! directories and present each as a drive the user can jump to without hunting through
-//! the folder tree. Read-only; nothing is mounted or changed here.
+//! Like a twin-pane file manager's drive bar, we read `/proc/mounts` and present every
+//! real mount (the root, extra partitions and btrfs subvolumes, network shares, and
+//! auto-mounted removable media under `/run/media` or `/media`) as a place the user can
+//! jump to. Kernel pseudo-filesystems (proc, sysfs, cgroup, tmpfs, snap/loop squashfs,
+//! container overlays, …) are filtered out. Read-only; nothing is mounted or changed here.
 
 use serde::Serialize;
 use std::path::Path;
 
+/// Filesystem types that are kernel/virtual mounts, not browsable storage. Dropped from the bar.
+const PSEUDO_FSTYPES: &[&str] = &[
+    "proc",
+    "sysfs",
+    "devtmpfs",
+    "devpts",
+    "tmpfs",
+    "ramfs",
+    "cgroup",
+    "cgroup2",
+    "pstore",
+    "bpf",
+    "mqueue",
+    "hugetlbfs",
+    "debugfs",
+    "tracefs",
+    "securityfs",
+    "selinuxfs",
+    "configfs",
+    "fusectl",
+    "efivarfs",
+    "autofs",
+    "rpc_pipefs",
+    "nsfs",
+    "binfmt_misc",
+    "squashfs", // snap/loop images
+    "overlay",  // container layers
+    "fuse.gvfsd-fuse",
+    "fuse.portal",
+];
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Drive {
-    /// Display name (the volume label, i.e. the last path component of the mount point).
+    /// Display name (the last path component of the mount point; "/" for the root).
     pub name: String,
     /// Absolute local path of the mount point.
     pub path: String,
@@ -36,24 +68,7 @@ fn unescape(field: &str) -> String {
     out
 }
 
-fn is_removable_mount(point: &str) -> bool {
-    for base in ["/run/media/", "/media/"] {
-        if let Some(rest) = point.strip_prefix(base) {
-            // Require <user>/<label>: a user directory and a volume below it, nothing shallower.
-            let depth = rest
-                .trim_end_matches('/')
-                .split('/')
-                .filter(|s| !s.is_empty())
-                .count();
-            if depth >= 2 {
-                return true;
-            }
-        }
-    }
-    false
-}
-
-/// Parse the mount table text (so it is testable) into removable drives, de-duplicated and bounded.
+/// Parse the mount table text (so it is testable) into browsable drives, de-duplicated and bounded.
 pub fn parse_mounts(table: &str) -> Vec<Drive> {
     let mut out: Vec<Drive> = Vec::new();
     for line in table.lines() {
@@ -62,10 +77,13 @@ pub fn parse_mounts(table: &str) -> Vec<Drive> {
         let Some(point_raw) = fields.next() else {
             continue;
         };
-        let point = unescape(point_raw);
-        if !is_removable_mount(&point) {
+        let Some(fstype) = fields.next() else {
+            continue;
+        };
+        if PSEUDO_FSTYPES.contains(&fstype) {
             continue;
         }
+        let point = unescape(point_raw);
         let name = Path::new(&point)
             .file_name()
             .and_then(|n| n.to_str())
@@ -82,7 +100,7 @@ pub fn parse_mounts(table: &str) -> Vec<Drive> {
     out
 }
 
-/// Removable media mounted on this machine. Empty when `/proc/mounts` cannot be read.
+/// Filesystems mounted on this machine. Empty when `/proc/mounts` cannot be read.
 pub fn local_drives() -> Vec<Drive> {
     match std::fs::read_to_string("/proc/mounts") {
         Ok(table) => parse_mounts(&table),
@@ -95,25 +113,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keeps_only_removable_mounts_and_decodes_the_label() {
+    fn keeps_real_mounts_drops_pseudo_and_decodes_the_label() {
         let table = "\
-/dev/sda1 / ext4 rw 0 0
+/dev/sda2 / btrfs rw,subvol=/@ 0 0
+/dev/sda2 /home btrfs rw,subvol=/@home 0 0
 /dev/sdb1 /run/media/tester/USB\\040Stick vfat rw 0 0
-/dev/sdc1 /media/tester/Backup\\040Disk ext4 rw 0 0
-tmpfs /run/media tmpfs rw 0 0
-/dev/sdd1 /mnt/manual ext4 rw 0 0
+proc /proc proc rw 0 0
+sysfs /sys sysfs rw 0 0
+tmpfs /run tmpfs rw 0 0
+/dev/loop0 /snap/core/1 squashfs ro 0 0
+overlay /var/lib/docker/overlay2/x overlay rw 0 0
+cgroup2 /sys/fs/cgroup cgroup2 rw 0 0
 ";
         let drives = parse_mounts(table);
         assert_eq!(
             drives,
             vec![
                 Drive {
-                    name: "USB Stick".into(),
-                    path: "/run/media/tester/USB Stick".into()
+                    name: "/".into(),
+                    path: "/".into()
                 },
                 Drive {
-                    name: "Backup Disk".into(),
-                    path: "/media/tester/Backup Disk".into()
+                    name: "home".into(),
+                    path: "/home".into()
+                },
+                Drive {
+                    name: "USB Stick".into(),
+                    path: "/run/media/tester/USB Stick".into()
                 },
             ]
         );
@@ -121,7 +147,7 @@ tmpfs /run/media tmpfs rw 0 0
 
     #[test]
     fn duplicate_mount_points_appear_once() {
-        let table = "a /run/media/u/X ext4 rw 0 0\nb /run/media/u/X ext4 rw 0 0\n";
+        let table = "a /mnt/x ext4 rw 0 0\nb /mnt/x ext4 rw 0 0\n";
         assert_eq!(parse_mounts(table).len(), 1);
     }
 }

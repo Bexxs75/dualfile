@@ -267,6 +267,51 @@ pub fn xdg_open_command(path: &Path) -> Command {
     command
 }
 
+/// Start the opener and surface an immediate failure instead of silently doing nothing.
+/// `xdg-open` exits non-zero at once when it finds no handler (e.g. the desktop environment was
+/// not detected, or no default application is set); previously its exit code and stderr were
+/// discarded, so a failed open produced no feedback at all. A handler that keeps running — the
+/// normal case — is detached after a short grace, exactly as before.
+fn spawn_opener_reporting(mut command: Command) -> Result<(), UiError> {
+    use std::io::Read;
+    command.stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|_| UiError::new("unsupported", "xdg-open konnte nicht gestartet werden"))?;
+    for _ in 0..8 {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => {
+                let mut detail = String::new();
+                if let Some(mut err) = child.stderr.take() {
+                    let _ = err.read_to_string(&mut detail);
+                }
+                let detail = detail.trim();
+                let msg = if detail.is_empty() {
+                    let code = status
+                        .code()
+                        .map_or_else(|| "abgebrochen".to_string(), |c| format!("Code {c}"));
+                    format!("Öffnen fehlgeschlagen ({code}); evtl. ist für diesen Dateityp kein Standardprogramm gesetzt")
+                } else {
+                    format!("Öffnen fehlgeschlagen: {detail}")
+                };
+                return Err(UiError::new("unsupported", msg));
+            }
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(100)),
+            Err(_) => break,
+        }
+    }
+    // Still running after the grace: a real application opened. Detach, draining stderr so a
+    // chatty handler can never fill the pipe and block.
+    std::thread::spawn(move || {
+        if let Some(mut err) = child.stderr.take() {
+            let _ = std::io::copy(&mut err, &mut std::io::sink());
+        }
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
 /// Largest remote file opened by copying it locally first. Bigger files should be fetched with
 /// a deliberate copy job rather than silently streamed into temp.
 const MAX_OPEN_EXTERNAL_BYTES: u64 = 512 << 20;
@@ -1073,12 +1118,7 @@ impl AppState {
             let vfs = self.vfs_for_read(&path)?;
             let (dir, bytes) = fetch_remote_to_temp(vfs.as_ref(), &path, MAX_OPEN_EXTERNAL_BYTES)?;
             let local = dir.path().join(remote_open_name(&path));
-            let mut child = xdg_open_command(&local).spawn().map_err(|_| {
-                UiError::new("unsupported", "xdg-open konnte nicht gestartet werden")
-            })?;
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
+            spawn_opener_reporting(xdg_open_command(&local))?;
             // Keep the copy (the opened program may still have it open), bounded by a total budget:
             // the oldest copies are dropped (their files removed) once the budget is exceeded.
             {
@@ -1094,14 +1134,7 @@ impl AppState {
         }
         std::fs::metadata(path.path())
             .map_err(|error| io_error("Die Datei", path.path(), &error))?;
-        let mut child = xdg_open_command(path.path())
-            .spawn()
-            .map_err(|_| UiError::new("unsupported", "xdg-open konnte nicht gestartet werden"))?;
-        // Reap the child so no zombie stays behind; its exit status is of no interest.
-        std::thread::spawn(move || {
-            let _ = child.wait();
-        });
-        Ok(())
+        spawn_opener_reporting(xdg_open_command(path.path()))
     }
 
     pub fn job_pause(&self, id: u64) -> Result<(), UiError> {

@@ -3,6 +3,21 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [0.2.6] - 2026-11-15
+
+### Added
+
+- The quick-access bar now lists every real mounted filesystem (the root, extra partitions and btrfs subvolumes, network shares and removable media), like a twin-pane file manager's drive bar, instead of only auto-mounted removable media. Kernel pseudo-filesystems (proc, sysfs, cgroup, tmpfs, snap/loop images, container overlays, …) are left out.
+- The terminal toolbar button shows a hover card with its keyboard shortcut drawn as keycaps, using the key legend of the active language (German shows `^` on the top-left key, not `` ` ``) plus a hint that it is the top-left key under Esc. The plain-text tooltip stays as a fallback.
+
+### Changed
+
+- The terminal resize grip and the column-width dividers are easier to see and grab — a taller terminal handle with a visible bar, and a clearer column divider that highlights on hover/focus — in all three themes.
+
+### Fixed
+
+- Opening a file externally no longer fails silently: if no default application is set for the file type, or the launcher exits with an error, the actual reason is now shown instead of nothing happening.
+
 ## [0.2.5] - 2026-11-15
 
 ### Added

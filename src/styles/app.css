@@ -102,9 +102,9 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .head button { text-align: left; text-transform: inherit; letter-spacing: inherit; color: inherit; width: 100%; }
 .head button { display: flex; align-items: center; gap: 4px; }
 .head > span { position: relative; }
-.col-resize { position: absolute; top: 0; bottom: 0; left: -6px; width: 9px; z-index: 2; cursor: col-resize; touch-action: none; outline: none; }
-.col-resize::after { content: ""; position: absolute; top: 5px; bottom: 5px; left: 4px; width: 1px; background: var(--line); }
-.col-resize:hover::after, .col-resize:focus-visible::after, .col-resize.dragging::after { width: 2px; left: 3px; background: var(--accent); }
+.col-resize { position: absolute; top: 0; bottom: 0; left: -7px; width: 14px; z-index: 2; cursor: col-resize; touch-action: none; outline: none; }
+.col-resize::after { content: ""; position: absolute; top: 4px; bottom: 4px; left: 6px; width: 2px; border-radius: 1px; background: color-mix(in srgb, var(--fg) 32%, transparent); transition: background .12s, width .12s; }
+.col-resize:hover::after, .col-resize:focus-visible::after, .col-resize.dragging::after { width: 3px; left: 5px; background: var(--accent); }
 .head .numeric button { justify-content: flex-end; text-align: right; }
 .row { height: var(--rowh); cursor: default; border-left: 2px solid transparent; content-visibility: auto; contain-intrinsic-size: auto var(--rowh); user-select: none; }
 .row:hover { background: var(--raised); }
@@ -495,7 +495,24 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .keys-foot { display: flex; justify-content: flex-end; }
 
 .terminal-panel { height: 260px; flex: 0 0 260px; min-height: 0; padding: 8px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.terminal-resize { height: 6px; margin: 0 -8px 4px; cursor: row-resize; flex: none; border-radius: 3px; }
-.terminal-resize:hover, .terminal-resize:focus-visible { background: var(--line); }
-.terminal-resize:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.terminal-resize { height: 16px; margin: 0 -8px 2px; cursor: row-resize; flex: none; display: flex; align-items: center; justify-content: center; }
+.terminal-resize::before { content: ""; width: 44px; height: 5px; border-radius: 3px; background: var(--line); transition: background .12s, width .12s; }
+.terminal-resize:hover::before, .terminal-resize:focus-visible::before { background: var(--accent); width: 60px; }
+.terminal-resize:focus-visible { outline: none; }
 .terminal-host { height: 100%; width: 100%; }
+
+/* Keycap + shortcut hover card (ShortcutHint) */
+.hint-wrap { position: relative; display: inline-flex; flex: none; }
+.keys, .hc-key { display: inline-flex; align-items: center; gap: 6px; }
+.kc { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 7px; font: 600 12.5px/1 Inter, sans-serif; color: var(--fg); background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 6px; box-shadow: 0 1px 0 rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .04); }
+.kc.glyph { font-size: 15px; font-weight: 700; }
+.kc .leg { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.kc .leg .top { font-size: 12px; font-weight: 700; }
+.kc .leg .bot { font-size: 8px; color: var(--muted); margin-top: 2px; }
+.plus { color: var(--muted); font-weight: 600; }
+.hovercard { position: absolute; top: calc(100% + 10px); left: 0; z-index: 50; width: max-content; background: var(--raised); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); display: flex; flex-direction: column; gap: 8px; color: var(--fg); pointer-events: none; }
+.hovercard[hidden] { display: none; }
+.hovercard::before { content: ""; position: absolute; top: -6px; left: 12px; width: 10px; height: 10px; background: var(--raised); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.hc-title { font-weight: 600; font-size: 13px; }
+.hc-row { display: flex; align-items: center; gap: 10px; }
+.hc-hint { font-size: 11.5px; color: var(--muted); }
