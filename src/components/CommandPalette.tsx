@@ -4,6 +4,7 @@ import { useAppState, useRuntime, useT } from "../app/context";
 import { matchCommand, type PaletteCommand } from "../app/commands";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { Shortcut } from "./Shortcut";
 
 export function CommandPalette({ commands, recent, onRun, onClose }: { commands: PaletteCommand[]; recent: string[]; onRun: (id: string) => void; onClose: () => void }) {
   const tr = useT();
@@ -56,7 +57,7 @@ export function CommandPalette({ commands, recent, onRun, onClose }: { commands:
         {groups.filter(g => g.entries.length).map(group => <div role="group" aria-label={group.name} key={group.name}>
           <div className="palette-heading" aria-hidden="true">{group.name}</div>
           {group.entries.map(({ command, hits }) => <div key={command.id} id={optionId(command)} role="option" aria-selected={current?.command.id === command.id} aria-disabled={!command.enabled(state)} className="palette-option" onMouseDown={e => e.preventDefault()} onMouseMove={() => setIndex(entries.findIndex(m => m.command.id === command.id))} onClick={() => run(command)}>
-            <Icon name={command.icon} /><span>{Array.from(command.title).map((char, i) => hits.has(i) ? <mark key={i}>{char}</mark> : char)}</span><kbd>{command.shortcut}</kbd>
+            <Icon name={command.icon} /><span>{Array.from(command.title).map((char, i) => hits.has(i) ? <mark key={i}>{char}</mark> : char)}</span><Shortcut spec={command.shortcut} />
           </div>)}
         </div>)}
       </div>

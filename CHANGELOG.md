@@ -3,6 +3,14 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [0.2.7] - 2026-11-15
+
+### Changed
+
+- Each pane now has its own quick-access bar; a click opens the place in that pane. Previously a single shared bar always moved the active pane.
+- The quick-access bar shows curated places — your Home folder, your bookmarks and your mounted drives — instead of listing every mounted filesystem. System mounts (`/boot`, `/efi`) are left out.
+- Keyboard shortcuts in the command palette and in the keyboard-shortcuts settings are now drawn as raised keycaps, matching the terminal button's hover card, instead of plain text.
+
 ## [0.2.6] - 2026-11-15
 
 ### Added

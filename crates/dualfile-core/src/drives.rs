@@ -68,6 +68,11 @@ fn unescape(field: &str) -> String {
     out
 }
 
+/// Firmware/boot mounts that aren't useful file-manager destinations (EFI system partition, /boot).
+fn is_system_mount(point: &str) -> bool {
+    point == "/boot" || point == "/efi" || point.starts_with("/boot/")
+}
+
 /// Parse the mount table text (so it is testable) into browsable drives, de-duplicated and bounded.
 /// `self_mount` is the running AppImage's own mount point (`$APPDIR`), dropped so it is not shown as a drive.
 pub fn parse_mounts(table: &str, self_mount: Option<&str>) -> Vec<Drive> {
@@ -86,6 +91,9 @@ pub fn parse_mounts(table: &str, self_mount: Option<&str>) -> Vec<Drive> {
         }
         let point = unescape(point_raw);
         if self_mount == Some(point.as_str()) {
+            continue;
+        }
+        if is_system_mount(&point) {
             continue;
         }
         let name = Path::new(&point)
@@ -153,6 +161,21 @@ cgroup2 /sys/fs/cgroup cgroup2 rw 0 0
     fn duplicate_mount_points_appear_once() {
         let table = "a /mnt/x ext4 rw 0 0\nb /mnt/x ext4 rw 0 0\n";
         assert_eq!(parse_mounts(table, None).len(), 1);
+    }
+
+    #[test]
+    fn drops_boot_and_efi_system_mounts() {
+        let table = "\
+/dev/sda2 / btrfs rw 0 0
+/dev/sda1 /boot/efi vfat rw 0 0
+/dev/sda3 /boot ext4 rw 0 0
+/dev/sdb1 /run/media/tester/Stick vfat rw 0 0
+";
+        let drives = parse_mounts(table, None);
+        assert_eq!(
+            drives.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(),
+            vec!["/", "/run/media/tester/Stick"]
+        );
     }
 
     #[test]

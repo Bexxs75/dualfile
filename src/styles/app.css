@@ -62,7 +62,7 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .ribbon { display: flex; gap: 4px; align-items: center; overflow-x: auto; padding: 0 8px; height: 30px; flex: none; border-bottom: 1px solid var(--line); }
 .ribbon .bm { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: transparent; border: 1px solid transparent; border-radius: 4px; white-space: nowrap; }
 .ribbon .bm:hover { background: var(--panel2); }
-.qa-bar { display: flex; gap: 4px; align-items: center; overflow-x: auto; padding: 0 8px; height: 28px; min-width: 0; flex: none; border-bottom: 1px solid var(--line); }
+.qa-bar { display: flex; gap: 4px; align-items: center; overflow-x: auto; padding: 0 8px; height: 28px; min-width: 0; flex: none; border-bottom: 1px solid var(--line); background: var(--panel2); }
 .qa-item { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: transparent; border: 1px solid transparent; border-radius: 4px; white-space: nowrap; }
 .qa-item:hover { background: var(--panel2); }
 .qa-bm > .ico { color: var(--c); }
@@ -510,6 +510,10 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .kc .leg .top { font-size: 12px; font-weight: 700; }
 .kc .leg .bot { font-size: 8px; color: var(--muted); margin-top: 2px; }
 .plus { color: var(--muted); font-weight: 600; }
+.sc, .sc-key { display: inline-flex; align-items: center; gap: 5px; }
+.sc .kc { min-width: 20px; height: 20px; padding: 0 6px; font-size: 11px; border-radius: 5px; }
+.sc-plus { color: var(--muted); font: 600 11px Inter, sans-serif; }
+.keys-caps.custom .kc { border-color: var(--accent); color: var(--accent); }
 .hovercard { position: absolute; top: calc(100% + 10px); left: 0; z-index: 50; width: max-content; background: var(--raised); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45); display: flex; flex-direction: column; gap: 8px; color: var(--fg); pointer-events: none; }
 .hovercard[hidden] { display: none; }
 .hovercard::before { content: ""; position: absolute; top: -6px; left: 12px; width: 10px; height: 10px; background: var(--raised); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }

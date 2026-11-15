@@ -8,3 +8,5 @@ vendor/
 target-tauri/
 src-tauri/gen/
 .npm-cache/
+
+/dist-appimage/

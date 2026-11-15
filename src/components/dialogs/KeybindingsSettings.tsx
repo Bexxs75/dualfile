@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAppState, useController, useT } from "../../app/context";
 import type { TranslationKey } from "../../i18n";
 import { eventToSpec, REBINDABLE, REBINDABLE_COMMANDS, RESERVED_SPECS, type RebindableCommand } from "../../state/keymap";
+import { Shortcut } from "../Shortcut";
 
 type Notice = { kind: "reserved" } | { kind: "conflict"; command: RebindableCommand; spec: string; owner: RebindableCommand };
 
@@ -81,7 +82,9 @@ export function KeybindingsSettings() {
           return (
             <div className="keys-row" key={command}>
               <span className="keys-name">{tr(cmdKey(command))}</span>
-              <kbd className={`keys-key${custom ? " custom" : ""}${active ? " capturing" : ""}`}>{active ? tr("settings.keys.capture") : spec}</kbd>
+              {active
+                ? <kbd className="keys-key capturing">{tr("settings.keys.capture")}</kbd>
+                : <span className={`keys-caps${custom ? " custom" : ""}`}><Shortcut spec={spec} /></span>}
               <span className="keys-actions">
                 <button type="button" className="tb" onClick={() => { setNotice(null); setCapturing(active ? null : command); }}>{tr("settings.keys.change")}</button>
                 <button type="button" className="tb" disabled={!custom} onClick={() => { const next = { ...(bindings ?? {}) }; delete next[command]; save(next); setNotice(null); }}>{tr("settings.keys.reset")}</button>
