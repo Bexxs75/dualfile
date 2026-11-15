@@ -73,6 +73,17 @@ fn is_system_mount(point: &str) -> bool {
     point == "/boot" || point == "/efi" || point.starts_with("/boot/")
 }
 
+/// FUSE self-mounts that aren't real drives: any running AppImage's runtime mount
+/// (named `.mount_XXXXXX` by convention, our own and others alike) and KDE's
+/// KIO-FUSE bridge (`kio-fuse-XXXXXX`). Matched on the mount-point name so it is
+/// independent of the fuse fstype, which carries the app name.
+fn is_fuse_self_mount(point: &str) -> bool {
+    Path::new(point)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with(".mount_") || n.starts_with("kio-fuse"))
+}
+
 /// Parse the mount table text (so it is testable) into browsable drives, de-duplicated and bounded.
 /// `self_mount` is the running AppImage's own mount point (`$APPDIR`), dropped so it is not shown as a drive.
 pub fn parse_mounts(table: &str, self_mount: Option<&str>) -> Vec<Drive> {
@@ -94,6 +105,9 @@ pub fn parse_mounts(table: &str, self_mount: Option<&str>) -> Vec<Drive> {
             continue;
         }
         if is_system_mount(&point) {
+            continue;
+        }
+        if is_fuse_self_mount(&point) {
             continue;
         }
         let name = Path::new(&point)
@@ -186,5 +200,24 @@ Dualfile.AppImage /tmp/.mount_DualfiAbc123 fuse.Dualfile.AppImage ro 0 0
 ";
         let drives = parse_mounts(table, Some("/tmp/.mount_DualfiAbc123"));
         assert_eq!(drives.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), vec!["/"]);
+    }
+
+    #[test]
+    fn drops_other_appimage_self_mounts_and_kio_fuse_but_keeps_real_fuse_drives() {
+        // Even without knowing our own $APPDIR (self_mount None), no running AppImage's
+        // mount nor the KIO-FUSE bridge should appear — but a real fuse drive (sshfs) stays.
+        let table = "\
+/dev/sda2 / btrfs rw 0 0
+artcral.AppImage /tmp/.mount_artcralCDHCI fuse.artcral.AppImage ro 0 0
+raider.AppImage /tmp/.mount_raiderWgiXCQ fuse.raider.AppImage ro 0 0
+Dualfile.AppImage /tmp/.mount_DualfiCAPeMP fuse.Dualfile.AppImage ro 0 0
+kio-fuse /run/user/1000/kio-fuse-dSRHXL fuse.kio-fuse rw 0 0
+user@host:/ /home/tester/sshfs fuse.sshfs rw 0 0
+";
+        let drives = parse_mounts(table, None);
+        assert_eq!(
+            drives.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(),
+            vec!["/", "/home/tester/sshfs"]
+        );
     }
 }

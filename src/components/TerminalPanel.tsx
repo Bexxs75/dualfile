@@ -42,8 +42,16 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    // Steady cursor: the blink animation never runs in the WebKitGTK webview, leaving the cursor stuck invisible.
-    const term = new Terminal({ cursorBlink: false, fontSize: 13, fontFamily: '"IBM Plex Mono", monospace' });
+    // Steady block cursor, visible even when the terminal is not focused. It only renders at all
+    // because the production CSP allows xterm's runtime <style> (style-src 'unsafe-inline' in
+    // tauri.conf.json); without that WebKitGTK refuses the injected sheet and the cursor vanishes.
+    const term = new Terminal({
+      cursorBlink: false,
+      cursorStyle: "block",
+      cursorInactiveStyle: "block",
+      fontSize: 13,
+      fontFamily: '"IBM Plex Mono", monospace',
+    });
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(element);

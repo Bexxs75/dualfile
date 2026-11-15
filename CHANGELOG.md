@@ -3,6 +3,13 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [0.2.10] - 2026-11-15
+
+### Fixed
+
+- The embedded terminal's cursor is now actually visible. In the packaged build the Content-Security-Policy (`style-src` without `'unsafe-inline'`) blocked the runtime stylesheet xterm injects to draw the cursor, so WebKitGTK dropped it and no cursor appeared — which is why the 0.2.9 cursor change had no effect. `style-src` now allows `'unsafe-inline'` (as the dev build already did); `script-src` stays `'self'`. The cursor is a steady block, visible whether or not the terminal is focused.
+- "This computer" no longer lists other AppImages' FUSE self-mounts (`/tmp/.mount_*`) or the KIO-FUSE bridge (`/run/user/*/kio-fuse-*`) as drives. Real FUSE mounts such as sshfs or ntfs are still shown.
+
 ## [0.2.9] - 2026-11-15
 
 ### Added
