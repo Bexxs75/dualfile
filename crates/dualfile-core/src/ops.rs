@@ -3527,7 +3527,9 @@ mod tests {
         let read = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
         let sv = LyingSizeVfs {
             reported,
-            actual: vec![b'x'; 10 * 1024 * 1024], // 10 MiB sent for a "4-byte" file
+            // More than it reports; the `take` must stop the reader at reported+1 regardless of how
+            // much the server would send (kept small here so the test stays light under load).
+            actual: vec![b'x'; 64 * 1024],
             read: read.clone(),
         };
         let job = JobHandle::new(Arc::new(VerifyEvents::default()));

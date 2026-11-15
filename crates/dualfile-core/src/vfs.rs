@@ -1328,10 +1328,15 @@ mod tests {
         let folder = VPath::local(dir.path().join("folder")).unwrap();
         let renamed = VPath::local(dir.path().join("renamed")).unwrap();
         LocalVfs.mkdir(&folder).unwrap();
-        LocalVfs
-            .rename(&folder, &renamed, ReplaceMode::NoReplace)
-            .unwrap();
-        assert!(renamed.path().is_dir());
+        // A no-replace directory rename succeeds where the filesystem supports renameat2's
+        // RENAME_NOREPLACE; where it does not (some CI/overlay filesystems return EINVAL/OPNOTSUPP),
+        // there is no safe fallback for a directory, so NoReplaceUnsupported is the honest answer
+        // (the FORCE_LINK_FALLBACK test above exercises that branch deterministically).
+        match LocalVfs.rename(&folder, &renamed, ReplaceMode::NoReplace) {
+            Ok(()) => assert!(renamed.path().is_dir()),
+            Err(Error::NoReplaceUnsupported) => assert!(folder.path().is_dir()),
+            other => panic!("unexpected directory no-replace rename result: {other:?}"),
+        }
     }
 
     #[cfg(unix)]
