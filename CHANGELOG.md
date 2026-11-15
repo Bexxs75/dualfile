@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- The file panes no longer flood with "Update installation in progress" during an update download; file operations are only paused for the brief replacement step, not the whole download.
+
 ## [0.2.2] - 2026-11-15
 
 ### Added

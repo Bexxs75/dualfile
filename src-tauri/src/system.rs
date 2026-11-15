@@ -199,12 +199,18 @@ pub async fn update_install(
     if state.active_jobs_count() != 0 {
         return Err("File jobs are active".into());
     }
+    // Reject only a second concurrent update here; do NOT raise the file-operation gate yet.
+    // The gate (INSTALLING) is raised just before the replace, so the panes keep listing
+    // normally during the (large) download instead of erroring for its whole duration.
     {
-        let mut installing = INSTALLING.write().map_err(|_| "Update gate unavailable")?;
-        if *installing || state.active_jobs_count() != 0 {
-            return Err("File jobs are active".into());
+        let downloading = DOWNLOAD_CANCEL
+            .lock()
+            .map_err(|_| "Update gate unavailable")?
+            .is_some();
+        let installing = *INSTALLING.read().map_err(|_| "Update gate unavailable")?;
+        if downloading || installing {
+            return Err("Update installation in progress".into());
         }
-        *installing = true;
     }
     let guard = InstallGuard;
     let (cancel, mut cancelled) = watch::channel(false);
@@ -258,6 +264,11 @@ pub async fn update_install(
         total: None,
         phase: "install",
     });
+    // Download finished: now lock file operations for the actual replace and the short
+    // window until the frontend triggers the restart. InstallGuard clears it on failure.
+    *INSTALLING
+        .write()
+        .map_err(|_| "Update gate unavailable")? = true;
     update.install(bytes).map_err(|e| e.to_string())?;
     // Keep file operations locked until the frontend invokes the process plugin restart.
     std::mem::forget(guard);
