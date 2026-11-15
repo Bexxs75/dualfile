@@ -720,7 +720,7 @@ function validateProfile(profile: ConnectionProfile): ConnectionProfile {
   }
   if (openssh && (profile.protocol !== "sftp" || profile.saveSecret)) throw bad("Transport");
   if (profile.transport && !["builtin", "openssh"].includes(profile.transport)) throw bad("Transport");
-  if (!["ftp", "ftps", "sftp", "smb"].includes(profile.protocol)) throw bad("Protokoll");
+  if (!["ftp", "ftps", "sftp", "smb", "webdav"].includes(profile.protocol)) throw bad("Protokoll");
   if (
     !text(profile.host) ||
     profile.host === "" ||
@@ -730,13 +730,22 @@ function validateProfile(profile: ConnectionProfile): ConnectionProfile {
     throw bad("Server");
   }
   if (!Number.isInteger(profile.port) || profile.port < (openssh ? 0 : 1) || profile.port > 65_535) throw bad("Port");
-  if (!text(profile.user) || (!openssh && profile.protocol !== "smb" && profile.user === "") || profile.user.length > 255 || !NO_CONTROL.test(profile.user)) {
+  if (!text(profile.user) || (!openssh && profile.protocol !== "smb" && profile.protocol !== "webdav" && profile.user === "") || profile.user.length > 255 || !NO_CONTROL.test(profile.user)) {
     throw bad("Benutzer");
   }
   if (openssh && profile.user !== "" && (!/^[A-Za-z0-9._@:%[\]-]+$/.test(profile.user) || profile.user.startsWith("-"))) throw bad("Benutzer");
   if (profile.protocol === "smb") {
     const share = profile.share ?? "", domain = profile.domain ?? "";
     if (share.length > 255 || [".", ".."].includes(share) || /[\/\\]/.test(share) || !NO_CONTROL.test(share) || domain.length > 256 || !NO_CONTROL.test(domain) || (!profile.guest && profile.user.toLowerCase() === "guest")) throw bad("SMB");
+  }
+  if (profile.protocol === "webdav") {
+    // Strict host (no userinfo/port/path/query/fragment, so credentials cannot be redirected) and a
+    // base path that is a valid folder; cleartext http needs the explicit confirmation. Mirrors the
+    // Rust valid_webdav_host / WebdavProfile::validate.
+    const base = profile.share ?? "/";
+    if (!/^(\[[0-9a-fA-F:]+\]|[A-Za-z0-9.-]+)$/.test(profile.host)) throw bad("Server");
+    if (!base.startsWith("/") || base.length > 1024 || !NO_CONTROL.test(base) || base.split("/").includes("..")) throw bad("WebDAV");
+    if (profile.tls === "none" && !profile.allowPlaintext) throw bad("Klartext");
   }
   const folder = profile.startFolder;
   if (
@@ -746,7 +755,9 @@ function validateProfile(profile: ConnectionProfile): ConnectionProfile {
     throw bad("Startordner");
   }
   const tlsOk =
-    profile.protocol === "ftps" ? profile.tls === "explicit" || profile.tls === "implicit" : profile.tls === "none";
+    profile.protocol === "ftps" ? profile.tls === "explicit" || profile.tls === "implicit"
+    : profile.protocol === "webdav" ? profile.tls === "explicit" || profile.tls === "none"
+    : profile.tls === "none";
   if (!tlsOk) throw bad("Verschlüsselung");
   const auth = profile.auth;
   if (auth?.kind === "keyFile") {
