@@ -62,10 +62,6 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .ribbon { display: flex; gap: 4px; align-items: center; overflow-x: auto; padding: 0 8px; height: 30px; flex: none; border-bottom: 1px solid var(--line); }
 .ribbon .bm { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: transparent; border: 1px solid transparent; border-radius: 4px; white-space: nowrap; }
 .ribbon .bm:hover { background: var(--panel2); }
-.qa-bar { display: flex; gap: 4px; align-items: center; overflow-x: auto; padding: 0 8px; height: 28px; min-width: 0; flex: none; border-bottom: 1px solid var(--line); background: var(--panel2); }
-.qa-item { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: transparent; border: 1px solid transparent; border-radius: 4px; white-space: nowrap; }
-.qa-item:hover { background: var(--panel2); }
-.qa-bm > .ico { color: var(--c); }
 
 /* Fenster */
 .panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -494,12 +490,12 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .keys-msg { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--warn); }
 .keys-foot { display: flex; justify-content: flex-end; }
 
-.terminal-panel { height: 260px; flex: 0 0 260px; min-height: 0; padding: 8px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.terminal-panel { height: 260px; flex: 0 0 260px; min-height: 0; padding: 8px; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
 .terminal-resize { height: 16px; margin: 0 -8px 2px; cursor: row-resize; flex: none; display: flex; align-items: center; justify-content: center; }
 .terminal-resize::before { content: ""; width: 44px; height: 5px; border-radius: 3px; background: var(--line); transition: background .12s, width .12s; }
 .terminal-resize:hover::before, .terminal-resize:focus-visible::before { background: var(--accent); width: 60px; }
 .terminal-resize:focus-visible { outline: none; }
-.terminal-host { height: 100%; width: 100%; }
+.terminal-host { flex: 1 1 auto; min-height: 0; width: 100%; }
 
 /* Keycap + shortcut hover card (ShortcutHint) */
 .hint-wrap { position: relative; display: inline-flex; flex: none; }

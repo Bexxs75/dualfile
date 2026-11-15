@@ -123,7 +123,6 @@ export const defaultSettings: Settings = {
   accent: "#e0a45c",
   accentAutomatic: true,
   showParentEntry: true,
-  showQuickAccess: false,
   terminalHeight: 260,
   extensionColumn: false,
   checkUpdatesOnStart: true,

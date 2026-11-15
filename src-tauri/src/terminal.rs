@@ -107,17 +107,22 @@ fn apply_clean_env(command: &mut CommandBuilder) {
     apply_env_plan(command, &plan);
 }
 
+/// The embedded terminal runs a plain shell on purpose: it ignores the user's
+/// `$SHELL` and interactive startup files so it stays simple (no greeting, no
+/// custom prompt, no login banner). bash with `--norc` when available,
+/// otherwise `/bin/sh`.
+fn plain_shell(bash_exists: bool) -> (&'static str, &'static [&'static str]) {
+    if bash_exists {
+        ("/bin/bash", &["--norc"])
+    } else {
+        ("/bin/sh", &[])
+    }
+}
+
 fn shell_command(cwd: Option<String>) -> CommandBuilder {
-    let shell = std::env::var_os("SHELL")
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| {
-            if std::path::Path::new("/bin/bash").is_file() {
-                "/bin/bash".into()
-            } else {
-                "/bin/sh".into()
-            }
-        });
-    let mut command = CommandBuilder::new(shell);
+    let (program, args) = plain_shell(std::path::Path::new("/bin/bash").is_file());
+    let mut command = CommandBuilder::new(program);
+    command.args(args);
     command.arg("-i");
     command.env("TERM", "xterm-256color");
     apply_clean_env(&mut command);
@@ -401,6 +406,11 @@ mod tests {
         command.args(["-c", script]);
         command.cwd("/");
         command
+    }
+    #[test]
+    fn plain_shell_prefers_bash_norc_then_sh() {
+        assert_eq!(plain_shell(true), ("/bin/bash", &["--norc"][..]));
+        assert_eq!(plain_shell(false), ("/bin/sh", &[][..]));
     }
     #[test]
     fn shell_env_drops_appimage_runtime_paths() {

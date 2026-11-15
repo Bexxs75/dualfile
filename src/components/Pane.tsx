@@ -6,7 +6,6 @@ import { baseName, crumbsOf, displayPath, joinPath, isArchivePath, parseRemotePa
 import { summary } from "../state/selection";
 import { FileList } from "./FileList";
 import { QuickView } from "./lister/QuickView";
-import { QuickAccessBar } from "./QuickAccessBar";
 
 import { HeaderMenu, type HeaderMenuItem } from "./HeaderMenu";
 import { Icon } from "./Icon";
@@ -304,7 +303,6 @@ export function Pane({ w }: { w: WinIdx }) {
         controller.drop(w, event.shiftKey);
       }}
     >
-      <QuickAccessBar w={w} />
       <Tabs w={w} />
       {preview ? <div className="crumbs quick-path" title={displayPath(previewPath)}>{displayPath(previewPath)}</div> : <PathBar w={w} />}
       {preview ? (

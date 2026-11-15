@@ -3,6 +3,20 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [0.2.8] - 2026-11-15
+
+### Changed
+
+- The embedded terminal now opens a plain shell — `bash --norc` (or `/bin/sh`) — instead of your login shell, so it starts clean without a custom prompt, greeting or login banner from your shell configuration.
+
+### Removed
+
+- The optional quick-access bar (added in 0.2.5) has been removed. It was off by default; it did not earn its place and grew awkward at narrow widths. Drives are still reachable through each pane's "This computer" menu.
+
+### Fixed
+
+- The embedded terminal no longer cuts off its last line: the panel now sizes the terminal to the space below the resize grip, so nothing is clipped at the bottom when the window or panel is resized.
+
 ## [0.2.7] - 2026-11-15
 
 ### Changed

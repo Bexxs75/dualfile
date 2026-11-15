@@ -428,7 +428,6 @@ export interface Settings {
   accent: string;
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
-  showQuickAccess?: boolean;
   /** Höhe (px) des eingebetteten Terminals; fehlt der Wert, gilt 260. */
   terminalHeight?: number;
   extensionColumn?: boolean;
