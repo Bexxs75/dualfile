@@ -571,6 +571,26 @@ fn ratio_guard_applies_while_indexing_a_compressed_tar() {
 }
 
 #[test]
+fn ratio_guard_does_not_trip_on_a_plain_uncompressed_tar() {
+    // A plain tar is not compressed, so reading a large entry must not look like a bomb.
+    let tmp = tempfile::tempdir().unwrap();
+    let data = vec![0u8; 256 * 1024];
+    let bytes = tar_bytes(&[file("big.bin", &data)]);
+    let limits = ArchiveLimits {
+        ratio_min_bytes: 64 * 1024,
+        ratio_max: 2,
+        ..ArchiveLimits::default()
+    };
+    let vfs = open_with(tmp.path(), "a.tar", &bytes, limits).unwrap();
+    let mut out = Vec::new();
+    vfs.open_read(&ap(&vfs, "/big.bin"))
+        .unwrap()
+        .read_to_end(&mut out)
+        .expect("plain tar entry must not trip the ratio guard");
+    assert_eq!(out.len(), 256 * 1024);
+}
+
+#[test]
 fn index_byte_budget_stops_a_tar_bomb_while_parsing() {
     let tmp = tempfile::tempdir().unwrap();
     // Low ratio (random-looking data is not needed: ratio guard is off here).

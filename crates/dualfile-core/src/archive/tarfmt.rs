@@ -87,6 +87,13 @@ impl TarBackend {
         if self.compression == TarCompression::None {
             let mut file = self.source.open()?;
             file.seek(SeekFrom::Start(loc.offset))?;
+            // Charge the bytes read to stats.compressed so the ratio guard sees ~1:1. A plain
+            // tar is never a compression bomb; without this feed compressed stays 0 and the
+            // guard falsely trips on any entry past ratio_min_bytes.
+            let file = CountSrc {
+                inner: file,
+                stats: stats.clone(),
+            };
             let counted = Counted::for_entry(file, ctx, stats, None);
             return Ok(Box::new(Exact {
                 inner: counted,
