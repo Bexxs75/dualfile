@@ -1378,6 +1378,16 @@ fn real_webdav_round_trip() {
         &JobHandle::silent(),
     );
     assert!(report.failed.is_empty(), "{:?}", report.failed);
+    // Listing a subfolder exercises the collection PROPFIND (Apache mod_dav 301s a path
+    // without a trailing slash); the uploaded file and the created dir must show up.
+    let names: Vec<String> = vfs
+        .list(&VPath::webdav(&info.id, work).unwrap())
+        .unwrap()
+        .into_iter()
+        .map(|e| e.name)
+        .collect();
+    assert!(names.contains(&"t.bin".to_string()), "{names:?}");
+    assert!(names.contains(&"dir".to_string()), "{names:?}");
     let mut got = Vec::new();
     vfs.open_read(&at("t.bin"))
         .unwrap()

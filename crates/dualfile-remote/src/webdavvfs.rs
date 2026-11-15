@@ -567,12 +567,23 @@ impl WriteFinish for WebdavWrite {
 impl WebdavVfs {
     fn propfind(&self, path: &str, depth: u8, missing: &VPath) -> Result<Vec<DavResponse>> {
         let depth = if depth == 0 { "0" } else { "1" };
-        let resp = self.transport.request(
-            "PROPFIND",
-            path,
-            &[("Depth", depth)],
-            Some(PROPFIND_BODY.to_vec()),
-        )?;
+        let send = |p: &str| {
+            self.transport.request(
+                "PROPFIND",
+                p,
+                &[("Depth", depth)],
+                Some(PROPFIND_BODY.to_vec()),
+            )
+        };
+        let mut resp = send(path)?;
+        // A collection PROPFINDed without a trailing slash is 301/308-redirected by some servers
+        // (notably Apache mod_dav), which would otherwise make every subfolder unbrowsable. We
+        // never follow the server's Location (no cross-host bounce or credential leak — the whole
+        // client keeps redirects(0)), but a collection canonically ends in "/", so we retry the
+        // SAME path with a trailing slash exactly once. A file never redirects, so it is untouched.
+        if (resp.status == 301 || resp.status == 308) && !path.ends_with('/') {
+            resp = send(&format!("{path}/"))?;
+        }
         if resp.status == 404 {
             return Err(Error::NotFound(missing.path().to_path_buf()));
         }
@@ -848,6 +859,27 @@ mod tests {
         assert_eq!(
             entries.iter().find(|e| e.name == "unter").unwrap().kind,
             EntryKind::Dir
+        );
+    }
+
+    #[test]
+    fn a_redirected_collection_is_retried_with_a_trailing_slash() {
+        // Apache mod_dav 301-redirects a collection path without a trailing slash. The client
+        // must retry the SAME path with "/" (never follow the Location) so subfolders stay
+        // browsable; a file (no redirect) is never retried.
+        let (v, t) = vfs_t(vec![(301, Vec::new()), (207, LISTING.to_vec())]);
+        let names = sorted_names(v.list(&vpath("/ordner")).unwrap());
+        assert_eq!(names, vec!["bild a.jpg", "unter"]);
+        let paths: Vec<String> = t
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|c| c.path.clone())
+            .collect();
+        assert_eq!(
+            paths,
+            vec!["/dav/ordner".to_string(), "/dav/ordner/".to_string()]
         );
     }
 
