@@ -289,13 +289,20 @@ fn open_temp_base() -> PathBuf {
 /// separators stripped, so the system opener keeps the original extension and nothing can
 /// escape the temp directory. Falls back to a neutral name.
 fn remote_open_name(path: &dualfile_core::vfs::VPath) -> String {
-    path.path()
+    let name = path
+        .path()
         .file_name()
         .and_then(|n| n.to_str())
         .map(|n| n.trim_matches(|c| c == '/' || c == '\\'))
         .filter(|n| !n.is_empty() && n != &"." && n != &"..")
-        .unwrap_or("datei")
-        .to_string()
+        .unwrap_or("datei");
+    // The local copy is handed to xdg-open: a `.desktop` entry would be *launched* (its Exec=
+    // line run) instead of shown. Neutralise that extension so the copy opens as plain text.
+    if name.to_ascii_lowercase().ends_with(".desktop") {
+        format!("{name}.txt")
+    } else {
+        name.to_string()
+    }
 }
 
 /// Copies a remote file into a fresh private temp directory (0700) as a 0600 file and returns
@@ -1387,6 +1394,11 @@ mod tests {
         assert_eq!(name("/srv/archiv.tar.gz"), "archiv.tar.gz");
         // A path with no usable final name falls back to a neutral one.
         assert_eq!(name("/"), "datei");
+        // A `.desktop` name is neutralised (case-insensitive) so xdg-open shows the copy as
+        // text instead of launching it; a name that only contains ".desktop" is untouched.
+        assert_eq!(name("/srv/evil.desktop"), "evil.desktop.txt");
+        assert_eq!(name("/srv/Evil.DESKTOP"), "Evil.DESKTOP.txt");
+        assert_eq!(name("/srv/notes.desktop.txt"), "notes.desktop.txt");
     }
 
     #[test]
