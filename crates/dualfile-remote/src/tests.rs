@@ -1326,6 +1326,69 @@ fn manager_connects_a_webdav_profile_and_registers_it() {
     assert!(!m.is_connected(&info.id));
 }
 
+/// Manual integration test against a real WebDAV server (never run by plain `cargo test`).
+/// `DUALFILE_WEBDAV_TEST=host:port:user:pass:base_path:workdir` (workdir must exist under the
+/// base and be writable). Run with `cargo test -p dualfile-remote -- --ignored real_webdav`.
+#[test]
+#[ignore = "needs a real WebDAV server, see DUALFILE_WEBDAV_TEST"]
+fn real_webdav_round_trip() {
+    use crate::profile::WebdavProfile;
+    use std::io::Read;
+    let spec = std::env::var("DUALFILE_WEBDAV_TEST").expect("DUALFILE_WEBDAV_TEST");
+    let parts: Vec<&str> = spec.splitn(6, ':').collect();
+    let [host, port, user, pass, base, work] = parts[..] else {
+        panic!("host:port:user:pass:base_path:workdir")
+    };
+    let (m, router, _) = manager(&FakeServer::new(), 2);
+    let profile = WebdavProfile {
+        name: "it".into(),
+        host: host.into(),
+        port: port.parse().unwrap(),
+        user: user.into(),
+        base_path: base.into(),
+        tls: false,
+        allow_plaintext: true,
+        start_folder: None,
+    };
+    let info = m
+        .connect_webdav(
+            profile,
+            Secret::new(pass),
+            Arc::new(Ask(TrustDecision::TrustOnce, Default::default())),
+        )
+        .unwrap();
+    let vfs = router.vfs_for(&info.root).unwrap();
+    let at = |name: &str| VPath::webdav(&info.id, &format!("{work}/{name}")).unwrap();
+    let _ = vfs.remove_permanent(&at("t.bin"));
+    let _ = vfs.remove_permanent(&at("dir"));
+    vfs.mkdir(&at("dir")).unwrap();
+    // (A duplicate MKCOL maps differently per server; the error mapping is covered by the
+    // unit tests against a fake transport, so this round-trip does not re-assert it.)
+    // upload, download, compare
+    let tmp = std::env::temp_dir().join(format!("df-webdav-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let data: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
+    std::fs::write(tmp.join("t.bin"), &data).unwrap();
+    let report = ops::copy(
+        &dualfile_core::LocalVfs,
+        &[VPath::local(tmp.join("t.bin")).unwrap()],
+        &*vfs,
+        &VPath::webdav(&info.id, work).unwrap(),
+        None,
+        &JobHandle::silent(),
+    );
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    let mut got = Vec::new();
+    vfs.open_read(&at("t.bin"))
+        .unwrap()
+        .read_to_end(&mut got)
+        .unwrap();
+    assert_eq!(got, data);
+    let _ = vfs.remove_permanent(&at("t.bin"));
+    let _ = vfs.remove_permanent(&at("dir"));
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn manager_webdav_wrong_password_fails_connect_with_auth_message() {
     // WD-4A-03/04: a 401 on the connect probe must fail the connect as "Anmeldung fehlgeschlagen"
