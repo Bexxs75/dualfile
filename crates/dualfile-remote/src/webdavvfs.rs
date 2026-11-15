@@ -5,11 +5,9 @@
 //!
 //! Status: standalone and read-only (`is_read_only()` is true, every write returns `Unsupported`),
 //! not yet wired into the router — so none of this runs in production until the connector increment.
-//! Before that wiring, two items from the review still need attention: (1) bound the staging read of
-//! a GET against the advertised size (a general remote-copy hardening shared with SFTP/FTP/SMB), and
-//! (2) a malicious server could still make namespace resolution costly with a flood of `xmlns`
-//! declarations; the element cap below bounds it, but a stricter `xmlns` limit (or a smaller body
-//! cap) should be added before this backend is reachable.
+//! The GET body is bounded against the advertised size by the shared copy loop (`ops.rs`), and the
+//! number of namespace declarations is capped here before parsing; the remaining work for the
+//! connector increment is the write side (PUT/MKCOL/MOVE/DELETE) and the real HTTP/TLS transport.
 //!
 //! Security: the PROPFIND body is attacker-controlled XML from the server. It is read with a hard
 //! byte cap (oversize is an error, never a silent partial list), parsed with quick-xml (which does
@@ -276,6 +274,15 @@ fn parse_multistatus(xml: &[u8]) -> Result<(Vec<DavResponse>, bool)> {
         "prop",
         "resourcetype",
     ];
+    // Bound the number of namespace declarations before parsing: resolving each element scans the
+    // active bindings, so a flood of `xmlns:` declarations would make resolution quadratic. A real
+    // DAV listing has a handful; reject far more rather than do the work. (Cheap single pass.)
+    const MAX_NS_DECLS: usize = 64;
+    if xml.windows(5).filter(|w| w == b"xmlns").count() > MAX_NS_DECLS {
+        return Err(remote(
+            "PROPFIND-Antwort hat zu viele Namespace-Deklarationen",
+        ));
+    }
     let mut reader = quick_xml::NsReader::from_reader(xml);
     reader.config_mut().expand_empty_elements = true;
     reader.config_mut().check_end_names = true;
@@ -918,6 +925,17 @@ mod tests {
     fn the_backend_reports_itself_read_only() {
         // WD-R4-03: so `ops` rejects a move before creating the destination.
         assert!(vfs(vec![]).is_read_only());
+    }
+
+    #[test]
+    fn a_flood_of_namespace_declarations_is_rejected() {
+        // WD-R8-01: many xmlns declarations would make namespace resolution quadratic.
+        let mut body = br#"<d:multistatus xmlns:d="DAV:" "#.to_vec();
+        for i in 0..100 {
+            body.extend_from_slice(format!("xmlns:p{i}=\"urn:{i}\" ").as_bytes());
+        }
+        body.extend_from_slice(b"/>");
+        assert!(vfs(vec![(207, body)]).list(&vpath("/ordner")).is_err());
     }
 
     #[test]
