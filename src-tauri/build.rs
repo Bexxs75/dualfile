@@ -1,6 +1,10 @@
 // Only the commands listed here exist for the web view; each one needs an explicit
 // `allow-<command>` permission in capabilities/default.json (no blanket access).
 const COMMANDS: &[&str] = &[
+    "terminal_open",
+    "terminal_write",
+    "terminal_resize",
+    "terminal_close",
     "system_status",
     "start_menu_set",
     "tray_set",

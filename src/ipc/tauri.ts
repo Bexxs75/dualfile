@@ -60,7 +60,30 @@ function isCoreEvent(value: unknown): value is CoreEvent {
 }
 
 export function createTauriApi(): DualfileApi {
+  const terminalListeners = new Set<Promise<unknown>>();
+  function terminalListener<T>(name: string, handler: (event: T) => void): () => void {
+    let active = true;
+    let stop: (() => void) | undefined;
+    // Opening waits for event registration, so a short-lived shell cannot beat listen().
+    const ready = listen<T>(name, event => { if (active) handler(event.payload); }).then(unlisten => {
+      if (active) stop = unlisten; else unlisten();
+      return null;
+    }).catch(error => error);
+    terminalListeners.add(ready);
+    return () => { active = false; stop?.(); terminalListeners.delete(ready); };
+  }
   return {
+    terminalOpen: async (cwd, rows, cols) => {
+      const failures = await Promise.all(terminalListeners);
+      const error = failures.find(result => result !== null);
+      if (error !== undefined) throw toCoreError(error);
+      return call("terminal_open", { cwd: cwd ?? null, rows, cols });
+    },
+    terminalWrite: (id, data) => call("terminal_write", { id, data }),
+    terminalResize: (id, rows, cols) => call("terminal_resize", { id, rows, cols }),
+    terminalClose: id => call("terminal_close", { id }),
+    onTerminalOutput: handler => terminalListener("terminal-output", handler),
+    onTerminalExit: handler => terminalListener("terminal-exit", handler),
     systemStatus: () => call("system_status"),
     startMenuSet: enabled => call("start_menu_set", { enabled }),
     traySet: (enabled, language) => call("tray_set", { enabled, language }),

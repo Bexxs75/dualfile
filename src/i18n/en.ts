@@ -751,6 +751,10 @@ const en: Record<keyof typeof de, string> = {
   "lister.quick.none": "No file selected.",
   "lister.quick.paused": "The viewer is open.",
   "toast.viewFolder": "Folders cannot be viewed.",
+  "menu.view.terminal": "Terminal",
+  "tip.terminal": "Toggle terminal (Ctrl+`)",
+  "keys.cmd.terminal": "Terminal",
+  "terminal.exited": "[process exited]",
   "menu.view.quickView": "Quick view",
   "tip.quickView": "Toggle quick view (Ctrl+Q)",
 

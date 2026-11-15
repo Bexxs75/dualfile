@@ -816,6 +816,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     }
   }
 
+  const toggleTerminal = (): void => dispatch({ type: "terminal", on: !get().terminal });
   const toggleQuickView = (): void => dispatch({ type: "quickView", on: !get().quickView });
 
   async function openExternalPath(path: string): Promise<void> {
@@ -877,6 +878,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         return compareFeature.openDiffFromPanes();
       case "view":
         return openLister();
+      case "terminal":
+        return toggleTerminal();
       case "quickView":
         return toggleQuickView();
       case "edit":

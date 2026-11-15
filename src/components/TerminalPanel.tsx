@@ -1,0 +1,99 @@
+import { useEffect, useRef } from "react";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { useController, useRuntime, useT } from "../app/context";
+import type { DualfileApi, TerminalOutput, TerminalExit } from "../ipc/api";
+import { mapKey } from "../state/keymap";
+import { isArchivePath, parseRemotePath } from "../state/paths";
+
+export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
+  const host = useRef<HTMLDivElement>(null);
+  // Navigation does not restart or cd an already running shell.
+  const initialCwd = useRef(cwd);
+  const controller = useController();
+  const { store } = useRuntime();
+  const tr = useT();
+  const exitedText = useRef(tr("terminal.exited"));
+  useEffect(() => {
+    const element = host.current;
+    if (!element) return;
+    const term = new Terminal({ cursorBlink: true, fontSize: 13, fontFamily: '"IBM Plex Mono", monospace' });
+    const fit = new FitAddon();
+    term.loadAddon(fit);
+    term.open(element);
+    let disposed = false;
+    let exited = false;
+    let id: number | undefined;
+    // Output (including immediate exit) can arrive before the open command resolves.
+    const pending: Array<TerminalOutput | TerminalExit> = [];
+    const fail = (error: unknown) => {
+      if (!disposed) term.writeln(`\r\n${String(error).replace(/[\x00-\x1f\x7f-\x9f]/g, " ")}`);
+    };
+    const receive = (event: TerminalOutput | TerminalExit) => {
+      if (disposed) return;
+      if (id === undefined) { pending.push(event); return; }
+      if (event.id !== id || exited) return;
+      if ("data" in event) term.write(Uint8Array.from(atob(event.data), char => char.charCodeAt(0)));
+      else {
+        exited = true;
+        term.options.disableStdin = true;
+        term.writeln(`\r\n\x1b[2m${exitedText.current}\x1b[0m`);
+      }
+    };
+    const stopOutput = api.onTerminalOutput(receive);
+    const stopExit = api.onTerminalExit(receive);
+    let inputQueue = Promise.resolve();
+    const input = term.onData((data: string) => {
+      inputQueue = inputQueue.then(async () => {
+        if (!disposed && id !== undefined && !exited) await api.terminalWrite(id, data);
+      }).catch(fail);
+    });
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      if (mapKey(event, "list", store.getState().settings.keybindings) !== "terminal") return true;
+      if (event.type === "keydown" && !event.repeat) controller.command("terminal");
+      event.preventDefault();
+      return false;
+    });
+    const resize = () => {
+      if (disposed) return;
+      fit.fit();
+      if (id !== undefined && !exited) void api.terminalResize(id, term.rows, term.cols).catch(fail);
+    };
+    const theme = () => {
+      const colors = getComputedStyle(element);
+      term.options.theme = {
+        background: colors.getPropertyValue("--panel").trim() || undefined,
+        foreground: colors.getPropertyValue("--fg").trim() || undefined,
+        cursor: colors.getPropertyValue("--fg").trim() || undefined,
+        selectionBackground: colors.getPropertyValue("--selection").trim() || undefined,
+      };
+    };
+    theme();
+    const themeObserver = new MutationObserver(theme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "data-theme"] });
+    const observer = new ResizeObserver(resize);
+    observer.observe(element);
+    window.addEventListener("resize", resize);
+    fit.fit();
+    const path = initialCwd.current;
+    const local = path.startsWith("/") && !isArchivePath(path) && !parseRemotePath(path) ? path : undefined;
+    void api.terminalOpen(local, term.rows, term.cols).then(opened => {
+      id = opened;
+      if (disposed) { void api.terminalClose(opened).catch(console.error); return; }
+      for (const event of pending) receive(event);
+      pending.length = 0;
+      resize();
+      term.focus();
+    }).catch(fail);
+    return () => {
+      disposed = true;
+      stopOutput(); stopExit(); input.dispose();
+      observer.disconnect(); themeObserver.disconnect();
+      window.removeEventListener("resize", resize);
+      if (id !== undefined) void api.terminalClose(id).catch(console.error);
+      term.dispose();
+    };
+  }, [api, controller, store]);
+  return <section className="terminal-panel" aria-label={tr("menu.view.terminal")}><div className="terminal-host" ref={host} /></section>;
+}

@@ -7,3 +7,4 @@ vendor/
 .cargo-home/
 target-tauri/
 src-tauri/gen/
+.npm-cache/

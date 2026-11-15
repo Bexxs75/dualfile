@@ -24,6 +24,7 @@ export type Command =
   | "compareDirs"
   | "compareFiles"
   | "view"
+  | "terminal"
   | "quickView"
   | "edit"
   | "copy"
@@ -98,6 +99,7 @@ export const REBINDABLE: Record<RebindableCommand, string> = {
   undo: "Ctrl+Z",
   multiRename: "Ctrl+M",
   quickView: "Ctrl+Q",
+  terminal: "Ctrl+`",
   pack: "Ctrl+Shift+P",
   compareDirs: "Ctrl+Shift+D",
   compareFiles: "Ctrl+Shift+F",
@@ -106,7 +108,7 @@ export const REBINDABLE: Record<RebindableCommand, string> = {
 export type RebindableCommand =
   | "rename" | "view" | "edit" | "copy" | "move" | "makeDir" | "trash" | "deletePermanent"
   | "selectAll" | "pathInput" | "refresh" | "toggleHidden" | "swapPanes" | "newTab" | "closeTab"
-  | "undo" | "multiRename" | "quickView" | "pack" | "compareDirs" | "compareFiles";
+  | "undo" | "multiRename" | "terminal" | "quickView" | "pack" | "compareDirs" | "compareFiles";
 
 export const REBINDABLE_COMMANDS = Object.keys(REBINDABLE) as RebindableCommand[];
 
@@ -127,6 +129,7 @@ export function eventToSpec(event: KeyboardEventLike): string | null {
   const { key, ctrlKey = false, shiftKey = false, altKey = false, metaKey = false } = event;
   if (altKey || metaKey) return null;
   if (/^F([1-9]|1[0-2])$/.test(key)) return ctrlKey ? null : shiftKey ? `Shift+${key}` : key;
+  if (ctrlKey && key === "`" && !shiftKey) return "Ctrl+`";
   if (ctrlKey && /^[a-z0-9]$/i.test(key)) return `Ctrl+${shiftKey ? "Shift+" : ""}${key.toUpperCase()}`;
   return null;
 }

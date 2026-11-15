@@ -748,6 +748,10 @@ const de = {
   "lister.quick.none": "Keine Datei markiert.",
   "lister.quick.paused": "Der Lister ist geöffnet.",
   "toast.viewFolder": "Ordner lassen sich nicht ansehen.",
+  "menu.view.terminal": "Terminal",
+  "tip.terminal": "Terminal ein-/ausschalten (Strg+`)",
+  "keys.cmd.terminal": "Terminal",
+  "terminal.exited": "[Prozess beendet]",
   "menu.view.quickView": "Schnellansicht",
   "tip.quickView": "Schnellansicht ein-/ausschalten (Strg+Q)",
 

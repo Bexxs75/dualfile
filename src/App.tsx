@@ -25,6 +25,8 @@ import { SearchDialog } from "./components/dialogs/SearchDialog";
 import { ContextMenu } from "./components/ContextMenu";
 import { DragHint } from "./components/DragHint";
 import { FKeys } from "./components/FKeys";
+import { TerminalPanel } from "./components/TerminalPanel";
+import { activeTabOf } from "./app/state";
 import { JobsPanel } from "./components/JobsPanel";
 import { NoticeBar } from "./components/NoticeBar";
 import { Lister } from "./components/lister/Lister";
@@ -75,6 +77,8 @@ function Shell({ api }: { api: DualfileApi }) {
   const { store, controller, system } = useRuntime();
   const tr = useT();
   const language = useLanguage();
+  const terminal = useAppState(state => state.terminal);
+  const terminalCwd = useAppState(state => activeTabOf(state, state.active).path);
   const phase = useAppState((state) => state.phase);
   const theme = useAppState((state) => state.settings.theme);
   const accentAutomatic = useAppState((state) => state.settings.accentAutomatic);
@@ -106,6 +110,7 @@ function Shell({ api }: { api: DualfileApi }) {
         <Pane w={0} />
         <Pane w={1} />
       </div>
+      {terminal && <TerminalPanel api={api} cwd={terminalCwd} />}
       <JobsPanel />
       <FKeys />
       <Toasts />

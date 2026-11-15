@@ -62,7 +62,16 @@ export class CoreError extends Error {
  * Einzige Schnittstelle zum Dateisystem. In der App (`createTauriApi`) von Tauri-Befehlen
  * getragen, in Tests und im Browser-Entwurf von `createMockApi` ersetzt.
  */
+export interface TerminalOutput { id: number; data: string }
+export interface TerminalExit { id: number; code: number | null }
+
 export interface DualfileApi extends SystemApi {
+  terminalOpen(cwd: string | undefined, rows: number, cols: number): Promise<number>;
+  terminalWrite(id: number, data: string): Promise<void>;
+  terminalResize(id: number, rows: number, cols: number): Promise<void>;
+  terminalClose(id: number): Promise<void>;
+  onTerminalOutput(handler: (event: TerminalOutput) => void): () => void;
+  onTerminalExit(handler: (event: TerminalExit) => void): () => void;
   spaceFree(path: string): Promise<{ available: number; total: number } | null>;
   usageStart(path: string, options: { oneFileSystem: boolean }): Promise<number>;
   usageNode(id: number, nodePath?: string): Promise<UsagePage>;

@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- Toggle a single embedded local shell terminal below the file panes with Ctrl+` or the toolbar button.
+
 ## [0.2.1] - 2026-11-15
 
 ### Security

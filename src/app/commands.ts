@@ -31,6 +31,7 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   command("goForward", "action.forward", "forward", "Alt+→", s => activeTabOf(s, s.active).forward.length > 0);
   command("swapPanes", "menu.view.swapPanes", "swap", "Ctrl+U");
   command("toggleHidden", "menu.view.hidden", "hidden", "Ctrl+H");
+  command("terminal", "menu.view.terminal", "terminal", "Ctrl+`");
   command("quickView", "menu.view.quickView", "preview", "Ctrl+Q");
   add("mirror", "menu.view.mirror", "couple", "", () => controller.setMirror(!state.settings.mirror));
   command("newTab", "action.newTab", "plus", "Ctrl+T");

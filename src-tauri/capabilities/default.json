@@ -6,6 +6,10 @@
     "main"
   ],
   "permissions": [
+    "allow-terminal-open",
+    "allow-terminal-write",
+    "allow-terminal-resize",
+    "allow-terminal-close",
     "allow-ssh-prompt-answer",
     "allow-system-places-list",
     "allow-system-places-import",

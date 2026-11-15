@@ -1,3 +1,4 @@
+import { createTerminalMock } from "./terminalMock";
 import { mockSystemPlaces, systemPlaceProfile, systemPlaceExists } from "./systemPlaces";
 import { createSimilarMock } from "./similarMock";
 import { createSpaceMock } from "./spaceMock";
@@ -2136,6 +2137,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
 
   let startMenuExists = true;
   const api: MockApi = {
+    ...createTerminalMock(),
     systemStatus: async () => ({ appImage: false, startMenuExists }),
     startMenuSet: async enabled => { startMenuExists = enabled; },
     traySet: async () => false,

@@ -23,6 +23,7 @@ export function useGlobalKeys(store: AppStore, controller: Controller): void {
       if (state.closeRequested !== null || state.itemErrors.length > 0 || state.dialog !== null || state.conflicts.length > 0 || state.menu !== null || state.lister !== null || state.compare !== null || state.diff !== null) return;
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) return;
+      if (target?.closest(".terminal-panel")) return;
       const typing = target !== null && (INPUT_TAGS.has(target.tagName) || target.isContentEditable);
       const context: KeyContext = typing ? "input" : "list";
       // Ein fokussierter Knopf löst sich mit Enter/Leertaste selbst aus.

@@ -22,6 +22,7 @@ mod space;
 mod ssh_prompt;
 mod state;
 mod system;
+mod terminal;
 mod validate;
 mod verification;
 mod watch;
@@ -91,6 +92,7 @@ pub fn run() {
             #[cfg(not(unix))]
             let state = AppState::new(sink, home_dir(), dualfile_core::settings::config_dir());
             app.manage(Arc::new(state));
+            app.manage(Arc::new(terminal::TerminalManager::default()));
             #[cfg(target_os = "linux")]
             system::watch_minimize(app.handle())?;
             Ok(())
@@ -134,6 +136,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            terminal::terminal_open,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_close,
             system::system_status,
             system::start_menu_set,
             system::tray_set,
@@ -227,6 +233,9 @@ pub fn run() {
         .expect("Dualfile konnte nicht gestartet werden");
 
     app.run(|handle, event| {
+        if matches!(&event, RunEvent::Exit) || matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+            if let Some(manager) = handle.try_state::<Arc<terminal::TerminalManager>>() { manager.shutdown(); }
+        }
         #[cfg(unix)]
         if matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") || matches!(&event, RunEvent::Exit) {
             if let Some(bridge) = handle.try_state::<Arc<ssh_prompt::SshPromptBridge>>() { bridge.close(); }

@@ -104,6 +104,7 @@ export interface AppState {
   lister: ListerState | null;
   /** Schnellansicht (Strg+Q): zeigt die fokussierte Datei des aktiven Fensters anstelle des anderen. */
   quickView: boolean;
+  terminal: boolean;
   /** Vergleichsdialog (Strg+Umschalt+D) samt Abgleich; `null` = geschlossen. */
   compare: CompareSession | null;
   /** Textvergleich zweier Dateien; liegt über dem Vergleichsdialog. */
@@ -166,6 +167,7 @@ export function initialState(): AppState {
     drag: null,
     lister: null,
     quickView: false,
+    terminal: false,
     compare: null,
     diff: null,
     renamePresets: [],
@@ -252,6 +254,7 @@ export type Action =
   | { type: "drag"; drag: DragState | null }
   | { type: "lister"; lister: ListerState | null }
   | { type: "quickView"; on: boolean }
+  | { type: "terminal"; on: boolean }
   | { type: "compare"; update: (session: CompareSession | null) => CompareSession | null }
   | { type: "diff"; update: (session: DiffSession | null) => DiffSession | null }
   | { type: "renamePresets"; presets: readonly RenamePreset[] }
@@ -408,6 +411,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, drag: action.drag };
     case "lister":
       return { ...state, lister: action.lister, menu: null };
+    case "terminal":
+      return state.terminal === action.on ? state : { ...state, terminal: action.on };
     case "quickView":
       return state.quickView === action.on ? state : { ...state, quickView: action.on };
     case "compare": {
