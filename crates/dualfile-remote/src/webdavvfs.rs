@@ -35,13 +35,15 @@ pub struct WebdavResponse {
 }
 
 /// The HTTP side of WebDAV, abstracted so the VFS logic is testable with a fake. `path` is the
-/// server path (already joined with the connection base); `depth` is the PROPFIND Depth header.
+/// server path (already joined with the connection base). `headers` are extra request headers
+/// (e.g. `Depth` for PROPFIND, `Destination`/`Overwrite` for MOVE, `If-None-Match` for a
+/// non-replacing PUT); the real transport percent-encodes the path and sets host/auth itself.
 pub trait WebdavTransport: Send + Sync {
     fn request(
         &self,
         method: &str,
         path: &str,
-        depth: Option<u8>,
+        headers: &[(&str, &str)],
         body: Option<Vec<u8>>,
     ) -> Result<WebdavResponse>;
 }
@@ -459,11 +461,95 @@ fn unsupported() -> Error {
     Error::Unsupported("Dieser WebDAV-Vorgang wird noch nicht unterstützt")
 }
 
+/// Largest file written through PUT. Writes are buffered in memory in this increment (a streaming
+/// PUT is a later refinement), so a very large write is refused rather than exhausting memory.
+const MAX_PUT_BYTES: usize = 256 << 20;
+
+/// Maps a WebDAV failure status to the core error model for a mutation at `at`.
+fn status_to_err(status: u16, at: &VPath) -> Error {
+    match status {
+        404 => Error::NotFound(at.path().to_path_buf()),
+        401 | 403 => Error::PermissionDenied(at.path().to_path_buf()),
+        405 => Error::Unsupported("WebDAV: Methode nicht erlaubt"),
+        409 => Error::NotFound(at.path().to_path_buf()), // Conflict: a parent is missing
+        412 => Error::Exists(at.path().to_path_buf()), // Precondition failed (If-None-Match/Overwrite:F)
+        423 => remote("WebDAV: Ressource ist gesperrt"),
+        207 => remote("WebDAV: Vorgang teilweise fehlgeschlagen"),
+        s => remote(&format!("WebDAV-Server antwortete mit {s}")),
+    }
+}
+
+#[derive(PartialEq)]
+enum CommitState {
+    Pending,
+    Done,
+    Failed,
+}
+
+/// A PUT buffered in memory until `commit`. `WriteMode::NoReplace` sends `If-None-Match: *` so the
+/// server refuses to overwrite an existing resource. `commit` runs the PUT at most once: a second
+/// commit after success is a no-op (it must not send an empty body and truncate the file), and after
+/// a failure it refuses rather than resend the already-consumed (empty) buffer.
+struct WebdavWrite {
+    transport: Arc<dyn WebdavTransport>,
+    path: String,
+    vpath: VPath,
+    mode: WriteMode,
+    buf: Vec<u8>,
+    state: CommitState,
+}
+impl std::io::Write for WebdavWrite {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        if self.buf.len().saturating_add(data.len()) > MAX_PUT_BYTES {
+            return Err(std::io::Error::other(
+                "WebDAV-PUT: Datei ist zu groß zum Puffern",
+            ));
+        }
+        self.buf.extend_from_slice(data);
+        Ok(data.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+impl WriteFinish for WebdavWrite {
+    fn commit(&mut self) -> Result<()> {
+        match self.state {
+            CommitState::Done => return Ok(()),
+            CommitState::Failed => return Err(remote("WebDAV-PUT ist bereits fehlgeschlagen")),
+            CommitState::Pending => {}
+        }
+        let headers: &[(&str, &str)] = if self.mode == WriteMode::NoReplace {
+            &[("If-None-Match", "*")]
+        } else {
+            &[]
+        };
+        // Consume the buffer and mark failed up front: a transport error or bad status then leaves
+        // the write in the Failed state, so a retry cannot resend an empty body.
+        self.state = CommitState::Failed;
+        let body = std::mem::take(&mut self.buf);
+        let resp = self
+            .transport
+            .request("PUT", &self.path, headers, Some(body))?;
+        match resp.status {
+            200 | 201 | 204 => {
+                self.state = CommitState::Done;
+                Ok(())
+            }
+            s => Err(status_to_err(s, &self.vpath)),
+        }
+    }
+}
+
 impl WebdavVfs {
     fn propfind(&self, path: &str, depth: u8, missing: &VPath) -> Result<Vec<DavResponse>> {
-        let resp =
-            self.transport
-                .request("PROPFIND", path, Some(depth), Some(PROPFIND_BODY.to_vec()))?;
+        let depth = if depth == 0 { "0" } else { "1" };
+        let resp = self.transport.request(
+            "PROPFIND",
+            path,
+            &[("Depth", depth)],
+            Some(PROPFIND_BODY.to_vec()),
+        )?;
         if resp.status == 404 {
             return Err(Error::NotFound(missing.path().to_path_buf()));
         }
@@ -549,7 +635,7 @@ impl Vfs for WebdavVfs {
 
     fn open_read(&self, p: &VPath) -> Result<Box<dyn Read + Send>> {
         let path = self.server_path(p);
-        let resp = self.transport.request("GET", &path, None, None)?;
+        let resp = self.transport.request("GET", &path, &[], None)?;
         if resp.status == 404 {
             return Err(Error::NotFound(p.path().to_path_buf()));
         }
@@ -564,14 +650,38 @@ impl Vfs for WebdavVfs {
         Ok(resp.body)
     }
 
-    fn create_write(&self, _p: &VPath, _mode: WriteMode) -> Result<Box<dyn WriteFinish>> {
-        Err(unsupported())
+    fn create_write(&self, p: &VPath, mode: WriteMode) -> Result<Box<dyn WriteFinish>> {
+        Ok(Box::new(WebdavWrite {
+            transport: self.transport.clone(),
+            path: self.server_path(p),
+            vpath: p.clone(),
+            mode,
+            buf: Vec::new(),
+            state: CommitState::Pending,
+        }))
     }
-    fn mkdir(&self, _p: &VPath) -> Result<()> {
-        Err(unsupported())
+    fn mkdir(&self, p: &VPath) -> Result<()> {
+        let path = self.server_path(p);
+        let resp = self.transport.request("MKCOL", &path, &[], None)?;
+        match resp.status {
+            201 => Ok(()),
+            // MKCOL on an existing resource answers 405; report it as "already exists".
+            405 => Err(Error::Exists(p.path().to_path_buf())),
+            s => Err(status_to_err(s, p)),
+        }
     }
-    fn rename(&self, _from: &VPath, _to: &VPath, _mode: ReplaceMode) -> Result<()> {
-        Err(unsupported())
+    fn rename(&self, from: &VPath, to: &VPath, mode: ReplaceMode) -> Result<()> {
+        let src = self.server_path(from);
+        let dst = self.server_path(to);
+        let mut headers: Vec<(&str, &str)> = vec![("Destination", dst.as_str())];
+        if mode == ReplaceMode::NoReplace {
+            headers.push(("Overwrite", "F"));
+        }
+        let resp = self.transport.request("MOVE", &src, &headers, None)?;
+        match resp.status {
+            201 | 204 => Ok(()),
+            s => Err(status_to_err(s, to)),
+        }
     }
     fn read_link(&self, _p: &VPath) -> Result<String> {
         Err(unsupported())
@@ -580,19 +690,36 @@ impl Vfs for WebdavVfs {
         Err(unsupported())
     }
     fn trash(&self, _p: &VPath) -> Result<()> {
-        Err(unsupported())
+        // WebDAV has no trash; the file layer falls back to permanent deletion with confirmation.
+        Err(Error::Unsupported("Papierkorb auf WebDAV nicht verfügbar"))
     }
-    fn remove_permanent(&self, _p: &VPath) -> Result<()> {
-        Err(unsupported())
+    fn remove_permanent(&self, p: &VPath) -> Result<()> {
+        // The core deletes one planned entry at a time with rmdir semantics (folders are emptied
+        // first, then removed, and anything that appeared after the plan must make the folder fail
+        // as "not empty"). A plain WebDAV DELETE on a collection removes it recursively, which would
+        // also take such unconfirmed children. So refuse a non-empty collection here; `list` returns
+        // only child entries (empty for a plain file or an empty collection), so this stays a no-op
+        // for files. Residual: a child appearing between this check and the DELETE is still inherent
+        // to plain WebDAV (no atomic conditional delete), matching the core's own lstat/unlink window.
+        if !self.list(p)?.is_empty() {
+            return Err(Error::DirectoryNotEmpty(p.path().to_path_buf()));
+        }
+        let path = self.server_path(p);
+        let resp = self.transport.request("DELETE", &path, &[], None)?;
+        match resp.status {
+            200 | 204 => Ok(()),
+            s => Err(status_to_err(s, p)),
+        }
     }
     fn capabilities(&self) -> Caps {
-        // Read-only for now; write capabilities arrive with the write increment.
-        Caps::default()
+        Caps {
+            can_trash: false,
+            can_rename_in_place: true,
+        }
     }
     fn is_read_only(&self) -> bool {
-        // Every mutation is refused in this increment, so `ops` must reject a move up front rather
-        // than copy to the destination and only then fail to delete the source.
-        true
+        // Writing (PUT/MKCOL/MOVE/DELETE) is implemented now.
+        false
     }
 }
 
@@ -601,24 +728,42 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
+    #[derive(Clone)]
+    struct Call {
+        method: String,
+        path: String,
+        headers: Vec<(String, String)>,
+        body: Option<Vec<u8>>,
+    }
     struct FakeTransport {
         responses: Mutex<Vec<(u16, Vec<u8>)>>,
+        calls: Mutex<Vec<Call>>,
     }
     impl FakeTransport {
         fn new(responses: Vec<(u16, Vec<u8>)>) -> Arc<Self> {
             Arc::new(Self {
                 responses: Mutex::new(responses),
+                calls: Mutex::new(Vec::new()),
             })
         }
     }
     impl WebdavTransport for FakeTransport {
         fn request(
             &self,
-            _method: &str,
-            _path: &str,
-            _depth: Option<u8>,
-            _body: Option<Vec<u8>>,
+            method: &str,
+            path: &str,
+            headers: &[(&str, &str)],
+            body: Option<Vec<u8>>,
         ) -> Result<WebdavResponse> {
+            self.calls.lock().unwrap().push(Call {
+                method: method.to_owned(),
+                path: path.to_owned(),
+                headers: headers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+                body,
+            });
             let (status, body) = self.responses.lock().unwrap().remove(0);
             Ok(WebdavResponse {
                 status,
@@ -634,6 +779,11 @@ mod tests {
     }
     fn vfs(responses: Vec<(u16, Vec<u8>)>) -> WebdavVfs {
         WebdavVfs::new(FakeTransport::new(responses), "/dav")
+    }
+    /// Like `vfs`, but also returns the transport so a test can inspect the requests made.
+    fn vfs_t(responses: Vec<(u16, Vec<u8>)>) -> (WebdavVfs, Arc<FakeTransport>) {
+        let t = FakeTransport::new(responses);
+        (WebdavVfs::new(t.clone(), "/dav"), t)
     }
     fn sorted_names(mut entries: Vec<Entry>) -> Vec<String> {
         entries.sort_by(|a, b| a.name.cmp(&b.name));
@@ -695,10 +845,157 @@ mod tests {
     }
 
     #[test]
-    fn write_operations_are_not_supported_yet() {
-        let v = vfs(vec![]);
+    fn mkdir_sends_mkcol_and_maps_existing() {
+        let (v, t) = vfs_t(vec![(201, vec![])]);
+        v.mkdir(&vpath("/neu")).unwrap();
+        let call = t.calls.lock().unwrap()[0].clone();
+        assert_eq!(call.method, "MKCOL");
+        assert_eq!(call.path, "/dav/neu");
+        // 405 means the collection already exists.
         assert!(matches!(
-            v.mkdir(&vpath("/x")).unwrap_err(),
+            vfs(vec![(405, vec![])]).mkdir(&vpath("/da")).unwrap_err(),
+            Error::Exists(_)
+        ));
+    }
+
+    #[test]
+    fn put_sends_the_buffered_body_and_honours_no_replace() {
+        let (v, t) = vfs_t(vec![(201, vec![])]);
+        let mut w = v
+            .create_write(&vpath("/ordner/datei.txt"), WriteMode::NoReplace)
+            .unwrap();
+        use std::io::Write;
+        w.write_all(b"hallo").unwrap();
+        w.commit().unwrap();
+        let call = t.calls.lock().unwrap()[0].clone();
+        assert_eq!(call.method, "PUT");
+        assert_eq!(call.path, "/dav/ordner/datei.txt");
+        assert_eq!(call.body.as_deref(), Some(&b"hallo"[..]));
+        assert!(call
+            .headers
+            .iter()
+            .any(|(k, val)| k == "If-None-Match" && val == "*"));
+        // A 412 Precondition Failed (target exists) maps to Exists.
+        let mut w2 = vfs(vec![(412, vec![])])
+            .create_write(&vpath("/da.txt"), WriteMode::NoReplace)
+            .unwrap();
+        w2.write_all(b"x").unwrap();
+        assert!(matches!(w2.commit().unwrap_err(), Error::Exists(_)));
+    }
+
+    #[test]
+    fn put_refuses_a_body_larger_than_the_buffer_cap() {
+        let mut w = vfs(vec![])
+            .create_write(&vpath("/gross.bin"), WriteMode::Replace)
+            .unwrap();
+        use std::io::Write;
+        let chunk = vec![0u8; 8 << 20];
+        let mut total = 0usize;
+        let mut hit = false;
+        while total <= MAX_PUT_BYTES {
+            if w.write_all(&chunk).is_err() {
+                hit = true;
+                break;
+            }
+            total += chunk.len();
+        }
+        assert!(hit, "an oversized write must be refused");
+    }
+
+    #[test]
+    fn rename_sends_move_with_destination_and_overwrite() {
+        let (v, t) = vfs_t(vec![(201, vec![])]);
+        v.rename(&vpath("/a.txt"), &vpath("/b.txt"), ReplaceMode::NoReplace)
+            .unwrap();
+        let call = t.calls.lock().unwrap()[0].clone();
+        assert_eq!(call.method, "MOVE");
+        assert_eq!(call.path, "/dav/a.txt");
+        assert!(call
+            .headers
+            .iter()
+            .any(|(k, val)| k == "Destination" && val == "/dav/b.txt"));
+        assert!(call
+            .headers
+            .iter()
+            .any(|(k, val)| k == "Overwrite" && val == "F"));
+    }
+
+    // A PROPFIND body with only the requested path itself (no children): `list` filters out the
+    // self entry, so this stands for a plain file or an empty collection.
+    const SELF_ONLY: &[u8] = br#"<d:multistatus xmlns:d="DAV:">
+      <d:response><d:href>/dav/weg.txt</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>5</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+    </d:multistatus>"#;
+
+    #[test]
+    fn delete_checks_emptiness_then_sends_delete_and_maps_not_found() {
+        // A plain file: the PROPFIND lists no children, so the DELETE goes out.
+        let (v, t) = vfs_t(vec![(207, SELF_ONLY.to_vec()), (204, vec![])]);
+        v.remove_permanent(&vpath("/weg.txt")).unwrap();
+        let calls = t.calls.lock().unwrap();
+        assert_eq!(calls[0].method, "PROPFIND");
+        assert_eq!(calls[1].method, "DELETE");
+        // A missing target: the PROPFIND 404 already maps to NotFound (no DELETE is attempted).
+        assert!(matches!(
+            vfs(vec![(404, vec![])])
+                .remove_permanent(&vpath("/fehlt"))
+                .unwrap_err(),
+            Error::NotFound(_)
+        ));
+    }
+
+    #[test]
+    fn delete_refuses_a_non_empty_collection_and_sends_no_delete() {
+        // WD-W-01: a WebDAV DELETE on a collection recurses; the core expects rmdir semantics, so a
+        // non-empty folder must be refused here and NO DELETE may be sent.
+        let (v, t) = vfs_t(vec![(207, LISTING.to_vec())]);
+        assert!(matches!(
+            v.remove_permanent(&vpath("/ordner")).unwrap_err(),
+            Error::DirectoryNotEmpty(_)
+        ));
+        let calls = t.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].method, "PROPFIND");
+    }
+
+    #[test]
+    fn commit_is_a_no_op_after_success() {
+        // WD-W-02: a second commit must not send an empty PUT and truncate the just-written file.
+        let (v, t) = vfs_t(vec![(201, vec![])]);
+        let mut w = v
+            .create_write(&vpath("/datei.txt"), WriteMode::Replace)
+            .unwrap();
+        use std::io::Write;
+        w.write_all(b"inhalt").unwrap();
+        w.commit().unwrap();
+        w.commit().unwrap();
+        let calls = t.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1, "the second commit must send no request");
+        assert_eq!(calls[0].body.as_deref(), Some(&b"inhalt"[..]));
+    }
+
+    #[test]
+    fn commit_refuses_to_resend_after_a_failure() {
+        // WD-W-02: after a failed PUT the buffer is already consumed; a retry must error, not resend
+        // an empty body.
+        let (v, t) = vfs_t(vec![(500, vec![])]);
+        let mut w = v
+            .create_write(&vpath("/datei.txt"), WriteMode::Replace)
+            .unwrap();
+        use std::io::Write;
+        w.write_all(b"inhalt").unwrap();
+        assert!(w.commit().is_err());
+        assert!(w.commit().is_err());
+        assert_eq!(
+            t.calls.lock().unwrap().len(),
+            1,
+            "the retry must send no request"
+        );
+    }
+
+    #[test]
+    fn trash_is_unsupported_on_webdav() {
+        assert!(matches!(
+            vfs(vec![]).trash(&vpath("/x")).unwrap_err(),
             Error::Unsupported(_)
         ));
     }
@@ -922,9 +1219,9 @@ mod tests {
     }
 
     #[test]
-    fn the_backend_reports_itself_read_only() {
-        // WD-R4-03: so `ops` rejects a move before creating the destination.
-        assert!(vfs(vec![]).is_read_only());
+    fn the_backend_is_writable() {
+        // Writing is implemented (increment 2), so ops treats it as a normal read-write backend.
+        assert!(!vfs(vec![]).is_read_only());
     }
 
     #[test]
