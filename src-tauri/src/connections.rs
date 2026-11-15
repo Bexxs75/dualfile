@@ -252,7 +252,7 @@ pub fn pin_protocol(p: &ConnectionProfile) -> Option<PinProtocol> {
     }
 }
 
-fn remote_protocol(protocol: PinProtocol) -> Protocol {
+pub(super) fn remote_protocol(protocol: PinProtocol) -> Protocol {
     match protocol {
         PinProtocol::Ftps => Protocol::Ftps,
         PinProtocol::Sftp => Protocol::Sftp,
@@ -291,32 +291,54 @@ pub fn pin_to_entry(pin: &Pin) -> Option<PinEntry> {
 
 // ---------------------------------------------------------------- Trust
 
-/// The pins in force while connecting: filled from the profiles before each connect. A pin
-/// the user chose to keep (`TrustAlways`) is also remembered in `added`, so the caller can
-/// write it into the profile once the connection worked.
+/// Shared persisted pins. Disk I/O and snapshot exchange run under the same lock.
 #[derive(Default)]
 pub struct ProfilePins {
     pins: Mutex<HashMap<PinKey, Pin>>,
-    added: Mutex<Vec<Pin>>,
+    generations: Mutex<HashMap<PinKey, u64>>,
 }
 
 impl ProfilePins {
-    pub fn replace_all(&self, pins: Vec<Pin>) {
-        let mut map = self.pins.lock().unwrap_or_else(|e| e.into_inner());
-        map.clear();
-        for pin in pins {
-            map.insert(pin.key(), pin);
-        }
-        self.added.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    pub fn reset_generation(&self, key: &PinKey) {
+        *self
+            .generations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(key.clone())
+            .or_default() += 1;
     }
 
-    /// The pins set since the last `replace_all` / `take_added`.
-    pub fn take_added(&self) -> Vec<Pin> {
-        std::mem::take(&mut *self.added.lock().unwrap_or_else(|e| e.into_inner()))
+    pub fn reload<E>(&self, load: impl FnOnce() -> Result<Vec<Pin>, E>) -> Result<(), E> {
+        let mut pins = self.pins.lock().unwrap_or_else(|e| e.into_inner());
+        let next: HashMap<_, _> = load()?.into_iter().map(|pin| (pin.key(), pin)).collect();
+        let keys: HashSet<_> = pins.keys().chain(next.keys()).cloned().collect();
+        for key in keys {
+            if pins.get(&key) != next.get(&key) {
+                self.reset_generation(&key);
+            }
+        }
+        *pins = next;
+        Ok(())
+    }
+
+    pub fn session(&self) -> Arc<SessionPins> {
+        Arc::new(SessionPins {
+            base: self.pins.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+            added: Mutex::default(),
+        })
     }
 }
 
 impl PinStore for ProfilePins {
+    fn generation(&self, key: &PinKey) -> u64 {
+        *self
+            .generations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .unwrap_or(&0)
+    }
+
     fn get(&self, key: &PinKey) -> Option<Pin> {
         self.pins
             .lock()
@@ -324,20 +346,48 @@ impl PinStore for ProfilePins {
             .get(key)
             .cloned()
     }
+    fn set(&self, _: Pin) {
+        // Persisted pins can only change through reload's disk transaction.
+    }
+    fn remove(&self, _: &PinKey) -> Option<Pin> {
+        None
+    }
+}
 
+/// Pending trust belongs to exactly one connection attempt, including for identical servers.
+pub struct SessionPins {
+    base: HashMap<PinKey, Pin>,
+    added: Mutex<HashMap<PinKey, Pin>>,
+}
+
+impl SessionPins {
+    pub fn take_added(&self) -> Vec<Pin> {
+        self.added
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .drain()
+            .map(|(_, pin)| pin)
+            .collect()
+    }
+}
+
+impl PinStore for SessionPins {
+    fn get(&self, key: &PinKey) -> Option<Pin> {
+        self.added
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .or_else(|| self.base.get(key))
+            .cloned()
+    }
     fn set(&self, pin: Pin) {
         self.added
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .push(pin.clone());
-        self.pins
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
             .insert(pin.key(), pin);
     }
-
     fn remove(&self, key: &PinKey) -> Option<Pin> {
-        self.pins
+        self.added
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .remove(key)
@@ -397,6 +447,8 @@ pub fn trust_kind(request: &TrustRequest) -> &'static str {
 /// for this attempt is kept (and overwritten when dropped) so the answer can finish the
 /// connect without asking for it again.
 pub struct PendingTrust {
+    pub pin_key: PinKey,
+    pub generation: u64,
     pub fingerprint: String,
     pub secret: Option<Secret>,
     pub created: Instant,
@@ -411,12 +463,14 @@ pub trait ConnectionBackend: Send + Sync {
         profile: FtpProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<ConnectionInfo, ConnectError>;
     fn connect_sftp(
         &self,
         profile: SftpProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<ConnectionInfo, ConnectError>;
     fn connect_smb(
         &self,
@@ -428,6 +482,7 @@ pub trait ConnectionBackend: Send + Sync {
         profile: dualfile_remote::profile::WebdavProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<ConnectionInfo, ConnectError>;
     fn disconnect(&self, id: &str) -> bool;
     fn disconnect_all(&self);
@@ -441,16 +496,18 @@ impl<C: Connector, S: SftpConnector> ConnectionBackend for ConnectionManager<C, 
         profile: FtpProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<ConnectionInfo, ConnectError> {
-        self.connect(profile, secret, confirm)
+        self.connect_with_pins(profile, secret, confirm, pins)
     }
     fn connect_sftp(
         &self,
         profile: SftpProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<ConnectionInfo, ConnectError> {
-        ConnectionManager::connect_sftp(self, profile, secret, confirm)
+        ConnectionManager::connect_sftp_with_pins(self, profile, secret, confirm, pins)
     }
     fn connect_smb(
         &self,
@@ -464,8 +521,9 @@ impl<C: Connector, S: SftpConnector> ConnectionBackend for ConnectionManager<C, 
         profile: dualfile_remote::profile::WebdavProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<ConnectionInfo, ConnectError> {
-        ConnectionManager::connect_webdav(self, profile, secret, confirm)
+        ConnectionManager::connect_webdav_with_pins(self, profile, secret, confirm, pins)
     }
     fn disconnect(&self, id: &str) -> bool {
         ConnectionManager::disconnect(self, id)
@@ -588,6 +646,7 @@ pub struct ConnectionState {
     pub connecting: Mutex<HashSet<String>>,
     /// Read-modify-write of the profile list in the settings file.
     pub settings_lock: Mutex<()>,
+    pub pin_locks: Mutex<HashMap<PinKey, Arc<Mutex<()>>>>,
 }
 
 impl ConnectionState {
@@ -602,6 +661,7 @@ impl ConnectionState {
             pending: Mutex::default(),
             connecting: Mutex::default(),
             settings_lock: Mutex::new(()),
+            pin_locks: Mutex::default(),
         }
     }
 }
@@ -609,6 +669,90 @@ impl ConnectionState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_pin(byte: u8) -> Pin {
+        Pin {
+            protocol: Protocol::Ftps,
+            host: "same-server".into(),
+            port: 21,
+            sha256: format!("{byte:02x}").repeat(32),
+            key_type: None,
+        }
+    }
+
+    #[test]
+    fn concurrent_attempts_own_pins_even_for_the_same_server() {
+        let base = ProfilePins::default();
+        let a = base.session();
+        let b = base.session();
+        let barrier = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                a.set(test_pin(1));
+                barrier.wait();
+                assert_eq!(a.take_added(), vec![test_pin(1)]);
+            });
+            scope.spawn(|| {
+                b.set(test_pin(2));
+                barrier.wait();
+                assert_eq!(b.take_added(), vec![test_pin(2)]);
+            });
+        });
+        assert!(base.get(&test_pin(1).key()).is_none());
+        let failed = base.session();
+        failed.set(test_pin(3));
+        drop(failed);
+        assert!(base.session().get(&test_pin(3).key()).is_none());
+    }
+
+    #[test]
+    fn disk_load_cannot_race_persistence_and_snapshot_exchange() {
+        let base = ProfilePins::default();
+        let disk = Mutex::new(Vec::new());
+        let (persisting, started) = std::sync::mpsc::channel();
+        let (loading, requested) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            let base = &base;
+            let disk = &disk;
+            scope.spawn(move || {
+                base.reload(|| {
+                    // The store lock covers disk persistence AND the active-map exchange.
+                    persisting.send(()).unwrap();
+                    requested.recv().unwrap();
+                    assert!(base.pins.try_lock().is_err());
+                    *disk.lock().unwrap() = vec![test_pin(1)];
+                    Ok::<_, ()>(disk.lock().unwrap().clone())
+                })
+                .unwrap();
+            });
+            scope.spawn(move || {
+                started.recv().unwrap();
+                loading.send(()).unwrap();
+                base.reload(|| Ok::<_, ()>(disk.lock().unwrap().clone()))
+                    .unwrap();
+            });
+        });
+        assert_eq!(base.get(&test_pin(1).key()), Some(test_pin(1)));
+        let verifier =
+            dualfile_remote::trust::PolicyVerifier::new(base.session(), DecisionConfirm::ask());
+        use dualfile_remote::trust::{CertObservation, CertVerifier, ChainStatus, TrustError};
+        assert!(matches!(
+            verifier.verify(
+                &test_pin(1).key(),
+                &CertObservation {
+                    sha256: [2; 32],
+                    chain: ChainStatus::Valid,
+                    hostname_ok: true,
+                    key_type: None,
+                }
+            ),
+            Err(TrustError::PinMismatch { .. })
+        ));
+        assert!(base.reload(|| Err::<Vec<Pin>, _>(())).is_err());
+        assert_eq!(base.get(&test_pin(1).key()), Some(test_pin(1)));
+        base.reload(|| Ok::<_, ()>(vec![])).unwrap();
+        assert!(base.get(&test_pin(1).key()).is_none());
+    }
 
     #[test]
     fn fingerprints_are_compared_in_one_form() {
@@ -640,7 +784,8 @@ mod tests {
 
     #[test]
     fn pins_set_by_the_user_are_reported_once() {
-        let pins = ProfilePins::default();
+        let base = ProfilePins::default();
+        let pins = base.session();
         let pin = Pin {
             protocol: Protocol::Sftp,
             host: "h".into(),
@@ -652,7 +797,7 @@ mod tests {
         assert_eq!(pins.get(&pin.key()), Some(pin.clone()));
         assert_eq!(pins.take_added(), vec![pin.clone()]);
         assert!(pins.take_added().is_empty());
-        pins.replace_all(vec![]);
+        base.reload(|| Ok::<_, ()>(vec![])).unwrap();
         assert!(pins.get(&pin.key()).is_none());
     }
 }
@@ -701,7 +846,12 @@ mod transport_tests {
             ..Default::default()
         };
         assert!(backend
-            .connect_sftp(sftp_profile(&p), Secret::new(""), DecisionConfirm::ask())
+            .connect_sftp(
+                sftp_profile(&p),
+                Secret::new(""),
+                DecisionConfirm::ask(),
+                ProfilePins::default().session()
+            )
             .is_err());
         assert_eq!(builtin.load(Ordering::SeqCst), 1);
         assert_eq!(openssh.load(Ordering::SeqCst), 0);
@@ -709,7 +859,12 @@ mod transport_tests {
         p.user.clear();
         p.port = 0;
         assert!(backend
-            .connect_sftp(sftp_profile(&p), Secret::new(""), DecisionConfirm::ask())
+            .connect_sftp(
+                sftp_profile(&p),
+                Secret::new(""),
+                DecisionConfirm::ask(),
+                ProfilePins::default().session()
+            )
             .is_err());
         assert_eq!(builtin.load(Ordering::SeqCst), 1);
         assert_eq!(openssh.load(Ordering::SeqCst), 1);

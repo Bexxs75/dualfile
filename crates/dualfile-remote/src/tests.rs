@@ -976,6 +976,83 @@ fn cert(byte: u8, chain: ChainStatus) -> CertObservation {
 }
 
 #[test]
+fn manager_uses_attempt_pins_then_only_persisted_pins_for_reconnects() {
+    let server = FakeServer::new();
+    server.mkdirs("/pub");
+    server.state().cert = Some(cert(1, ChainStatus::UnknownIssuer));
+    let (manager, router, persisted) = manager(&server, 4);
+    let pending = Arc::new(MemoryPins::new());
+    let confirm = Arc::new(Ask(TrustDecision::TrustAlways, Default::default()));
+    let info = manager
+        .connect_with_pins(
+            profile(TlsMode::Explicit),
+            Secret::new("secret"),
+            confirm.clone(),
+            pending.clone(),
+        )
+        .unwrap();
+    let key = PinKey::new(Protocol::Ftps, "ftp.example.org", 21);
+    assert!(persisted.get(&key).is_none());
+    persisted.set(pending.remove(&key).unwrap());
+    server.disconnect_everybody();
+    let vfs = router.vfs_for(&info.root).unwrap();
+    assert!(vfs.list(&info.root).is_ok());
+    persisted.remove(&key);
+    server.disconnect_everybody();
+    assert!(vfs.list(&info.root).is_err());
+    assert!(pending.get(&key).is_none());
+    assert!(persisted.get(&key).is_none());
+    assert_eq!(confirm.1.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[test]
+fn trust_once_allows_fresh_transports_but_reset_and_persisted_conflicts_win() {
+    for reset in [false, true] {
+        let server = FakeServer::new();
+        server.put("/data.txt", b"trusted");
+        server.state().cert = Some(cert(1, ChainStatus::UnknownIssuer));
+        let (manager, router, persisted) = manager(&server, 4);
+        let confirm = Arc::new(Ask(TrustDecision::TrustOnce, Default::default()));
+        let info = manager
+            .connect_with_pins(
+                profile(TlsMode::Explicit),
+                Secret::new("secret"),
+                confirm.clone(),
+                Arc::new(MemoryPins::new()),
+            )
+            .unwrap();
+        let key = PinKey::new(Protocol::Ftps, "ftp.example.org", 21);
+        let vfs = router.vfs_for(&info.root).unwrap();
+        let before = server.state().connects;
+        let mut content = Vec::new();
+        vfs.open_read(&VPath::ftp(&info.id, "/data.txt").unwrap())
+            .unwrap()
+            .read_to_end(&mut content)
+            .unwrap();
+        assert_eq!(content, b"trusted");
+        assert!(
+            server.state().connects > before,
+            "download opens a new transport"
+        );
+        assert!(persisted.get(&key).is_none());
+        if reset {
+            persisted.remove(&key);
+        } else {
+            persisted.set(Pin {
+                protocol: key.protocol,
+                host: key.host.clone(),
+                port: key.port,
+                sha256: hex(&[2; 32]),
+                key_type: None,
+            });
+        }
+        server.disconnect_everybody();
+        assert!(vfs.list(&info.root).is_err());
+        assert_eq!(confirm.1.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+}
+
+#[test]
 fn pinning_through_the_manager() {
     let server = FakeServer::new();
     let (m, router, pins) = manager(&server, 4);

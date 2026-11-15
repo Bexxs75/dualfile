@@ -3,8 +3,8 @@
 //! Basic authentication, percent-encodes the request path, follows no redirects (so a hostile server
 //! cannot bounce the client to another host or leak the credentials), and bounds every call with a
 //! timeout. For `https`, the agent is built with a rustls `ClientConfig` that carries the shared
-//! pinning/trust verifier (`tls::client_config`, the same one FTPS uses — system roots plus a
-//! fingerprint pin with user confirmation); plain `http` carries no TLS.
+//! pinning/trust verifier (`tls::webdav_client_config` — system roots plus a fingerprint pin with
+//! user confirmation, with session resumption disabled); plain `http` carries no TLS.
 //!
 //! Security notes: 4xx/5xx come back as responses (`ureq::Error::Status`), which [`WebdavVfs`] maps
 //! itself; `redirects(0)` returns a 3xx as a plain response instead of following it; the response
@@ -48,7 +48,7 @@ impl UreqTransport {
     }
 
     /// Like [`new`](Self::new), but with an explicit rustls `ClientConfig` for TLS — carrying the
-    /// pinning/trust verifier (`tls::client_config`). `None` keeps ureq's default TLS (used for
+    /// pinning/trust verifier (`tls::webdav_client_config`). `None` keeps ureq's default TLS (used for
     /// plain `http`, where it is never consulted).
     pub fn new_tls(
         origin: &str,
@@ -528,7 +528,7 @@ mod tests {
             PinKey::new(Protocol::Webdav, "localhost", port),
             tls::system_roots(),
         );
-        let config = tls::client_config(pinning.clone());
+        let config = tls::webdav_client_config(pinning.clone());
 
         let t = UreqTransport::new_tls(
             &format!("https://localhost:{port}"),
@@ -549,6 +549,268 @@ mod tests {
             pinning.take_error().is_none(),
             "a matching pin must not record a trust error"
         );
+    }
+
+    #[test]
+    fn trust_once_survives_a_fresh_tls_transport_until_reset_or_mismatch() {
+        use crate::trust::*;
+        use std::sync::atomic::AtomicUsize;
+
+        struct Once(AtomicUsize);
+        impl ConfirmTrust for Once {
+            fn confirm(&self, _: &TrustRequest) -> TrustDecision {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                TrustDecision::TrustOnce
+            }
+        }
+
+        for reset in [false, true] {
+            let issued = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            listener.set_nonblocking(true).unwrap();
+            let config = Arc::new(
+                rustls::ServerConfig::builder_with_provider(Arc::new(
+                    rustls::crypto::ring::default_provider(),
+                ))
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_no_client_auth()
+                .with_single_cert(
+                    vec![issued.cert.der().clone()],
+                    rustls::pki_types::PrivateKeyDer::Pkcs8(issued.key_pair.serialize_der().into()),
+                )
+                .unwrap(),
+            );
+            let server = std::thread::spawn(move || {
+                let deadline = std::time::Instant::now() + Duration::from_secs(10);
+                let mut accepted = 0;
+                while accepted < 3 && std::time::Instant::now() < deadline {
+                    let (mut sock, _) = match listener.accept() {
+                        Ok(connection) => connection,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(5));
+                            continue;
+                        }
+                        Err(e) => panic!("{e}"),
+                    };
+                    accepted += 1;
+                    sock.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                    sock.set_write_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    let mut conn = rustls::ServerConnection::new(config.clone()).unwrap();
+                    let mut stream = rustls::Stream::new(&mut conn, &mut sock);
+                    let mut request = Vec::new();
+                    let mut byte = [0];
+                    while request.len() < 8192 && stream.read_exact(&mut byte).is_ok() {
+                        request.push(byte[0]);
+                        if request.ends_with(b"\r\n\r\n") {
+                            stream
+                                .write_all(
+                                    b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                                )
+                                .unwrap();
+                            stream.flush().unwrap();
+                            break;
+                        }
+                    }
+                    conn.send_close_notify();
+                    let _ = conn.complete_io(&mut sock);
+                }
+                accepted
+            });
+            let pins = Arc::new(MemoryPins::new());
+            let confirm = Arc::new(Once(AtomicUsize::new(0)));
+            let verifier = Arc::new(AttemptVerifier::new(
+                Arc::new(MemoryPins::new()),
+                pins.clone(),
+                confirm.clone(),
+            ));
+            let key = PinKey::new(Protocol::Webdav, "localhost", port);
+            let pinning = crate::tls::PinningServerVerifier::new(
+                verifier.clone(),
+                key.clone(),
+                crate::tls::system_roots(),
+            );
+            // Each request creates both a fresh HTTP agent and TLS config (no session resumption).
+            let request = || {
+                UreqTransport::new_tls(
+                    &format!("https://localhost:{port}"),
+                    None,
+                    None,
+                    Some(crate::tls::webdav_client_config(pinning.clone())),
+                )
+                .request("GET", "/", &[], None)
+            };
+            assert_eq!(request().unwrap().status, 200);
+            verifier.finish();
+            assert_eq!(request().unwrap().status, 200);
+            assert!(pins.get(&key).is_none());
+            if reset {
+                pins.remove(&key);
+            } else {
+                pins.set(Pin {
+                    protocol: key.protocol,
+                    host: key.host.clone(),
+                    port,
+                    sha256: "00".repeat(32),
+                    key_type: None,
+                });
+            }
+            assert!(request().is_err());
+            let error = pinning.take_error().unwrap();
+            if reset {
+                assert!(matches!(error, TrustError::NotConfirmed(_)));
+            } else {
+                assert!(matches!(error, TrustError::PinMismatch { .. }));
+            }
+            assert_eq!(confirm.0.load(Ordering::SeqCst), 1);
+            assert_eq!(server.join().unwrap(), 3);
+        }
+    }
+
+    #[test]
+    fn retained_webdav_config_reverifies_after_ticket_and_trust_reset() {
+        use crate::trust::*;
+        use std::sync::atomic::AtomicUsize;
+
+        struct Once;
+        impl ConfirmTrust for Once {
+            fn confirm(&self, _: &TrustRequest) -> TrustDecision {
+                TrustDecision::TrustOnce
+            }
+        }
+
+        // Count actual ticket issuance, rather than merely enabling it in the server config.
+        #[derive(Debug)]
+        struct Tickets {
+            inner: Arc<dyn rustls::server::ProducesTickets>,
+            issued: AtomicUsize,
+        }
+        impl rustls::server::ProducesTickets for Tickets {
+            fn enabled(&self) -> bool {
+                self.inner.enabled()
+            }
+            fn lifetime(&self) -> u32 {
+                self.inner.lifetime()
+            }
+            fn encrypt(&self, plain: &[u8]) -> Option<Vec<u8>> {
+                let ticket = self.inner.encrypt(plain)?;
+                self.issued.fetch_add(1, Ordering::SeqCst);
+                Some(ticket)
+            }
+            fn decrypt(&self, cipher: &[u8]) -> Option<Vec<u8>> {
+                self.inner.decrypt(cipher)
+            }
+        }
+        let tickets = Arc::new(Tickets {
+            inner: rustls::crypto::ring::Ticketer::new().unwrap(),
+            issued: AtomicUsize::new(0),
+        });
+        let issued = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let mut server_config = rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![issued.cert.der().clone()],
+            rustls::pki_types::PrivateKeyDer::Pkcs8(issued.key_pair.serialize_der().into()),
+        )
+        .unwrap();
+        server_config.ticketer = tickets.clone();
+        server_config.send_tls13_tickets = 2;
+        let server_config = Arc::new(server_config);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let (tx, rx) = mpsc::channel();
+        let server =
+            thread::spawn(move || {
+                let deadline = std::time::Instant::now() + Duration::from_secs(10);
+                let mut accepted = 0;
+                while accepted < 2 && std::time::Instant::now() < deadline {
+                    let (mut socket, _) = match listener.accept() {
+                        Ok(connection) => connection,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(5));
+                            continue;
+                        }
+                        Err(e) => panic!("{e}"),
+                    };
+                    accepted += 1;
+                    socket
+                        .set_read_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    socket
+                        .set_write_timeout(Some(Duration::from_secs(2)))
+                        .unwrap();
+                    let mut conn = rustls::ServerConnection::new(server_config.clone()).unwrap();
+                    let handshake = conn.complete_io(&mut socket);
+                    let kind = conn.handshake_kind();
+                    if handshake.is_ok() {
+                        let mut stream = rustls::Stream::new(&mut conn, &mut socket);
+                        let mut request = Vec::new();
+                        let mut byte = [0];
+                        while request.len() < 8192 && !request.ends_with(b"\r\n\r\n") {
+                            stream.read_exact(&mut byte).unwrap();
+                            request.push(byte[0]);
+                        }
+                        stream.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                    ).unwrap();
+                        stream.flush().unwrap();
+                        conn.send_close_notify();
+                        let _ = conn.complete_io(&mut socket);
+                    }
+                    // Signal only after the socket is closed, so reset cannot race that close.
+                    drop(socket);
+                    tx.send((handshake.is_ok(), kind)).unwrap();
+                }
+                accepted
+            });
+        let pins = Arc::new(MemoryPins::new());
+        let verifier = Arc::new(AttemptVerifier::new(
+            Arc::new(MemoryPins::new()),
+            pins.clone(),
+            Arc::new(Once),
+        ));
+        let key = PinKey::new(Protocol::Webdav, "localhost", port);
+        let pinning =
+            crate::tls::PinningServerVerifier::new(verifier.clone(), key.clone(), Vec::new());
+        let config = crate::tls::webdav_client_config(pinning.clone());
+        // Keep exactly the same production config AND agent across both TCP connections.
+        let transport = UreqTransport::new_tls(
+            &format!("https://localhost:{port}"),
+            None,
+            None,
+            Some(config),
+        );
+        let mut response = transport.request("GET", "/", &[], None).unwrap();
+        assert_eq!(response.status, 200);
+        let mut body = String::new();
+        response.body.read_to_string(&mut body).unwrap();
+        assert_eq!(body, "ok");
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(10)).unwrap(),
+            (true, Some(rustls::HandshakeKind::Full)),
+        );
+        assert!(tickets.issued.load(Ordering::SeqCst) > 0);
+        verifier.finish();
+        assert!(pins.get(&key).is_none(), "TrustOnce must not persist a pin");
+        pins.remove(&key);
+        assert!(pinning.take_error().is_none());
+        let result = transport.request("GET", "/", &[], None);
+        let (succeeded, _) = rx.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(server.join().unwrap(), 2);
+        assert!(matches!(result, Err(Error::Disconnected)));
+        // This error can only be recorded by a fresh verify_server_cert call; resumption skips it.
+        assert!(matches!(
+            pinning.take_error(),
+            Some(TrustError::NotConfirmed(_))
+        ));
+        assert!(!succeeded, "revoked trust must fail the new TLS handshake");
     }
 
     #[test]

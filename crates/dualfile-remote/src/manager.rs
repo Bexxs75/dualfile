@@ -13,7 +13,7 @@ use crate::secret::Secret;
 use crate::sftp_transport::SftpTransport;
 use crate::sftpvfs::{SftpConfig, SftpVfs};
 use crate::transport::FtpTransport;
-use crate::trust::{CertVerifier, ConfirmTrust, PinKey, PinStore, PolicyVerifier, Protocol};
+use crate::trust::{AttemptVerifier, CertVerifier, ConfirmTrust, PinKey, PinStore, Protocol};
 use dualfile_core::vfs::{VPath, Vfs};
 use dualfile_core::VfsRouter;
 use std::collections::BTreeMap;
@@ -220,9 +220,19 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         password: Secret,
         confirm: Arc<dyn ConfirmTrust>,
     ) -> Result<ConnectionInfo, ConnectError> {
+        self.connect_with_pins(profile, password, confirm, self.pins.clone())
+    }
+
+    pub fn connect_with_pins(
+        &self,
+        profile: FtpProfile,
+        password: Secret,
+        confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
+    ) -> Result<ConnectionInfo, ConnectError> {
         profile.validate().map_err(ConnectError::Invalid)?;
         self.reserve()?;
-        let outcome = self.open(profile, password, confirm);
+        let outcome = self.open(profile, password, confirm, pins);
         self.finish(outcome)
     }
 
@@ -235,9 +245,19 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
     ) -> Result<ConnectionInfo, ConnectError> {
+        self.connect_sftp_with_pins(profile, secret, confirm, self.pins.clone())
+    }
+
+    pub fn connect_sftp_with_pins(
+        &self,
+        profile: SftpProfile,
+        secret: Secret,
+        confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
+    ) -> Result<ConnectionInfo, ConnectError> {
         profile.validate().map_err(ConnectError::Invalid)?;
         self.reserve()?;
-        let outcome = self.open_sftp(profile, secret, confirm);
+        let outcome = self.open_sftp(profile, secret, confirm, pins);
         self.finish(outcome)
     }
 
@@ -292,6 +312,16 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
     ) -> Result<ConnectionInfo, ConnectError> {
+        self.connect_webdav_with_pins(profile, secret, confirm, self.pins.clone())
+    }
+
+    pub fn connect_webdav_with_pins(
+        &self,
+        profile: crate::profile::WebdavProfile,
+        secret: Secret,
+        confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
+    ) -> Result<ConnectionInfo, ConnectError> {
         profile.validate().map_err(ConnectError::Invalid)?;
         self.reserve()?;
         let outcome = (|| {
@@ -301,18 +331,17 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
             let password = user.map(|_| secret.expose());
             // For https, pin and confirm the certificate through the same verifier the FTPS path
             // uses (system roots + fingerprint pin + user confirmation); http carries no TLS.
+            let verifier = Arc::new(AttemptVerifier::new(pins, self.pins.clone(), confirm));
             let pinning = profile.tls.then(|| {
-                let verifier: Arc<dyn CertVerifier> =
-                    Arc::new(PolicyVerifier::new(self.pins.clone(), confirm));
                 crate::tls::PinningServerVerifier::new(
-                    verifier,
+                    verifier.clone(),
                     PinKey::new(Protocol::Webdav, &profile.host, profile.port),
                     crate::tls::system_roots(),
                 )
             });
             let tls_config = pinning
                 .as_ref()
-                .map(|p| crate::tls::client_config(p.clone()));
+                .map(|p| crate::tls::webdav_client_config(p.clone()));
             let transport = Arc::new(crate::webdav_transport::UreqTransport::new_tls(
                 &origin, user, password, tls_config,
             ));
@@ -342,6 +371,7 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
                     _ => ConnectError::Invalid("WebDAV-Server nicht erreichbar"),
                 }
             })?;
+            verifier.finish();
             self.router.register_remote(&id, vfs.clone()).map_err(|_| {
                 ConnectError::Invalid("Die Verbindung konnte nicht angemeldet werden")
             })?;
@@ -391,14 +421,15 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         profile: SftpProfile,
         secret: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<Opened, ConnectError> {
         let params = SftpConnectParams::new(profile.clone());
-        let verifier: Arc<dyn CertVerifier> =
-            Arc::new(PolicyVerifier::new(self.pins.clone(), confirm));
+        let verifier = Arc::new(AttemptVerifier::new(pins, self.pins.clone(), confirm));
         let first = self
             .sftp
             .connect(&params, &secret, verifier.clone())
             .map_err(|error| error.scrubbed(&secret))?;
+        verifier.finish();
         let id = self.next_id();
         let connector = self.sftp.clone();
         let opener_params = params.clone();
@@ -444,14 +475,15 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
         profile: FtpProfile,
         password: Secret,
         confirm: Arc<dyn ConfirmTrust>,
+        pins: Arc<dyn PinStore>,
     ) -> Result<Opened, ConnectError> {
         let params = ConnectParams::new(profile.clone());
-        let verifier: Arc<dyn CertVerifier> =
-            Arc::new(PolicyVerifier::new(self.pins.clone(), confirm));
+        let verifier = Arc::new(AttemptVerifier::new(pins, self.pins.clone(), confirm));
         let first = self
             .connector
             .connect(&params, &password, verifier.clone())
             .map_err(|error| error.scrubbed(&password))?;
+        verifier.finish();
         let id = self.next_id();
         let connector = self.connector.clone();
         let opener_params = params.clone();

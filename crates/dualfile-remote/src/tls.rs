@@ -192,6 +192,14 @@ pub fn client_config(verifier: Arc<PinningServerVerifier>) -> Arc<ClientConfig> 
     Arc::new(config)
 }
 
+/// WebDAV must verify every new TLS connection: resumed sessions skip certificate verification
+/// and could otherwise reuse trust that was revoked after the original handshake.
+pub fn webdav_client_config(verifier: Arc<PinningServerVerifier>) -> Arc<ClientConfig> {
+    let mut config = client_config(verifier);
+    Arc::get_mut(&mut config).unwrap().resumption = rustls::client::Resumption::disabled();
+    config
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

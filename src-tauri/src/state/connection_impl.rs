@@ -9,7 +9,7 @@ use super::{lock, AppState};
 use crate::connections::{
     ftp_profile, normalize_fingerprint, pin_infos, pin_protocol, pin_to_entry, pin_to_remote,
     sftp_profile, ActiveConnection, ConnectOutcomeDto, ConnectionEntryDto, ConnectionProfileDto,
-    DecisionConfirm, PendingTrust, SecretStoreDto, TrustDecisionDto, MAX_SECRET_BYTES,
+    DecisionConfirm, PendingTrust, SecretStoreDto, SessionPins, TrustDecisionDto, MAX_SECRET_BYTES,
     TRUST_QUESTION_TTL,
 };
 use crate::convert::{connect_error, vpath_text, UiError};
@@ -23,7 +23,7 @@ use dualfile_core::Error;
 use dualfile_remote::manager::{ConnectError, ConnectionInfo};
 use dualfile_remote::secret::Secret;
 use dualfile_remote::secret_store::{secret_key, StoreKind};
-use dualfile_remote::trust::{Protocol, TrustDecision, TrustError};
+use dualfile_remote::trust::{PinKey, PinStore, Protocol, TrustDecision, TrustError};
 use std::time::Instant;
 
 fn not_found_profile() -> UiError {
@@ -161,7 +161,7 @@ impl AppState {
         dto: ConnectionProfileDto,
     ) -> Result<ConnectionEntryDto, UiError> {
         let _guard = lock(&self.connections.settings_lock);
-        let mut current = self.load_for_update()?;
+        let current = self.load_for_update()?;
         let mut profile = dto.into_profile();
         if lock(&self.connections.connecting).contains(&profile.id) {
             return Err(invalid("Die Verbindung wird gerade aufgebaut"));
@@ -197,20 +197,35 @@ impl AppState {
         // never claims a removal that did not happen.
         let turns_off =
             existing.is_some_and(|i| current.connections[i].save_secret) && !profile.save_secret;
+        let previous = existing.map(|i| current.connections[i].clone());
+        // Reserve this profile across potentially blocking keychain/backend calls.
+        lock(&self.connections.connecting).insert(profile.id.clone());
+        let _profile_guard = ConnectingGuard {
+            state: self,
+            id: profile.id.clone(),
+        };
+        drop(_guard);
         if turns_off && !self.connections.vault.delete(&secret_key(&profile.id)) {
             return Err(secret_removal_failed());
+        }
+        let _settings_guard = lock(&self.connections.settings_lock);
+        let mut current = self.load_for_update()?;
+        let existing = current.connections.iter().position(|p| p.id == profile.id);
+        if existing.map(|i| &current.connections[i]) != previous.as_ref() {
+            return Err(invalid("Das Verbindungsprofil wurde geändert"));
         }
         match existing {
             Some(index) => current.connections[index] = profile.clone(),
             None => current.connections.push(profile.clone()),
         }
         validate_connections(&current.connections).map_err(invalid)?;
-        settings::save(&self.config_dir, &current, false)?;
+        self.save_profiles_and_pins(&current)?;
+        // The profile changed: an open question about its old fingerprint is void.
+        lock(&self.connections.pending).remove(&profile.id);
+        drop(_settings_guard);
         if transport_changed {
             self.drop_connection(&profile.id);
         }
-        // The profile changed: an open question about its old fingerprint is void.
-        lock(&self.connections.pending).remove(&profile.id);
         Ok(self.entry_for(&profile))
     }
 
@@ -218,14 +233,25 @@ impl AppState {
     /// secret.
     pub fn connection_delete(&self, profile_id: &str) -> Result<(), UiError> {
         let _guard = lock(&self.connections.settings_lock);
-        let mut current = self.load_for_update()?;
-        let Some(existing) = current.connections.iter().find(|p| p.id == profile_id) else {
+        let current = self.load_for_update()?;
+        let Some(existing) = current
+            .connections
+            .iter()
+            .find(|p| p.id == profile_id)
+            .cloned()
+        else {
             return Err(not_found_profile());
         };
         let had_saved_secret = existing.save_secret;
         if lock(&self.connections.connecting).contains(profile_id) {
             return Err(invalid("Die Verbindung wird gerade aufgebaut"));
         }
+        lock(&self.connections.connecting).insert(profile_id.to_owned());
+        let _profile_guard = ConnectingGuard {
+            state: self,
+            id: profile_id.to_owned(),
+        };
+        drop(_guard);
         self.drop_connection(profile_id);
         lock(&self.connections.pending).remove(profile_id);
         // Keep the profile available for a retry if the keychain refuses removal. A profile
@@ -236,8 +262,13 @@ impl AppState {
         if !removed && had_saved_secret {
             return Err(secret_removal_failed());
         }
+        let _settings_guard = lock(&self.connections.settings_lock);
+        let mut current = self.load_for_update()?;
+        if current.connections.iter().find(|p| p.id == profile_id) != Some(&existing) {
+            return Err(invalid("Das Verbindungsprofil wurde geändert"));
+        }
         current.connections.retain(|p| p.id != profile_id);
-        settings::save(&self.config_dir, &current, false)?;
+        self.save_profiles_and_pins(&current)?;
         Ok(())
     }
 
@@ -276,7 +307,14 @@ impl AppState {
                 });
             }
         }
-        settings::save(&self.config_dir, &current, false)?;
+        self.save_profiles_and_pins(&current)?;
+        if let Some(protocol) = pin_protocol(&target) {
+            self.connections.pins.reset_generation(&PinKey::new(
+                crate::connections::remote_protocol(protocol),
+                &target.host,
+                target.port,
+            ));
+        }
         lock(&self.connections.pending).remove(profile_id);
         Ok(())
     }
@@ -330,7 +368,7 @@ impl AppState {
         let provided = secret.map(Self::secret_from).transpose()?;
         // A new attempt ends an older open question of this profile.
         lock(&self.connections.pending).remove(profile_id);
-        self.connect_with(profile_id, provided, DecisionConfirm::ask())
+        self.connect_with(profile_id, provided, DecisionConfirm::ask(), None)
     }
 
     /// Answers the trust question of `connection_connect`: only the fingerprint that was
@@ -362,6 +400,7 @@ impl AppState {
             profile_id,
             pending.secret,
             DecisionConfirm::decided(decision, given),
+            Some((pending.pin_key, pending.generation)),
         )
     }
 
@@ -370,32 +409,52 @@ impl AppState {
         profile_id: &str,
         provided: Option<Secret>,
         confirm: std::sync::Arc<DecisionConfirm>,
+        confirmation: Option<(PinKey, u64)>,
     ) -> Result<ConnectOutcomeDto, UiError> {
         let settings_guard = lock(&self.connections.settings_lock);
         let profile = self.profile(profile_id)?;
+        let pin_key = pin_protocol(&profile)
+            .filter(|_| profile.transport != SshTransport::Openssh)
+            .map(|protocol| {
+                PinKey::new(
+                    crate::connections::remote_protocol(protocol),
+                    &profile.host,
+                    profile.port,
+                )
+            });
+        let generation = pin_key
+            .as_ref()
+            .map(|key| self.connections.pins.generation(key));
+        if confirmation.as_ref().is_some_and(|(key, confirmed)| {
+            Some(key) != pin_key.as_ref() || Some(*confirmed) != generation
+        }) {
+            return Err(invalid(
+                "Das Vertrauen wurde zurückgesetzt; bitte neu verbinden",
+            ));
+        }
+        drop(settings_guard);
+        let pin_lock = pin_key.as_ref().map(|key| {
+            lock(&self.connections.pin_locks)
+                .entry(key.clone())
+                .or_default()
+                .clone()
+        });
+        // Never wait for a server's attempt while holding the global settings lock.
+        let _pin_guard = pin_lock.as_ref().map(|mutex| lock(mutex));
+        let settings_guard = lock(&self.connections.settings_lock);
+        if self.profile(profile_id)? != profile
+            || generation
+                != pin_key
+                    .as_ref()
+                    .map(|key| self.connections.pins.generation(key))
+        {
+            return Err(invalid("Das Verbindungsprofil wurde geändert"));
+        }
         if cfg!(not(unix)) && profile.transport == SshTransport::Openssh {
             return Err(UiError::new(
                 "opensshMissing",
                 "OpenSSH ist auf dieser Plattform nicht verfügbar",
             ));
-        }
-        self.prune_active();
-        let stale = lock(&self.connections.active)
-            .get(profile_id)
-            .filter(|a| !self.connections.backend.is_live(&a.info.id))
-            .map(|a| a.info.id.clone());
-        if let Some(id) = stale {
-            self.connections.backend.disconnect(&id);
-            self.prune_active();
-        }
-        if let Some(active) = lock(&self.connections.active).get(profile_id) {
-            return Ok(ConnectOutcomeDto::Connected {
-                connection_id: active.info.id.clone(),
-                root: vpath_text(&active.info.root),
-                secret_store: SecretStoreDto::from(
-                    self.connections.vault.kind(&secret_key(profile_id), false),
-                ),
-            });
         }
         if !lock(&self.connections.connecting).insert(profile_id.to_owned()) {
             return Err(invalid("Die Verbindung wird gerade aufgebaut"));
@@ -404,7 +463,51 @@ impl AppState {
             state: self,
             id: profile_id.to_owned(),
         };
+        drop(settings_guard);
+        self.prune_active();
+        let active = lock(&self.connections.active).get(profile_id).cloned();
+        let stale = active
+            .as_ref()
+            .filter(|a| !self.connections.backend.is_live(&a.info.id))
+            .map(|a| a.info.id.clone());
+        if let Some(id) = stale {
+            self.connections.backend.disconnect(&id);
+            self.prune_active();
+        }
+        let secret_kind = self.connections.vault.kind(&secret_key(profile_id), false);
+        let settings_guard = lock(&self.connections.settings_lock);
+        if self.profile(profile_id)? != profile
+            || generation
+                != pin_key
+                    .as_ref()
+                    .map(|key| self.connections.pins.generation(key))
+        {
+            return Err(invalid("Verbindungsprofil oder Vertrauen wurde geändert"));
+        }
+        if let Some(active) = lock(&self.connections.active).get(profile_id) {
+            return Ok(ConnectOutcomeDto::Connected {
+                connection_id: active.info.id.clone(),
+                root: vpath_text(&active.info.root),
+                secret_store: SecretStoreDto::from(secret_kind),
+            });
+        }
         profile.validate().map_err(invalid)?;
+        self.connections.pins.reload(|| {
+            let all = self.load_for_update()?;
+            Ok::<_, UiError>(
+                all.connections
+                    .iter()
+                    .flat_map(|p| p.pins.iter().map(pin_to_remote))
+                    .collect(),
+            )
+        })?;
+        let pins = self.connections.pins.session();
+        let pin_snapshot = pin_key.as_ref().map(|key| {
+            (
+                self.connections.pins.get(key),
+                self.connections.pins.generation(key),
+            )
+        });
         drop(settings_guard);
         let provided = if profile.transport == SshTransport::Openssh {
             None
@@ -422,17 +525,6 @@ impl AppState {
                     .flatten()
             })
             .unwrap_or_else(|| Secret::new(""));
-        // The pins of all profiles are in force; a profile never connects to a server that
-        // presents another key than the pinned one.
-        if profile.transport != SshTransport::Openssh {
-            let (all, _) = settings::load(&self.config_dir);
-            self.connections.pins.replace_all(
-                all.connections
-                    .iter()
-                    .flat_map(|p| p.pins.iter().map(pin_to_remote))
-                    .collect(),
-            );
-        }
         let confirm: std::sync::Arc<dyn dualfile_remote::trust::ConfirmTrust> = confirm;
         let result = match profile.protocol {
             ConnectionProtocol::System => {
@@ -466,19 +558,62 @@ impl AppState {
                 },
                 secret,
                 confirm,
+                pins.clone(),
             ),
-            ConnectionProtocol::Sftp => {
-                self.connections
-                    .backend
-                    .connect_sftp(sftp_profile(&profile), secret, confirm)
-            }
-            _ => self
-                .connections
-                .backend
-                .connect_ftp(ftp_profile(&profile), secret, confirm),
+            ConnectionProtocol::Sftp => self.connections.backend.connect_sftp(
+                sftp_profile(&profile),
+                secret,
+                confirm,
+                pins.clone(),
+            ),
+            _ => self.connections.backend.connect_ftp(
+                ftp_profile(&profile),
+                secret,
+                confirm,
+                pins.clone(),
+            ),
         };
+        // Keychain access can prompt too, so it also stays outside settings_lock.
+        let kind = if result.is_ok() && profile.transport != SshTransport::Openssh {
+            match provided.as_ref() {
+                Some(secret) if profile.save_secret => {
+                    Some(self.connections.vault.set(&key, secret))
+                }
+                _ => self.connections.vault.kind(&key, profile.save_secret),
+            }
+        } else {
+            None
+        };
+        let _settings_guard = lock(&self.connections.settings_lock);
+        let unchanged = self
+            .profile(profile_id)
+            .is_ok_and(|current| current == profile)
+            && pin_snapshot
+                == pin_key.as_ref().map(|key| {
+                    (
+                        self.connections.pins.get(key),
+                        self.connections.pins.generation(key),
+                    )
+                });
+        if !unchanged {
+            drop(_settings_guard);
+            if let Ok(info) = result {
+                self.connections.backend.disconnect(&info.id);
+            }
+            return Err(invalid(
+                "Verbindungsprofil oder Vertrauen wurde während des Verbindungsaufbaus geändert",
+            ));
+        }
         match result {
-            Ok(info) => self.connected(&profile, info, provided),
+            Ok(info) => {
+                let id = info.id.clone();
+                let outcome = self.connected(&profile, info, kind, &pins);
+                drop(_settings_guard);
+                if outcome.is_err() {
+                    self.connections.backend.disconnect(&id);
+                }
+                outcome
+            }
             Err(error) => self.connect_failed(profile_id, error, provided),
         }
     }
@@ -487,32 +622,19 @@ impl AppState {
         &self,
         profile: &ConnectionProfile,
         info: ConnectionInfo,
-        provided: Option<Secret>,
+        kind: Option<StoreKind>,
+        pins: &SessionPins,
     ) -> Result<ConnectOutcomeDto, UiError> {
         // Fingerprints the user chose to keep go into the profile now. If that cannot be
         // written the connection is closed again: "always" must not silently become "once".
         let added = if profile.transport == SshTransport::Openssh {
             Vec::new()
         } else {
-            self.connections.pins.take_added()
+            pins.take_added()
         };
         if !added.is_empty() {
-            if let Err(error) = self.store_pins(&profile.id, &added) {
-                self.connections.backend.disconnect(&info.id);
-                return Err(error);
-            }
+            self.store_pins(&profile.id, &added)?;
         }
-        let key = secret_key(&profile.id);
-        let kind: Option<StoreKind> = if profile.transport == SshTransport::Openssh {
-            None
-        } else {
-            match provided {
-                Some(secret) if profile.save_secret => {
-                    Some(self.connections.vault.set(&key, &secret))
-                }
-                _ => self.connections.vault.kind(&key, profile.save_secret),
-            }
-        };
         let outcome = ConnectOutcomeDto::Connected {
             connection_id: info.id.clone(),
             root: vpath_text(&info.root),
@@ -522,12 +644,25 @@ impl AppState {
         Ok(outcome)
     }
 
+    /// Caller holds settings_lock. Readers cannot observe the disk/exchange window.
+    fn save_profiles_and_pins(&self, current: &Settings) -> Result<(), UiError> {
+        self.connections.pins.reload(|| {
+            settings::save(&self.config_dir, current, false)?;
+            let persisted = self.load_for_update()?;
+            Ok(persisted
+                .connections
+                .iter()
+                .flat_map(|p| p.pins.iter().map(pin_to_remote))
+                .collect())
+        })
+    }
+
     fn store_pins(
         &self,
         profile_id: &str,
         added: &[dualfile_remote::trust::Pin],
     ) -> Result<(), UiError> {
-        let _guard = lock(&self.connections.settings_lock);
+        // Caller holds settings_lock for validation and persistence.
         let mut current = self.load_for_update()?;
         let profile = current
             .connections
@@ -546,7 +681,7 @@ impl AppState {
             profile.pins.push(entry);
         }
         profile.validate().map_err(invalid)?;
-        settings::save(&self.config_dir, &current, false)?;
+        self.save_profiles_and_pins(&current)?;
         Ok(())
     }
 
@@ -563,6 +698,8 @@ impl AppState {
                 lock(&self.connections.pending).insert(
                     profile_id.to_owned(),
                     PendingTrust {
+                        pin_key: request.key.clone(),
+                        generation: self.connections.pins.generation(&request.key),
                         fingerprint: request.sha256.clone(),
                         secret: provided,
                         created: Instant::now(),
@@ -607,6 +744,7 @@ impl AppState {
             dualfile_core::system_places::import_places(&settings.connections, &discovered, &urls)
                 .map_err(invalid)?;
         settings::save(&self.config_dir, &settings, false)?;
+        drop(_guard);
         Ok(settings
             .connections
             .iter()
@@ -645,7 +783,7 @@ impl AppState {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{AppState, EventSink};
+    use super::super::{lock, AppState, EventSink};
     use crate::connections::{
         AuthDto, ConnectOutcomeDto, ConnectionProfileDto, RemoteParts, SecretStoreDto,
         TrustDecisionDto,
@@ -655,11 +793,13 @@ mod tests {
     use dualfile_core::jobs::JobState;
     use dualfile_core::settings::{self, LoadOutcome};
     use dualfile_remote::fake::{FakeConnector, FakeServer};
+    use dualfile_remote::secret::Secret;
     use dualfile_remote::secret_store::{FakeKeychain, SecretVault};
     use dualfile_remote::sftp_fake::{FakeSftpConnector, FakeSftpServer, HostKey};
-    use dualfile_remote::trust::{CertObservation, ChainStatus};
+    use dualfile_remote::trust::{CertObservation, ChainStatus, PinStore};
     use std::sync::mpsc::{channel, Receiver, Sender};
     use std::sync::{Arc, Mutex};
+    use std::time::Instant;
 
     const PW: &str = "marker-PW-4711";
 
@@ -679,7 +819,75 @@ mod tests {
         keychain: Arc<FakeKeychain>,
     }
 
+    struct PausingConnector {
+        inner: FakeConnector,
+        after_connect: Option<Arc<dyn Fn() + Send + Sync>>,
+    }
+
+    impl dualfile_remote::manager::Connector for PausingConnector {
+        type Transport = dualfile_remote::fake::FakeTransport;
+
+        fn connect(
+            &self,
+            params: &dualfile_remote::profile::ConnectParams,
+            password: &dualfile_remote::secret::Secret,
+            verifier: Arc<dyn dualfile_remote::trust::CertVerifier>,
+        ) -> dualfile_remote::error::TResult<Self::Transport> {
+            let result = dualfile_remote::manager::Connector::connect(
+                &self.inner,
+                params,
+                password,
+                verifier,
+            );
+            if let Some(hook) = &self.after_connect {
+                hook();
+            }
+            result
+        }
+    }
+
     fn fixture() -> Fx {
+        fixture_with_pause(None)
+    }
+
+    fn fixture_with_pause(after_connect: Option<Arc<dyn Fn() + Send + Sync>>) -> Fx {
+        fixture_with_hooks(after_connect, None)
+    }
+
+    struct HookKeychain {
+        inner: Arc<FakeKeychain>,
+        hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    }
+
+    impl dualfile_remote::secret_store::SecretStore for HookKeychain {
+        fn get(
+            &self,
+            key: &str,
+        ) -> Result<Option<Secret>, dualfile_remote::secret_store::SecretStoreError> {
+            if let Some(hook) = &self.hook {
+                hook();
+            }
+            dualfile_remote::secret_store::SecretStore::get(&self.inner, key)
+        }
+        fn set(
+            &self,
+            key: &str,
+            secret: &Secret,
+        ) -> Result<(), dualfile_remote::secret_store::SecretStoreError> {
+            dualfile_remote::secret_store::SecretStore::set(&self.inner, key, secret)
+        }
+        fn delete(&self, key: &str) -> Result<(), dualfile_remote::secret_store::SecretStoreError> {
+            if let Some(hook) = &self.hook {
+                hook();
+            }
+            dualfile_remote::secret_store::SecretStore::delete(&self.inner, key)
+        }
+    }
+
+    fn fixture_with_hooks(
+        after_connect: Option<Arc<dyn Fn() + Send + Sync>>,
+        keychain_hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    ) -> Fx {
         let root = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(root.path().join("home")).unwrap();
         let ftp = FakeServer::new();
@@ -699,9 +907,15 @@ mod tests {
             root.path().join("home"),
             root.path().join("config"),
             RemoteParts::with_connectors(
-                SecretVault::new(Box::new(keychain.clone())),
-                FakeConnector {
-                    server: ftp.clone(),
+                SecretVault::new(Box::new(HookKeychain {
+                    inner: keychain.clone(),
+                    hook: keychain_hook,
+                })),
+                PausingConnector {
+                    inner: FakeConnector {
+                        server: ftp.clone(),
+                    },
+                    after_connect,
                 },
                 FakeSftpConnector {
                     server: sftp.clone(),
@@ -716,6 +930,155 @@ mod tests {
             sftp,
             keychain,
         }
+    }
+
+    #[test]
+    fn reset_revokes_confirmation_waiting_for_the_same_server() {
+        let f = fixture();
+        let a = f.save(dto("A", ConnectionProtocol::Ftps));
+        let b = f.save(dto("B", ConnectionProtocol::Ftps));
+        let ConnectOutcomeDto::NeedsTrust { fingerprint, .. } =
+            f.state.connection_connect(&b, Some(PW.into())).unwrap()
+        else {
+            panic!("expected trust question")
+        };
+        let key = lock(&f.state.connections.pending)
+            .get(&b)
+            .unwrap()
+            .pin_key
+            .clone();
+        let pin_lock = lock(&f.state.connections.pin_locks)
+            .get(&key)
+            .unwrap()
+            .clone();
+        let held = lock(&pin_lock);
+        std::thread::scope(|scope| {
+            let attempt = scope.spawn(|| {
+                f.state
+                    .connection_trust(&b, TrustDecisionDto::Always, &fingerprint)
+            });
+            // Map + this test + the waiting attempt each own one Arc.
+            let deadline = Instant::now() + std::time::Duration::from_secs(5);
+            while Arc::strong_count(&pin_lock) < 3 && Instant::now() < deadline {
+                std::thread::yield_now();
+            }
+            let waiting = Arc::strong_count(&pin_lock) == 3;
+            let reset = f.state.connection_reset_trust(&a);
+            drop(held);
+            let result = attempt.join().unwrap();
+            assert!(waiting, "attempt never reached the pin lock");
+            reset.unwrap();
+            assert_eq!(kind(result), "invalidInput");
+        });
+        assert!(f.state.connections.pins.get(&key).is_none());
+        assert!(f.state.profile(&b).unwrap().pins.is_empty());
+        assert!(!lock(&f.state.connections.pending).contains_key(&b));
+        assert!(f.state.router.remote_ids().is_empty());
+    }
+
+    #[test]
+    fn profile_keychain_calls_do_not_hold_settings_lock() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        for action in ["save", "turn_off", "delete"] {
+            let armed = Arc::new(AtomicBool::new(false));
+            let hook_armed = armed.clone();
+            let (entered_tx, entered_rx) = channel();
+            let (release_tx, release_rx) = channel();
+            let release_rx = Mutex::new(release_rx);
+            let f = fixture_with_hooks(
+                None,
+                Some(Arc::new(move || {
+                    if hook_armed.swap(false, Ordering::SeqCst) {
+                        entered_tx.send(()).unwrap();
+                        release_rx
+                            .lock()
+                            .unwrap()
+                            .recv_timeout(std::time::Duration::from_secs(10))
+                            .unwrap();
+                    }
+                })),
+            );
+            let mut profile = dto("Saved", ConnectionProtocol::Ftps);
+            profile.save_secret = true;
+            let id = f.save(profile.clone());
+            profile.id = id.clone();
+            f.state.secret_set(&id, PW.into()).unwrap();
+            armed.store(true, Ordering::SeqCst);
+            std::thread::scope(|scope| {
+                let writer = scope.spawn(|| {
+                    if action == "delete" {
+                        f.state.connection_delete(&id)
+                    } else {
+                        profile.save_secret = action != "turn_off";
+                        f.state.connection_save(profile).map(|_| ())
+                    }
+                });
+                entered_rx
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
+                let available = f.state.connections.settings_lock.try_lock().is_ok();
+                if available {
+                    let mut other = dto("OpenSSH", ConnectionProtocol::Sftp);
+                    other.transport = SshTransport::Openssh;
+                    f.state.connection_save(other).unwrap();
+                }
+                release_tx.send(()).unwrap();
+                writer.join().unwrap().unwrap();
+                assert!(
+                    available,
+                    "{action} held settings_lock during keychain access"
+                );
+            });
+        }
+    }
+
+    #[test]
+    fn settings_and_reset_progress_during_connect_and_stale_result_is_discarded() {
+        let (entered_tx, entered_rx) = channel();
+        let (release_tx, release_rx) = channel();
+        let release_rx = Mutex::new(release_rx);
+        let f = fixture_with_pause(Some(Arc::new(move || {
+            entered_tx.send(()).unwrap();
+            release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .unwrap();
+        })));
+        let id = f.save(dto("FTPS", ConnectionProtocol::Ftps));
+        let state = &f.state;
+        std::thread::scope(|scope| {
+            let attempt = scope.spawn(|| {
+                state.connect_with(
+                    &id,
+                    Some(dualfile_remote::secret::Secret::new(PW)),
+                    crate::connections::DecisionConfirm::decided(
+                        dualfile_remote::trust::TrustDecision::TrustAlways,
+                        dualfile_remote::trust::hex(&[7; 32]),
+                    ),
+                    None,
+                )
+            });
+            entered_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            let available = state.connections.settings_lock.try_lock().is_ok();
+            if available {
+                state
+                    .save_settings(&state.load_settings().settings)
+                    .unwrap();
+                state.connection_reset_trust(&id).unwrap();
+                let other = state.connection_save(dto("Other", ConnectionProtocol::Ftps));
+                assert!(other.is_ok());
+            }
+            release_tx.send(()).unwrap();
+            let result = attempt.join().unwrap();
+            assert!(available, "network connect held settings_lock");
+            assert_eq!(kind(result), "invalidInput");
+        });
+        assert!(state.router.remote_ids().is_empty());
+        assert!(state.profile(&id).unwrap().pins.is_empty());
+        assert!(state.connections.active.lock().unwrap().is_empty());
     }
 
     fn dto(name: &str, protocol: ConnectionProtocol) -> ConnectionProfileDto {
@@ -1045,6 +1408,26 @@ mod tests {
         // the deliberate step: reset trust, then the new key is asked about
         f.state.connection_reset_trust(&id).unwrap();
         assert!(f.state.connections_list()[0].pins.is_empty());
+        assert!(matches!(
+            f.state.connection_connect(&id, Some(PW.into())).unwrap(),
+            ConnectOutcomeDto::NeedsTrust { .. }
+        ));
+    }
+
+    #[test]
+    fn retained_reconnect_cannot_repin_after_reset_trust() {
+        let f = fixture();
+        let (id, root) = f.connect_ftps();
+        f.ftp.mkdirs("/pub");
+        f.ftp.disconnect_everybody();
+        // A successful reconnect must not recreate a pending TrustAlways write.
+        assert!(f.state.list(&format!("{root}pub")).is_ok());
+        f.state.connection_reset_trust(&id).unwrap();
+        f.ftp.disconnect_everybody();
+        f.ftp.mkdirs("/uncached");
+        assert!(f.state.list(&format!("{root}uncached")).is_err());
+        assert!(f.state.connections_list()[0].pins.is_empty());
+        f.state.connection_disconnect(&id).unwrap();
         assert!(matches!(
             f.state.connection_connect(&id, Some(PW.into())).unwrap(),
             ConnectOutcomeDto::NeedsTrust { .. }

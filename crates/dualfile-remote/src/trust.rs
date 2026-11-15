@@ -125,13 +125,17 @@ impl ConfirmTrust for RejectAll {
 
 pub trait PinStore: Send + Sync {
     fn get(&self, key: &PinKey) -> Option<Pin>;
+    /// Changes on explicit reset, including when no persistent pin exists.
+    fn generation(&self, _key: &PinKey) -> u64 {
+        0
+    }
     fn set(&self, pin: Pin);
     /// Only for the explicit "reset trust" step of the profile editor.
     fn remove(&self, key: &PinKey) -> Option<Pin>;
 }
 
 #[derive(Default)]
-pub struct MemoryPins(Mutex<HashMap<PinKey, Pin>>);
+pub struct MemoryPins(Mutex<HashMap<PinKey, Pin>>, Mutex<HashMap<PinKey, u64>>);
 
 impl MemoryPins {
     pub fn new() -> Self {
@@ -140,6 +144,9 @@ impl MemoryPins {
 }
 
 impl PinStore for MemoryPins {
+    fn generation(&self, key: &PinKey) -> u64 {
+        *self.1.lock().unwrap().get(key).unwrap_or(&0)
+    }
     fn get(&self, key: &PinKey) -> Option<Pin> {
         self.0.lock().unwrap().get(key).cloned()
     }
@@ -147,6 +154,7 @@ impl PinStore for MemoryPins {
         self.0.lock().unwrap().insert(pin.key(), pin);
     }
     fn remove(&self, key: &PinKey) -> Option<Pin> {
+        *self.1.lock().unwrap().entry(key.clone()).or_default() += 1;
         self.0.lock().unwrap().remove(key)
     }
 }
@@ -188,6 +196,71 @@ pub trait CertVerifier: Send + Sync {
         key: &PinKey,
         observation: &CertObservation,
     ) -> Result<TrustOutcome, TrustError>;
+}
+
+/// Initial handshakes may record trust; retained transports read pins and confirmed identities.
+/// Switching also releases the attempt store and its confirmation decision.
+pub(crate) struct AttemptVerifier {
+    initial: Mutex<Option<PolicyVerifier>>,
+    retained: PolicyVerifier,
+    once: Mutex<HashMap<PinKey, (CertObservation, u64)>>,
+}
+
+impl AttemptVerifier {
+    pub(crate) fn new(
+        attempt: Arc<dyn PinStore>,
+        persisted: Arc<dyn PinStore>,
+        confirm: Arc<dyn ConfirmTrust>,
+    ) -> Self {
+        Self {
+            initial: Mutex::new(Some(PolicyVerifier::new(attempt, confirm))),
+            retained: PolicyVerifier::new(persisted, Arc::new(RejectAll)),
+            once: Mutex::default(),
+        }
+    }
+
+    pub(crate) fn finish(&self) {
+        self.initial.lock().unwrap().take();
+    }
+}
+
+impl CertVerifier for AttemptVerifier {
+    fn verify(
+        &self,
+        key: &PinKey,
+        observation: &CertObservation,
+    ) -> Result<TrustOutcome, TrustError> {
+        let initial = self.initial.lock().unwrap();
+        if let Some(initial) = initial.as_ref() {
+            let generation = self.retained.pins.generation(key);
+            let outcome = initial.verify(key, observation)?;
+            if outcome == TrustOutcome::TrustedOnce {
+                self.once
+                    .lock()
+                    .unwrap()
+                    .insert(key.clone(), (observation.clone(), generation));
+            }
+            return Ok(outcome);
+        }
+        let result = self.retained.verify(key, observation);
+        // Persisted conflicts and invalid chains always win over session trust.
+        if result.is_ok() || matches!(result, Err(TrustError::NotConfirmed(_))) {
+            if let Some((confirmed, generation)) = self.once.lock().unwrap().get(key) {
+                if *generation == self.retained.pins.generation(key) {
+                    if confirmed.sha256 != observation.sha256
+                        || confirmed.key_type != observation.key_type
+                    {
+                        return Err(TrustError::PinMismatch {
+                            expected: hex(&confirmed.sha256),
+                            actual: hex(&observation.sha256),
+                        });
+                    }
+                    return Ok(TrustOutcome::TrustedOnce);
+                }
+            }
+        }
+        result
+    }
 }
 
 /// The rules from the module documentation.
@@ -305,6 +378,69 @@ mod tests {
         let pins = Arc::new(MemoryPins::new());
         let ask = Counting::new(answer);
         (PolicyVerifier::new(pins.clone(), ask.clone()), pins, ask)
+    }
+
+    #[test]
+    fn retained_trust_once_rejects_a_different_valid_certificate() {
+        let pins = Arc::new(MemoryPins::new());
+        let verifier = AttemptVerifier::new(
+            Arc::new(MemoryPins::new()),
+            pins.clone(),
+            Counting::new(TrustDecision::TrustOnce),
+        );
+        assert_eq!(
+            verifier.verify(&key(), &obs(1, ChainStatus::UnknownIssuer, true)),
+            Ok(TrustOutcome::TrustedOnce)
+        );
+        verifier.finish();
+        assert_eq!(
+            verifier.verify(&key(), &obs(2, ChainStatus::Valid, true)),
+            Err(TrustError::PinMismatch {
+                expected: hex(&[1; 32]),
+                actual: hex(&[2; 32])
+            })
+        );
+        assert_eq!(
+            verifier.verify(&key(), &obs(2, ChainStatus::Expired, true)),
+            Err(TrustError::Expired)
+        );
+        assert_eq!(
+            verifier.verify(&key(), &obs(2, ChainStatus::Invalid, true)),
+            Err(TrustError::InvalidChain)
+        );
+        assert!(pins.get(&key()).is_none());
+    }
+
+    #[test]
+    fn retained_verifier_reads_persisted_pins_and_cannot_restore_revoked_trust() {
+        let pending = Arc::new(MemoryPins::new());
+        let persisted = Arc::new(MemoryPins::new());
+        let confirm = Counting::new(TrustDecision::TrustAlways);
+        let verifier = AttemptVerifier::new(pending.clone(), persisted.clone(), confirm.clone());
+        let observation = obs(3, ChainStatus::UnknownIssuer, true);
+        assert_eq!(
+            verifier.verify(&key(), &observation),
+            Ok(TrustOutcome::TrustedAlways)
+        );
+        let pin = pending.remove(&key()).unwrap();
+        persisted.set(pin);
+        verifier.finish();
+        assert_eq!(
+            verifier.verify(&key(), &observation),
+            Ok(TrustOutcome::Pinned)
+        );
+        assert!(matches!(
+            verifier.verify(&key(), &obs(4, ChainStatus::Valid, true)),
+            Err(TrustError::PinMismatch { .. })
+        ));
+        persisted.remove(&key());
+        assert!(matches!(
+            verifier.verify(&key(), &observation),
+            Err(TrustError::NotConfirmed(_))
+        ));
+        assert!(pending.get(&key()).is_none());
+        assert!(persisted.get(&key()).is_none());
+        assert_eq!(confirm.asked(), 1);
     }
 
     #[test]
