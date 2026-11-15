@@ -11,6 +11,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Security
 
+- Names and text a plugin supplies (entry names and its manifest name/description) can no longer contain invisible or bidirectional Unicode format characters, which could reorder or hide text in the UI to spoof a name (F8).
 - Removing a local source tree during a move now uses the hardened directory removal that never follows a directory symlink swapped in during the walk, so a local race cannot redirect the deletion outside the source tree (F3).
 - A remote file opened externally is never handed to the desktop as a launchable `.desktop` entry: the private local copy of such a file is renamed so it opens as text instead of being executed (F11).
 - A saved password is discarded when a profile is changed to another server (host, port or protocol), so it is never sent to the new server.

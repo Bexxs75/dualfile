@@ -7,6 +7,22 @@ use std::collections::HashMap;
 /// Longest name accepted from a plugin, in bytes.
 pub const MAX_NAME_BYTES: usize = 255;
 
+/// Characters that are not control characters but can still hide or reorder text in the UI:
+/// bidirectional overrides/isolates, zero-width and other invisible format characters. A plugin
+/// could use them to spoof a name (e.g. a right-to-left override to disguise an extension), so
+/// they are treated like control characters — rejected in usable names, replaced in shown names.
+pub(crate) fn is_spoofing_char(c: char) -> bool {
+    matches!(c,
+        '\u{061C}'                 // Arabic letter mark
+        | '\u{180E}'               // Mongolian vowel separator
+        | '\u{200B}'..='\u{200F}'  // zero-width space/joiners + LRM/RLM
+        | '\u{202A}'..='\u{202E}'  // bidi embeddings and override
+        | '\u{2060}'..='\u{2064}'  // word joiner and invisible operators
+        | '\u{2066}'..='\u{2069}'  // bidi isolates
+        | '\u{FEFF}'               // zero-width no-break space / BOM
+    )
+}
+
 /// Why a name is unusable (`None` = fine).
 pub fn name_problem(name: &str) -> Option<&'static str> {
     if name.is_empty() || name == "." || name == ".." {
@@ -15,8 +31,8 @@ pub fn name_problem(name: &str) -> Option<&'static str> {
         Some("Der Name vom Plugin ist zu lang")
     } else if name.contains('/') || name.contains('\\') {
         Some("Der Name vom Plugin enthält einen Pfadtrenner")
-    } else if name.chars().any(char::is_control) {
-        Some("Der Name vom Plugin enthält Steuerzeichen")
+    } else if name.chars().any(|c| c.is_control() || is_spoofing_char(c)) {
+        Some("Der Name vom Plugin enthält Steuer- oder unsichtbare Zeichen")
     } else {
         None
     }
@@ -27,7 +43,7 @@ pub fn display_name(name: &str) -> String {
     let shown: String = name
         .chars()
         .map(|c| {
-            if c.is_control() || c == '/' || c == '\\' {
+            if c.is_control() || is_spoofing_char(c) || c == '/' || c == '\\' {
                 '\u{fffd}'
             } else {
                 c
@@ -126,6 +142,24 @@ mod tests {
     fn display_names_hide_control_characters() {
         assert_eq!(display_name("a\nb/c\\d"), "a\u{fffd}b\u{fffd}c\u{fffd}d");
         assert!(display_name(&"é".repeat(300)).len() <= MAX_NAME_BYTES);
+    }
+
+    #[test]
+    fn invisible_and_bidi_characters_are_marked_and_hidden() {
+        // A right-to-left override or a zero-width space can disguise a name in the UI.
+        for bad in [
+            "bild\u{202e}gpj.exe",
+            "a\u{200b}b",
+            "x\u{2066}y",
+            "\u{feff}start",
+        ] {
+            assert!(name_problem(bad).is_some(), "{bad:?}");
+        }
+        assert_eq!(display_name("a\u{202e}b"), "a\u{fffd}b");
+        // Ordinary accented and non-Latin letters stay usable.
+        for good in ["café", "日本語", "Datei"] {
+            assert!(name_problem(good).is_none(), "{good:?}");
+        }
     }
 
     #[test]

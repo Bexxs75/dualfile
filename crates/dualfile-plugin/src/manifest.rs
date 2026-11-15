@@ -113,7 +113,9 @@ fn valid_text(text: &str, max_chars: usize) -> bool {
     chars >= 1
         && chars <= max_chars
         && !text.trim().is_empty()
-        && !text.chars().any(char::is_control)
+        && !text
+            .chars()
+            .any(|c| c.is_control() || crate::names::is_spoofing_char(c))
 }
 
 fn valid_ext(ext: &str) -> bool {
@@ -343,6 +345,15 @@ mod tests {
         let manifest = parse(&good()).unwrap();
         assert_eq!(manifest.id, "example");
         assert!(manifest.has_kind(Kind::Packer) && !manifest.write);
+    }
+
+    #[test]
+    fn invisible_characters_in_text_fields_are_refused() {
+        // A bidi override or zero-width space in a shown field could spoof the plugin's name.
+        assert!(with(|v| v["name"] = json!("Bei\u{202e}spiel")).is_err());
+        assert!(with(|v| v["name"] = json!("a\u{200b}b")).is_err());
+        // an ordinary accented name stays valid
+        assert!(with(|v| v["name"] = json!("Béispiel")).is_ok());
     }
 
     #[test]
