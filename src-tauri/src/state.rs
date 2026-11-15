@@ -734,9 +734,15 @@ impl AppState {
             {
                 ("Kopieren", "copy")
             }
-            (false, Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav | Scheme::Nfs | Scheme::Plugin) => {
-                ("Herunterladen", "download")
-            }
+            (
+                false,
+                Scheme::Ftp
+                | Scheme::Sftp
+                | Scheme::Smb
+                | Scheme::Webdav
+                | Scheme::Nfs
+                | Scheme::Plugin,
+            ) => ("Herunterladen", "download"),
             (false, Scheme::Local) if to_server => ("Hochladen", "upload"),
             (false, Scheme::Local) => ("Kopieren", "copy"),
         };

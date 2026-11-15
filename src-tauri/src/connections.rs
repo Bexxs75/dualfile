@@ -38,6 +38,10 @@ pub enum AuthDto {
     KeyFile { path: String },
 }
 
+fn default_nfs_id() -> u32 {
+    1000
+}
+
 /// A profile as the UI edits it. There is deliberately no password field; the pins are not
 /// part of it either (only the connection code writes them).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -56,6 +60,12 @@ pub struct ConnectionProfileDto {
     pub domain: String,
     #[serde(default)]
     pub guest: bool,
+    #[serde(default)]
+    pub export: String,
+    #[serde(default = "default_nfs_id")]
+    pub uid: u32,
+    #[serde(default = "default_nfs_id")]
+    pub gid: u32,
     pub host: String,
     pub port: u16,
     pub user: String,
@@ -150,6 +160,9 @@ impl From<ConnectionProfile> for ConnectionProfileDto {
             share: p.share,
             domain: p.domain,
             guest: p.guest,
+            export: p.export,
+            uid: p.uid,
+            gid: p.gid,
             host: p.host,
             port: p.port,
             user: p.user,
@@ -178,6 +191,9 @@ impl ConnectionProfileDto {
             share: self.share,
             domain: self.domain,
             guest: self.guest,
+            export: self.export,
+            uid: self.uid,
+            gid: self.gid,
             host: self.host,
             port: self.port,
             user: self.user,
@@ -244,7 +260,10 @@ pub fn sftp_profile(p: &ConnectionProfile) -> SftpProfile {
 /// The pin protocol a profile's server is pinned under (plain FTP has no pin).
 pub fn pin_protocol(p: &ConnectionProfile) -> Option<PinProtocol> {
     match p.protocol {
-        ConnectionProtocol::System | ConnectionProtocol::Ftp | ConnectionProtocol::Smb => None,
+        ConnectionProtocol::System
+        | ConnectionProtocol::Ftp
+        | ConnectionProtocol::Smb
+        | ConnectionProtocol::Nfs => None,
         ConnectionProtocol::Ftps => Some(PinProtocol::Ftps),
         ConnectionProtocol::Sftp => Some(PinProtocol::Sftp),
         // WebDAV over https pins the certificate; http never produces pins.
@@ -477,6 +496,10 @@ pub trait ConnectionBackend: Send + Sync {
         profile: dualfile_remote::smb::SmbProfile,
         secret: Secret,
     ) -> Result<ConnectionInfo, ConnectError>;
+    fn connect_nfs(
+        &self,
+        profile: dualfile_remote::nfs::NfsProfile,
+    ) -> Result<ConnectionInfo, ConnectError>;
     fn connect_webdav(
         &self,
         profile: dualfile_remote::profile::WebdavProfile,
@@ -515,6 +538,12 @@ impl<C: Connector, S: SftpConnector> ConnectionBackend for ConnectionManager<C, 
         secret: Secret,
     ) -> Result<ConnectionInfo, ConnectError> {
         ConnectionManager::connect_smb(self, profile, secret)
+    }
+    fn connect_nfs(
+        &self,
+        profile: dualfile_remote::nfs::NfsProfile,
+    ) -> Result<ConnectionInfo, ConnectError> {
+        ConnectionManager::connect_nfs(self, profile)
     }
     fn connect_webdav(
         &self,

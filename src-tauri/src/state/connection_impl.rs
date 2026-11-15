@@ -551,6 +551,19 @@ impl AppState {
                 },
                 secret,
             ),
+            ConnectionProtocol::Nfs => {
+                self.connections
+                    .backend
+                    .connect_nfs(dualfile_remote::nfs::NfsProfile {
+                        name: profile.name.clone(),
+                        host: profile.host.clone(),
+                        port: profile.port,
+                        export: profile.export.clone(),
+                        uid: profile.uid,
+                        gid: profile.gid,
+                        start_folder: profile.start_folder.clone(),
+                    })
+            }
             ConnectionProtocol::Webdav => self.connections.backend.connect_webdav(
                 dualfile_remote::profile::WebdavProfile {
                     name: profile.name.clone(),
@@ -1087,6 +1100,29 @@ mod tests {
         assert!(state.connections.active.lock().unwrap().is_empty());
     }
 
+    #[test]
+    fn nfs_profile_round_trips_and_connect_takes_the_nfs_path() {
+        let f = fixture();
+        let mut d = dto("Nas", ConnectionProtocol::Nfs);
+        d.port = 2049;
+        d.user = String::new();
+        d.export = "relative/path".into();
+        d.uid = 1234;
+        d.gid = 4321;
+        let id = f.save(d);
+        let p = f.state.profile(&id).unwrap();
+        assert_eq!(
+            (p.export.as_str(), p.uid, p.gid),
+            ("relative/path", 1234, 4321)
+        );
+        let back = ConnectionProfileDto::from(p.clone());
+        assert_eq!((back.uid, back.gid), (1234, 4321));
+        assert_eq!(back.into_profile().export, "relative/path");
+        // The FTP route would try the network; only NfsProfile::validate rejects this export.
+        let err = f.state.connection_connect(&id, None).unwrap_err();
+        assert_eq!(err.kind, "invalidInput");
+    }
+
     fn dto(name: &str, protocol: ConnectionProtocol) -> ConnectionProfileDto {
         ConnectionProfileDto {
             transport: SshTransport::Builtin,
@@ -1094,6 +1130,9 @@ mod tests {
             share: String::new(),
             domain: String::new(),
             guest: false,
+            export: String::new(),
+            uid: 1000,
+            gid: 1000,
             id: String::new(),
             name: name.into(),
             protocol,

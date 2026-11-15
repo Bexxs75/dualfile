@@ -721,7 +721,7 @@ function validateProfile(profile: ConnectionProfile): ConnectionProfile {
   }
   if (openssh && (profile.protocol !== "sftp" || profile.saveSecret)) throw bad("Transport");
   if (profile.transport && !["builtin", "openssh"].includes(profile.transport)) throw bad("Transport");
-  if (!["ftp", "ftps", "sftp", "smb", "webdav"].includes(profile.protocol)) throw bad("Protokoll");
+  if (!["ftp", "ftps", "sftp", "smb", "nfs", "webdav"].includes(profile.protocol)) throw bad("Protokoll");
   if (
     !text(profile.host) ||
     profile.host === "" ||
@@ -731,13 +731,17 @@ function validateProfile(profile: ConnectionProfile): ConnectionProfile {
     throw bad("Server");
   }
   if (!Number.isInteger(profile.port) || profile.port < (openssh ? 0 : 1) || profile.port > 65_535) throw bad("Port");
-  if (!text(profile.user) || (!openssh && profile.protocol !== "smb" && profile.protocol !== "webdav" && profile.user === "") || profile.user.length > 255 || !NO_CONTROL.test(profile.user)) {
+  if (!text(profile.user) || (!openssh && profile.protocol !== "smb" && profile.protocol !== "nfs" && profile.protocol !== "webdav" && profile.user === "") || profile.user.length > 255 || !NO_CONTROL.test(profile.user)) {
     throw bad("Benutzer");
   }
   if (openssh && profile.user !== "" && (!/^[A-Za-z0-9._@:%[\]-]+$/.test(profile.user) || profile.user.startsWith("-"))) throw bad("Benutzer");
   if (profile.protocol === "smb") {
     const share = profile.share ?? "", domain = profile.domain ?? "";
     if (share.length > 255 || [".", ".."].includes(share) || /[\/\\]/.test(share) || !NO_CONTROL.test(share) || domain.length > 256 || !NO_CONTROL.test(domain) || (!profile.guest && profile.user.toLowerCase() === "guest")) throw bad("SMB");
+  }
+  if (profile.protocol === "nfs") {
+    const exp = profile.export ?? "";
+    if (!exp.startsWith("/") || exp.length > 1024 || !NO_CONTROL.test(exp) || exp.includes("\\") || exp.split("/").includes("..")) throw bad("NFS");
   }
   if (profile.protocol === "webdav") {
     // Strict host (no userinfo/port/path/query/fragment, so credentials cannot be redirected) and a
@@ -772,6 +776,7 @@ function validateProfile(profile: ConnectionProfile): ConnectionProfile {
     protocol: profile.protocol,
     transport: profile.transport ?? "builtin",
     share: profile.share ?? "", domain: profile.domain ?? "", guest: profile.guest ?? false,
+    export: profile.export ?? "", uid: profile.uid ?? 1000, gid: profile.gid ?? 1000,
     host: profile.host,
     port: profile.port,
     user: profile.user,

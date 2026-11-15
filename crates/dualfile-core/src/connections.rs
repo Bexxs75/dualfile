@@ -36,6 +36,8 @@ pub enum ConnectionProtocol {
     Ftps,
     Sftp,
     Smb,
+    /// NFSv3; `export` holds the exported path, `uid`/`gid` the identity; no password.
+    Nfs,
     /// WebDAV over HTTP(S); `share` holds the server base path, `tls` other than `None` = https.
     Webdav,
     System,
@@ -114,6 +116,9 @@ pub struct ConnectionProfile {
     pub share: String,
     pub domain: String,
     pub guest: bool,
+    pub export: String,
+    pub uid: u32,
+    pub gid: u32,
     pub host: String,
     pub port: u16,
     pub user: String,
@@ -138,6 +143,9 @@ impl Default for ConnectionProfile {
             share: String::new(),
             domain: String::new(),
             guest: false,
+            export: String::new(),
+            uid: 1000,
+            gid: 1000,
             host: String::new(),
             port: 21,
             user: String::new(),
@@ -239,7 +247,7 @@ impl ConnectionProfile {
             && self.user.is_empty()
             && !matches!(
                 self.protocol,
-                ConnectionProtocol::Smb | ConnectionProtocol::Webdav
+                ConnectionProtocol::Smb | ConnectionProtocol::Nfs | ConnectionProtocol::Webdav
             ))
             || self.user.len() > MAX_USER_BYTES
             || !plain(&self.user)
@@ -276,6 +284,14 @@ impl ConnectionProfile {
                 return Err("Gast ausdrücklich auswählen");
             }
         }
+        if self.protocol == ConnectionProtocol::Nfs
+            && self
+                .start_folder
+                .as_ref()
+                .is_some_and(|folder| VPath::nfs(&self.id, folder).is_err())
+        {
+            return Err("Ungültiger Startordner");
+        }
         if self.protocol == ConnectionProtocol::Webdav {
             if !valid_webdav_host(&self.host) {
                 return Err("Ungültiger WebDAV-Servername");
@@ -296,7 +312,7 @@ impl ConnectionProfile {
                     return Err("FTPS braucht einen TLS-Modus (explizit oder implizit)");
                 }
             }
-            ConnectionProtocol::Sftp | ConnectionProtocol::Smb => {
+            ConnectionProtocol::Sftp | ConnectionProtocol::Smb | ConnectionProtocol::Nfs => {
                 if self.tls != ConnectionTls::None {
                     return Err("SFTP verwendet keinen TLS-Modus");
                 }
@@ -333,9 +349,10 @@ impl ConnectionProfile {
         }
         for pin in &self.pins {
             let expected = match self.protocol {
-                ConnectionProtocol::System | ConnectionProtocol::Ftp | ConnectionProtocol::Smb => {
-                    return Err("FTP ohne TLS hat keine Fingerabdrücke")
-                }
+                ConnectionProtocol::System
+                | ConnectionProtocol::Ftp
+                | ConnectionProtocol::Smb
+                | ConnectionProtocol::Nfs => return Err("FTP ohne TLS hat keine Fingerabdrücke"),
                 ConnectionProtocol::Ftps => PinProtocol::Ftps,
                 ConnectionProtocol::Sftp => PinProtocol::Sftp,
                 // WebDAV over https pins the certificate exactly like FTPS/SFTP.

@@ -31,7 +31,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
   const fail = (e: unknown) => setError(errorText(e));
   const failAttempt = async (profile: ConnectionProfile, e: unknown) => {
     let host = profile.host;
-    let port = profile.port || (profile.protocol === "smb" ? 445 : profile.protocol === "sftp" ? 22 : 21);
+    let port = profile.port || (profile.protocol === "smb" ? 445 : profile.protocol === "nfs" ? 2049 : profile.protocol === "sftp" ? 22 : 21);
     if (profile.transport === "openssh") {
       try {
         const resolved = await api.sshHostResolve(profile.host);
@@ -85,7 +85,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
     else if (entry.profile) {
       if (entry.action === "edit") edit(entry.profile);
       else if (entry.action === "disconnect") void disconnect(entry.profile);
-      else if (entry.profile.protocol === "system" || entry.profile.transport === "openssh" || (entry.profile.protocol === "smb" && entry.profile.guest)) void connect(entry.profile);
+      else if (entry.profile.protocol === "system" || entry.profile.transport === "openssh" || (entry.profile.protocol === "smb" && entry.profile.guest) || entry.profile.protocol === "nfs") void connect(entry.profile);
       else setPassword(entry.profile);
     }
   }, [entry]);
@@ -151,7 +151,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
       <strong>{profile.name}</strong><span>{profile.protocol === "system" ? tr("system.type") : profile.protocol.toUpperCase()} · {profile.host}</span>
       <button className="tb" disabled={busy} onClick={() => edit(profile)}>{tr("ssh.edit")}</button>
       {connected && profile.protocol !== "system" ? <button className="tb" disabled={busy} onClick={() => { void disconnect(profile); }}>{tr("ssh.disconnect")}</button>
-        : <button className="tb" disabled={busy} onClick={() => { if (profile.protocol === "system" || profile.transport === "openssh" || (profile.protocol === "smb" && profile.guest)) void connect(profile); else { setAttemptError(null); setPassword(profile); } }}>{tr("ssh.connect")}</button>}
+        : <button className="tb" disabled={busy} onClick={() => { if (profile.protocol === "system" || profile.transport === "openssh" || (profile.protocol === "smb" && profile.guest) || profile.protocol === "nfs") void connect(profile); else { setAttemptError(null); setPassword(profile); } }}>{tr("ssh.connect")}</button>}
       {profile.protocol === "system" && connected && <>
         <button className="tb" disabled={busy} onClick={() => { void disconnect(profile); }}>{tr("ssh.disconnect")}</button>
         <button className="tb" disabled={busy} onClick={() => { setBusy(true); void api.systemMountUnmount(profile.id).then(refresh).catch(fail).finally(() => setBusy(false)); }}>{tr("system.unmount")}</button>

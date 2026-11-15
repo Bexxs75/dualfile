@@ -476,7 +476,7 @@ export type CoreEvent =
 
 // ---------------------------------------------------------------- Server-Verbindungen (FTP/FTPS/SFTP)
 
-export type ConnectionProtocol = "ftp" | "ftps" | "sftp" | "smb" | "webdav" | "system";
+export type ConnectionProtocol = "ftp" | "ftps" | "sftp" | "smb" | "nfs" | "webdav" | "system";
 /** ftp => "none", ftps => "explicit" | "implicit", sftp => "none". */
 export type TlsModeKind = "none" | "explicit" | "implicit";
 export type SftpAuthMethod = { kind: "password" } | { kind: "keyFile"; path: string };
@@ -495,6 +495,9 @@ export interface ConnectionProfile {
   share?: string;
   domain?: string;
   guest?: boolean;
+  export?: string;
+  uid?: number;
+  gid?: number;
   systemUrl?: string | null;
   /** Missing on legacy profiles; zero port/empty user inherit OpenSSH configuration. */
   transport?: "builtin" | "openssh";
