@@ -163,3 +163,9 @@ The AppImage script writes to `dist-appimage/` by default and repacks Tauri's Ap
 ## License
 
 [MIT](LICENSE), copyright 2026 Dualfile contributors. Dependencies retain their own licenses; see [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+
+## Support
+
+Dualfile is free and open source. If it helps you, you can support development:
+
+[![Support on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/V7W12ALQE3)
