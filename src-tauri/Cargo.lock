@@ -1317,7 +1317,7 @@ dependencies = [
 
 [[package]]
 name = "dualfile"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "dualfile-core",
  "dualfile-plugin",
@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "dualfile-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -1362,7 +1362,7 @@ dependencies = [
 
 [[package]]
 name = "dualfile-plugin"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "base64ct",
  "dualfile-core",
@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "dualfile-remote"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "dualfile-core",
  "quick-xml 0.38.4",

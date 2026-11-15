@@ -5,6 +5,18 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-15
+
+### Security
+
+- Harden the certificate pin store and the TLS trust lifecycle. A pre-existing concurrency issue
+  (affecting FTPS, SFTP and WebDAV) could lose a "trust always" decision when two profiles connected
+  at once, and several TLS trust paths bypassed a trust reset. Each connection attempt now owns its
+  pending pins; a reconnect or follow-up transport verifies read-only against the persisted and
+  just-confirmed pins (a different valid certificate is a pin mismatch); a trust reset reliably
+  invalidates earlier confirmations; and WebDAV TLS connections no longer resume sessions, so every
+  handshake re-verifies the certificate. FTPS keeps session resumption unchanged.
+
 ## [0.2.0] - 2026-11-15
 
 ### Added
