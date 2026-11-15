@@ -16,6 +16,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Fixed
 
+- The embedded terminal now starts the shell with a clean environment in the AppImage build: it no longer inherits the bundle's LD_LIBRARY_PATH/PATH, so the shell loads system libraries (e.g. fish/libpcre2) and finds system commands instead of the bundled ones.
 - Large entries in a plain (uncompressed) tar are no longer wrongly rejected as a possible zip bomb past 100 MiB (the compression-ratio guard was not fed the bytes read).
 - The terminal keyboard shortcut (Ctrl+`) now works on keyboard layouts where the backtick is a dead/accent key (e.g. German): the physical top-left key is matched regardless of layout.
 

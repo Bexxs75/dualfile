@@ -86,6 +86,27 @@ fn local_cwd(cwd: Option<String>) -> PathBuf {
         .filter(|p| p.is_absolute() && p.is_dir())
         .unwrap_or_else(crate::home_dir)
 }
+fn apply_env_plan(command: &mut CommandBuilder, plan: &dualfile_core::appenv::EnvPlan) {
+    for key in &plan.remove {
+        command.env_remove(key);
+    }
+    for (key, value) in &plan.replace {
+        command.env(key, value);
+    }
+}
+
+/// Strip the AppImage runtime paths the bundle injects (LD_LIBRARY_PATH, a PATH/GTK/GIO/… overlay
+/// into the mount) from the shell's environment, so it loads system libraries and finds system
+/// commands instead of the bundled ones. Mirrors the clean environment used for xdg-open; a no-op
+/// outside an AppImage (APPDIR unset).
+fn apply_clean_env(command: &mut CommandBuilder) {
+    let plan = dualfile_core::appenv::clean_env(
+        std::env::vars_os(),
+        std::env::var_os("APPDIR").as_deref(),
+    );
+    apply_env_plan(command, &plan);
+}
+
 fn shell_command(cwd: Option<String>) -> CommandBuilder {
     let shell = std::env::var_os("SHELL")
         .filter(|s| !s.is_empty())
@@ -99,6 +120,7 @@ fn shell_command(cwd: Option<String>) -> CommandBuilder {
     let mut command = CommandBuilder::new(shell);
     command.arg("-i");
     command.env("TERM", "xterm-256color");
+    apply_clean_env(&mut command);
     command.cwd(local_cwd(cwd));
     command
 }
@@ -380,6 +402,27 @@ mod tests {
         command.cwd("/");
         command
     }
+    #[test]
+    fn shell_env_drops_appimage_runtime_paths() {
+        use std::ffi::OsStr;
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.env("LD_LIBRARY_PATH", "/tmp/.mount_x/lib");
+        command.env("PATH", "/tmp/.mount_x/usr/bin:/usr/bin:/bin");
+        command.env("KEEP", "value");
+        let plan = dualfile_core::appenv::clean_env(
+            [
+                ("LD_LIBRARY_PATH".into(), "/tmp/.mount_x/lib".into()),
+                ("PATH".into(), "/tmp/.mount_x/usr/bin:/usr/bin:/bin".into()),
+                ("KEEP".into(), "value".into()),
+            ],
+            Some(OsStr::new("/tmp/.mount_x")),
+        );
+        apply_env_plan(&mut command, &plan);
+        assert!(command.get_env("LD_LIBRARY_PATH").is_none());
+        assert_eq!(command.get_env("PATH"), Some(OsStr::new("/usr/bin:/bin")));
+        assert_eq!(command.get_env("KEEP"), Some(OsStr::new("value")));
+    }
+
     fn collect(rx: &mpsc::Receiver<Event>, id: u64) -> (Vec<u8>, Option<i32>) {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut bytes = Vec::new();
