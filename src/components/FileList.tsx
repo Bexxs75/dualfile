@@ -1,8 +1,9 @@
-import { memo, useEffect, useRef, type DragEvent, type MouseEvent } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useAppState, useController, useLanguage, useT } from "../app/context";
 import { activeTabOf, visibleEntries, type WinIdx } from "../app/state";
 import { createTranslator, formatBytes, formatDate, type Language } from "../i18n";
 import type { Entry } from "../ipc/types";
+import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, columnTemplate, columnWidthsFor, type ColumnTriple } from "../state/columns";
 import { isArchivePath } from "../state/paths";
 import { fileType, parseSort, type SortKey } from "../state/sort";
 import { EntryIcon, Icon } from "./Icon";
@@ -118,6 +119,61 @@ export function FileList({ w }: { w: WinIdx }) {
   const filter = useAppState((state) => activeTabOf(state, w).filter);
   const active = useAppState((state) => state.active === w);
   const extCol = useAppState((state) => state.settings.extensionColumn === true);
+  const storedWidths = useAppState((state) => state.settings.columnWidths);
+  const mode = extCol ? "ext" : "normal";
+  const savedWidths = columnWidthsFor({ columnWidths: storedWidths }, mode);
+  // Entwurf während des Ziehens bzw. Tastenanpassens; erst beim Loslassen wird gespeichert.
+  const [draft, setDraft] = useState<ColumnTriple | null>(null);
+  const [dragSlot, setDragSlot] = useState<number | null>(null);
+  const draftRef = useRef<ColumnTriple | null>(null);
+  const widths = draft ?? savedWidths;
+  const setLive = (next: ColumnTriple | null) => {
+    draftRef.current = next;
+    setDraft(next);
+  };
+  const commitWidths = () => {
+    const next = draftRef.current;
+    setLive(null);
+    if (!next) return;
+    controller.updateSettings((s) => ({ ...s, columnWidths: { ...s.columnWidths, [mode]: next } }));
+  };
+  const widthAt = (slot: number, value: number): ColumnTriple => {
+    const next: ColumnTriple = [...(draftRef.current ?? savedWidths)];
+    next[slot] = clampColumn(value, COLUMN_DEFAULTS[mode][slot]);
+    return next;
+  };
+  const resetWidth = (slot: number) => {
+    setLive(null);
+    controller.updateSettings((s) => ({ ...s, columnWidths: { ...s.columnWidths, [mode]: widthAt(slot, COLUMN_DEFAULTS[mode][slot]) } }));
+  };
+  const startDrag = (slot: number, event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = widths[slot];
+    setDragSlot(slot);
+    // Handle sits on the column's LEFT edge; dragging it left widens the column so the
+    // divider tracks the cursor (the flexible name column on the left absorbs the change).
+    const move = (e: PointerEvent) => setLive(widthAt(slot, startWidth + startX - e.clientX));
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      setDragSlot(null);
+      commitWidths();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+  const onHandleKey = (slot: number, event: KeyboardEvent<HTMLElement>) => {
+    const delta = event.key === "ArrowLeft" ? COLUMN_STEP : event.key === "ArrowRight" ? -COLUMN_STEP : 0;
+    if (delta === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setLive(widthAt(slot, (draftRef.current ?? savedWidths)[slot] + delta));
+  };
   const spec = parseSort(sort);
   const ref = useRef<HTMLDivElement>(null);
   const focusIndex = Math.min(selection.focus, Math.max(0, entries.length - 1));
@@ -169,6 +225,7 @@ export function FileList({ w }: { w: WinIdx }) {
       tabIndex={0}
       aria-label={`${tr("pane.listLabel")} – ${tr(w === 0 ? "pane.left" : "pane.right")}`}
       aria-multiselectable="true"
+      style={{ "--df-cols": columnTemplate(widths) } as CSSProperties}
       aria-rowcount={entries.length + 1}
       aria-activedescendant={entries.length > 0 ? rowId(w, focusIndex) : undefined}
       onFocus={() => controller.setActive(w)}
@@ -178,9 +235,10 @@ export function FileList({ w }: { w: WinIdx }) {
       }}
     >
       <div role="row" aria-rowindex={1} className={extCol ? "head ext-split" : "head"}>
-        {(extCol ? COLUMNS_EXT : COLUMNS).map((column) => {
+        {(extCol ? COLUMNS_EXT : COLUMNS).map((column, columnIndex) => {
           const sorted = spec.key === column.key;
           const name = tr(column.label);
+          const slot = columnIndex - 1; // Spalte 0 (Name) ist flexibel und nicht ziehbar
           return (
             <span
               key={column.key}
@@ -198,6 +256,30 @@ export function FileList({ w }: { w: WinIdx }) {
                 {name}
                 {sorted ? <Icon name={spec.direction === "asc" ? "sortUp" : "down"} size={12} className="arrow" /> : null}
               </button>
+              {slot >= 0 ? (
+                <span
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label={tr("column.resize", { column: name })}
+                  aria-valuemin={COLUMN_MIN}
+                  aria-valuemax={COLUMN_MAX}
+                  aria-valuenow={widths[slot]}
+                  title={tr("column.resizeReset")}
+                  tabIndex={0}
+                  className={dragSlot === slot ? "col-resize dragging" : "col-resize"}
+                  onPointerDown={(event) => startDrag(slot, event)}
+                  onClick={(event) => event.stopPropagation()}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    resetWidth(slot);
+                  }}
+                  onKeyDown={(event) => onHandleKey(slot, event)}
+                  onKeyUp={(event) => {
+                    if (event.key === "ArrowLeft" || event.key === "ArrowRight") commitWidths();
+                  }}
+                  onBlur={commitWidths}
+                />
+              ) : null}
             </span>
           );
         })}

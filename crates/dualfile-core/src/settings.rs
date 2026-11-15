@@ -51,6 +51,18 @@ pub struct Settings {
     pub pane_color_right: String,
     /// User-remapped keyboard shortcuts (command id → key spec); empty means all defaults.
     pub keybindings: BTreeMap<String, String>,
+    /// Custom file-list column widths (px); empty fields mean the default width.
+    pub column_widths: ColumnWidths,
+}
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(default)]
+pub struct ColumnWidths {
+    /// Widths (px) of the three fixed columns in the normal view: size, type, modified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normal: Option<[u16; 3]>,
+    /// Widths (px) of the three fixed columns in the extension-split view: ext, size, modified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ext: Option<[u16; 3]>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -80,6 +92,7 @@ impl Default for Settings {
             pane_color_left: String::new(),
             pane_color_right: String::new(),
             keybindings: BTreeMap::new(),
+            column_widths: ColumnWidths::default(),
         }
     }
 }
@@ -352,6 +365,12 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         plugins: Vec::new(),
         extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
         keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
+        column_widths: field(
+            &mut obj,
+            "column_widths",
+            d.column_widths.clone(),
+            &mut fixes,
+        ),
         pane_color_left: field(
             &mut obj,
             "pane_color_left",

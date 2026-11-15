@@ -522,6 +522,7 @@ mod tests {
             pane_color_left: String::new(),
             pane_color_right: String::new(),
             keybindings: Default::default(),
+            column_widths: Default::default(),
             session: SessionDto {
                 windows: vec![WindowSessionDto {
                     tabs: vec![TabDto {

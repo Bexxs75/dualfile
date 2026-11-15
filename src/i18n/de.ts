@@ -424,6 +424,8 @@ const de = {
   "column.size": "Größe",
   "column.type": "Typ",
   "column.modified": "Geändert",
+  "column.resize": "{column} breiter/schmaler ziehen",
+  "column.resizeReset": "Doppelklick: Standardbreite",
   "column.ext": "Endung",
   "sort.ascending": "aufsteigend",
   "sort.descending": "absteigend",

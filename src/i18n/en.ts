@@ -427,6 +427,8 @@ const en: Record<keyof typeof de, string> = {
   "column.size": "Size",
   "column.type": "Type",
   "column.modified": "Modified",
+  "column.resize": "Resize {column}",
+  "column.resizeReset": "Double-click: default width",
   "column.ext": "Ext",
   "sort.ascending": "ascending",
   "sort.descending": "descending",

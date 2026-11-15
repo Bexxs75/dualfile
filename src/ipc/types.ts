@@ -429,6 +429,8 @@ export interface Settings {
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
   extensionColumn?: boolean;
+  /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
+  columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
   /** Optional tint (hex) per window; missing/empty = no tint. */
   paneColorLeft?: string;
   paneColorRight?: string;
