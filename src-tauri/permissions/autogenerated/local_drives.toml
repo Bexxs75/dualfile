@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-local-drives"
+description = "Enables the local_drives command without any pre-configured scope."
+commands.allow = ["local_drives"]
+
+[[permission]]
+identifier = "deny-local-drives"
+description = "Denies the local_drives command without any pre-configured scope."
+commands.deny = ["local_drives"]

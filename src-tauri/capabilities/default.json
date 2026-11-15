@@ -11,6 +11,7 @@
     "allow-terminal-resize",
     "allow-terminal-close",
     "allow-ssh-prompt-answer",
+    "allow-local-drives",
     "allow-system-places-list",
     "allow-system-places-import",
     "allow-system-mount-connect",

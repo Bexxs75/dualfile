@@ -60,7 +60,7 @@ export function Toolbar() {
       {iconButton("hidden", tr("menu.view.hidden"), tr("tip.hidden"), () => controller.command("toggleHidden"), showHidden)}
       {iconButton("swap", tr("menu.view.swapPanes"), tr("tip.swapPanes"), () => controller.command("swapPanes"))}
       {iconButton("preview", tr("menu.view.quickView"), tr("tip.quickView"), () => controller.command("quickView"), quickView)}
-      <TerminalShortcutHint>{iconButton("terminal", tr("menu.view.terminal"), tr("tip.terminal"), () => controller.command("terminal"), terminal)}</TerminalShortcutHint>
+      <TerminalShortcutHint>{iconButton("terminal", tr("menu.view.terminal"), tr("hint.terminal.title"), () => controller.command("terminal"), terminal)}</TerminalShortcutHint>
       <HeaderMenu label={tr("header.tools")} items={tools}><Icon name="tools" />{tr("header.tools")}</HeaderMenu>
       <button type="button" className="command-placeholder" onClick={openPalette} aria-haspopup="dialog" aria-expanded={palette}><Icon name="search" /><span>{tr("header.command")}</span><kbd>{tr("header.commandKey")}</kbd></button>
       <span className="sp" />

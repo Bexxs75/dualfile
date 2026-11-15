@@ -13,6 +13,7 @@ const COMMANDS: &[&str] = &[
     "update_cancel",
     "release_open",
     "ssh_prompt_answer",
+    "local_drives",
     "system_places_list",
     "system_places_import",
     "system_mount_connect",

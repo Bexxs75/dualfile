@@ -531,6 +531,13 @@ test("close acknowledgement is registered in build, handler, permissions and mai
 });
 
 
+test("local-drives command is registered, permissioned and granted in the main capability", () => {
+  expect(closeBuild).toContain('"local_drives"');
+  expect(closeHandler).toContain("commands::local_drives");
+  expect(JSON.parse(closeCapability).permissions).toContain("allow-local-drives");
+});
+
+
 test("free-space command has explicit main-window permission and registration", () => {
   expect(closeBuild).toContain('"space_free"');
   expect(closeHandler).toContain("commands::space_free");

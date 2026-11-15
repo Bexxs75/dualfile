@@ -69,7 +69,8 @@ fn unescape(field: &str) -> String {
 }
 
 /// Parse the mount table text (so it is testable) into browsable drives, de-duplicated and bounded.
-pub fn parse_mounts(table: &str) -> Vec<Drive> {
+/// `self_mount` is the running AppImage's own mount point (`$APPDIR`), dropped so it is not shown as a drive.
+pub fn parse_mounts(table: &str, self_mount: Option<&str>) -> Vec<Drive> {
     let mut out: Vec<Drive> = Vec::new();
     for line in table.lines() {
         let mut fields = line.split_whitespace();
@@ -84,6 +85,9 @@ pub fn parse_mounts(table: &str) -> Vec<Drive> {
             continue;
         }
         let point = unescape(point_raw);
+        if self_mount == Some(point.as_str()) {
+            continue;
+        }
         let name = Path::new(&point)
             .file_name()
             .and_then(|n| n.to_str())
@@ -103,7 +107,7 @@ pub fn parse_mounts(table: &str) -> Vec<Drive> {
 /// Filesystems mounted on this machine. Empty when `/proc/mounts` cannot be read.
 pub fn local_drives() -> Vec<Drive> {
     match std::fs::read_to_string("/proc/mounts") {
-        Ok(table) => parse_mounts(&table),
+        Ok(table) => parse_mounts(&table, std::env::var("APPDIR").ok().as_deref()),
         Err(_) => Vec::new(),
     }
 }
@@ -125,7 +129,7 @@ tmpfs /run tmpfs rw 0 0
 overlay /var/lib/docker/overlay2/x overlay rw 0 0
 cgroup2 /sys/fs/cgroup cgroup2 rw 0 0
 ";
-        let drives = parse_mounts(table);
+        let drives = parse_mounts(table, None);
         assert_eq!(
             drives,
             vec![
@@ -148,6 +152,16 @@ cgroup2 /sys/fs/cgroup cgroup2 rw 0 0
     #[test]
     fn duplicate_mount_points_appear_once() {
         let table = "a /mnt/x ext4 rw 0 0\nb /mnt/x ext4 rw 0 0\n";
-        assert_eq!(parse_mounts(table).len(), 1);
+        assert_eq!(parse_mounts(table, None).len(), 1);
+    }
+
+    #[test]
+    fn drops_the_running_appimage_self_mount() {
+        let table = "\
+/dev/sda2 / btrfs rw 0 0
+Dualfile.AppImage /tmp/.mount_DualfiAbc123 fuse.Dualfile.AppImage ro 0 0
+";
+        let drives = parse_mounts(table, Some("/tmp/.mount_DualfiAbc123"));
+        assert_eq!(drives.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), vec!["/"]);
     }
 }
