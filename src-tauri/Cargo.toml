@@ -1,6 +1,6 @@
 [package]
 name = "dualfile"
-version = "0.1.0"
+version = "0.2.0"
 description = "Dualfile: two-pane file manager (Tauri shell around dualfile-core)"
 edition = "2021"
 publish = false

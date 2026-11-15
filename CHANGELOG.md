@@ -5,15 +5,55 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-15
+
 ### Added
 
-- MIT license, English project overview and contribution/security documentation.
-- GitHub issue and pull-request templates, Linux CI and draft-release workflows.
-- Offline updater-manifest generator and tests; the release workflow now signs the final AppImage.
-- UPD1 native updater, tray and user-local desktop-entry commands; persisted settings and a mocked, tested TypeScript policy. UPD1b connects the approved settings groups, update banner, release notes, cancellable download progress and start-menu prompt to the runtime, with DE/EN text and DOM tests. Native tests are pending.
-- UPD1: native commands for the updater, tray and user-local start-menu entry; persisted settings and tested TypeScript flow control. UPD1b wires the released settings groups, update banner, release notes, cancellable download progress and start-menu prompt (DE/EN text, DOM tests) into the runtime. Native tests pending.
-- Distribution: Linux AppImage and tar.gz for x86_64 and arm64 (Raspberry Pi). The draft-release workflow builds each architecture on a native runner, signs both AppImages and publishes one `latest.json` covering `linux-x86_64` and `linux-aarch64`.
-- Offline dependency-license inventory generator and screenshot capture checklist.
+- Native **WebDAV** connections (read and write) as a first-class protocol. HTTPS verifies the
+  certificate against the system root store, and self-signed / internal-CA servers go through the
+  same fingerprint-confirmation flow as FTPS/SFTP; the connection form has a base-path field, an
+  HTTPS toggle and an explicit confirmation for unencrypted (http) connections.
+- **Global content search** across many files, reachable from the command palette; results navigate
+  into the containing folder.
+- **Rebindable keyboard shortcuts** — an editor in Settings remaps the function keys and Ctrl
+  combinations; structural keys stay fixed and reserved shortcuts are protected.
+- **Metadata-based batch rename** with EXIF (capture date, camera) and ID3 (artist/title/album/track)
+  placeholders.
+- **Per-pane window colours** — a subtle, freely chosen tint per pane.
+- **Extension column** in the Total-Commander style (name · extension · size · date), off by default.
+- Mounted external media (USB) appear as **devices** in the places bar, refreshed when the window
+  regains focus.
+- **Refresh button per pane**.
+- Tab **context menu** (new tab / close / close others), **pin**, and **lock to folder**; tabs are
+  restored on start.
+- `known_hosts` entries are additionally suggested while connecting.
+- Offline updater-manifest generator and tests; the release workflow signs the final AppImage.
+- Native updater, tray and user-local start-menu entry; persisted settings and a tested TypeScript
+  update flow (update banner, release notes, cancellable download progress, start-menu prompt;
+  DE/EN text, DOM tests).
+- Distribution: Linux AppImage and tar.gz for x86_64 and arm64 (Raspberry Pi); the draft-release
+  workflow builds each architecture on a native runner, signs both AppImages and publishes one
+  `latest.json` covering `linux-x86_64` and `linux-aarch64`.
+- Offline dependency-license inventory generator and screenshot-capture checklist.
+- MIT license, English project overview and contribution/security documentation; GitHub issue and
+  pull-request templates; Linux CI and draft-release workflows.
+
+### Changed
+
+- The default UI font is now **Inter** (self-hosted, CSP-compliant); the monospace font stays
+  IBM Plex Mono.
+- SSH-config import follows **relative and nested `Include`** directives like OpenSSH, so hosts from
+  included files are found.
+- Remote servers are distinguishable in tabs (host/icon); job names are localized.
+
+### Fixed
+
+- Mouse-wheel scrolling in large folders no longer snaps the selection back into view.
+- Opening a remote file now downloads it to a private temporary copy and opens it, instead of
+  reporting a misleading "unknown error".
+- Connecting now refreshes the pane to the remote location.
+- Core hardening: a copy from a remote source can no longer exceed the size the server advertised
+  (guard against a lying server over-filling the staging file).
 
 ## [0.1.0] - Development baseline
 
