@@ -25,9 +25,12 @@ russh = { version = "0.65", default-features = false, features = ["ring", "rsa"]
 russh-sftp = "3"
 tokio = { version = "1", default-features = false, features = ["rt", "net", "time", "sync", "io-util"] }
 
-# WebDAV: streaming XML parser for PROPFIND responses (the HTTP transport is a thin, separate
-# adapter added with the connector). Pure Rust, no entity expansion.
+# WebDAV: streaming XML parser for PROPFIND responses. Pure Rust, no entity expansion.
 quick-xml = "0.38"
+# WebDAV HTTP(S) transport: blocking HTTP/1.1 client on the same rustls+ring stack as above.
+# Pinned to 2.x: its 3.x line (via ureq-proto) rejects WebDAV extension methods (PROPFIND/MKCOL/
+# MOVE/…). The "tls" feature is rustls 0.23 + ring; default-features off keeps out OpenSSL/native-tls.
+ureq = { version = "2.12.1", default-features = false, features = ["tls"] }
 
 [target.'cfg(unix)'.dependencies]
 # Anchored, no-follow config reads: prevent symlink swaps and blocking special files.

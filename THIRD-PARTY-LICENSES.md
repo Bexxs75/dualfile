@@ -8,7 +8,7 @@ platform-specific dependencies. This is an inventory, not a list of files shippe
 Rust metadata: `vendor/*/Cargo.toml`; npm: lockfile, falling back to matching installed package metadata.
 Use `--vendor DIR` for an offline metadata mirror. No downloads or dependency resolution are performed.
 
-Packages: **851**. Unknown: **0**.
+Packages: **855**. Unknown: **0**.
 
 UNKNOWN is a release-review blocker: provide matching source metadata and regenerate before distribution.
 License expressions are upstream declarations; alternatives (OR) and exceptions need individual review.
@@ -52,6 +52,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | autocfg | 1.5.1 | Apache-2.0 OR MIT |
 | Cargo | base16ct | 1.0.0 | Apache-2.0 OR MIT |
 | Cargo | base64 | 0.21.7 | MIT OR Apache-2.0 |
+| Cargo | base64 | 0.22.1 | MIT OR Apache-2.0 |
 | Cargo | base64 | 0.23.1 | MIT OR Apache-2.0 |
 | Cargo | base64ct | 1.8.3 | Apache-2.0 OR MIT |
 | Cargo | bcrypt-pbkdf | 0.11.0 | MIT OR Apache-2.0 |
@@ -579,6 +580,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | unicode-segmentation | 1.13.3 | MIT OR Apache-2.0 |
 | Cargo | universal-hash | 0.6.1 | MIT OR Apache-2.0 |
 | Cargo | untrusted | 0.9.0 | ISC |
+| Cargo | ureq | 2.12.1 | MIT OR Apache-2.0 |
 | Cargo | url | 2.5.8 | MIT OR Apache-2.0 |
 | Cargo | urlencoding | 2.1.3 | MIT |
 | Cargo | urlpattern | 0.6.0 | MIT |
@@ -610,6 +612,8 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | Cargo | web_atoms | 0.3.0 | MIT OR Apache-2.0 |
 | Cargo | webkit2gtk | 2.0.2 | MIT |
 | Cargo | webkit2gtk-sys | 2.0.2 | MIT |
+| Cargo | webpki-roots | 0.26.11 | CDLA-Permissive-2.0 |
+| Cargo | webpki-roots | 1.0.12 | CDLA-Permissive-2.0 |
 | Cargo | webview2-com | 0.39.1 | MIT |
 | Cargo | webview2-com-macros | 0.8.1 | MIT |
 | Cargo | webview2-com-sys | 0.39.1 | MIT |
