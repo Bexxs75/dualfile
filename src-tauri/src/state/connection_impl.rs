@@ -175,14 +175,15 @@ impl AppState {
         };
         let transport_changed =
             existing.is_some_and(|i| current.connections[i].transport != profile.transport);
+        let same_server = |old: &ConnectionProfile| {
+            old.host.eq_ignore_ascii_case(&profile.host)
+                && old.port == profile.port
+                && pin_protocol(old) == pin_protocol(&profile)
+        };
+        let server_changed = existing.is_some_and(|i| !same_server(&current.connections[i]));
         if let Some(index) = existing {
-            let same_server = |old: &ConnectionProfile| {
-                old.host.eq_ignore_ascii_case(&profile.host)
-                    && old.port == profile.port
-                    && pin_protocol(old) == pin_protocol(&profile)
-            };
             let old = &current.connections[index];
-            if same_server(old)
+            if !server_changed
                 || (old.protocol == ConnectionProtocol::Sftp
                     && profile.protocol == ConnectionProtocol::Sftp
                     && (old.transport == SshTransport::Openssh
@@ -192,11 +193,13 @@ impl AppState {
             }
         }
         profile.validate().map_err(invalid)?;
-        // "Save the password" switched off: the stored one goes too, before the profile is
-        // written. If the keychain refuses, the profile stays as it was (still "save"), so it
-        // never claims a removal that did not happen.
-        let turns_off =
-            existing.is_some_and(|i| current.connections[i].save_secret) && !profile.save_secret;
+        // "Save the password" switched off, or the profile now points at another server: the
+        // stored password goes too, before the profile is written, so it never travels to a
+        // server the user did not save it for. If the keychain refuses, the profile stays as it
+        // was (still "save"), so it never claims a removal that did not happen. Only a profile
+        // that had saved a secret gets here (deleting nothing is not an error either way).
+        let clear_secret = existing.is_some_and(|i| current.connections[i].save_secret)
+            && (!profile.save_secret || server_changed);
         let previous = existing.map(|i| current.connections[i].clone());
         // Reserve this profile across potentially blocking keychain/backend calls.
         lock(&self.connections.connecting).insert(profile.id.clone());
@@ -205,7 +208,7 @@ impl AppState {
             id: profile.id.clone(),
         };
         drop(_guard);
-        if turns_off && !self.connections.vault.delete(&secret_key(&profile.id)) {
+        if clear_secret && !self.connections.vault.delete(&secret_key(&profile.id)) {
             return Err(secret_removal_failed());
         }
         let _settings_guard = lock(&self.connections.settings_lock);
@@ -223,7 +226,7 @@ impl AppState {
         // The profile changed: an open question about its old fingerprint is void.
         lock(&self.connections.pending).remove(&profile.id);
         drop(_settings_guard);
-        if transport_changed {
+        if transport_changed || server_changed {
             self.drop_connection(&profile.id);
         }
         Ok(self.entry_for(&profile))
@@ -316,6 +319,8 @@ impl AppState {
             ));
         }
         lock(&self.connections.pending).remove(profile_id);
+        // An open session still runs on the certificate that was just forgotten.
+        self.drop_connection(profile_id);
         Ok(())
     }
 
@@ -1169,6 +1174,38 @@ mod tests {
         f.state.connection_disconnect(&id).unwrap();
         assert!(f.keychain.keys().is_empty());
         f.state.connection_delete(&id).unwrap();
+    }
+
+    #[test]
+    fn reset_trust_closes_the_open_connection() {
+        let f = fixture();
+        let (id, _) = f.connect_ftps();
+        assert!(f.state.connections_list()[0].connected);
+        f.state.connection_reset_trust(&id).unwrap();
+        assert!(!f.state.connections_list()[0].connected);
+        assert!(f.state.router.remote_ids().is_empty());
+    }
+
+    #[test]
+    fn changing_the_server_drops_the_saved_secret_and_connection_but_renaming_keeps_it() {
+        let f = fixture();
+        f.ftp.state().cert.as_mut().unwrap().chain = ChainStatus::Valid;
+        let mut d = dto("FTPS", ConnectionProtocol::Ftps);
+        d.save_secret = true;
+        let id = f.save(d.clone());
+        f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        assert_eq!(f.keychain.keys(), [format!("dualfile:{id}")]);
+        d.id = id.clone();
+        // same server, other name: nothing is lost
+        d.name = "Renamed".into();
+        f.state.connection_save(d.clone()).unwrap();
+        assert_eq!(f.keychain.keys(), [format!("dualfile:{id}")]);
+        assert!(f.state.connections_list()[0].connected);
+        // other host, still "save": the old password is gone and so is the session
+        d.host = "other.example.org".into();
+        f.state.connection_save(d).unwrap();
+        assert!(f.keychain.keys().is_empty());
+        assert!(!f.state.connections_list()[0].connected);
     }
 
     #[test]

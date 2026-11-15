@@ -9,6 +9,11 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 - Optional quick-access bar above the panes with local drives and bookmarks; one click opens the place in the active pane. Off by default (Settings).
 
+### Security
+
+- A saved password is discarded when a profile is changed to another server (host, port or protocol), so it is never sent to the new server.
+- Resetting trust now also closes the open session that still used the forgotten certificate.
+
 ### Fixed
 
 - The terminal keyboard shortcut (Ctrl+`) now works on keyboard layouts where the backtick is a dead/accent key (e.g. German): the physical top-left key is matched regardless of layout.
