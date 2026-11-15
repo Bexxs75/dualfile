@@ -2,7 +2,7 @@
 //! is handed over separately as a `Secret` and never stored.
 
 use crate::transport::{Limits, Timeouts};
-pub use dualfile_core::connections::{valid_ssh_endpoint, SshTransport};
+pub use dualfile_core::connections::{valid_ssh_endpoint, valid_webdav_host, SshTransport};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,6 +62,66 @@ impl FtpProfile {
         }
         if self.tls == TlsMode::None && !self.allow_plaintext {
             return Err("Unverschlüsselte Verbindungen brauchen eine ausdrückliche Bestätigung");
+        }
+        if let Some(folder) = &self.start_folder {
+            if !folder.starts_with('/') || folder.chars().any(char::is_control) {
+                return Err("Ungültiger Startordner");
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Connection profile for a WebDAV server (what the settings keep; no password in here).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WebdavProfile {
+    /// Name shown to the user.
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    /// Empty = anonymous.
+    pub user: String,
+    /// Base path of the share on the server, e.g. `/dav` (default `/`).
+    pub base_path: String,
+    /// `true` = https (the default), `false` = http (needs `allow_plaintext`).
+    pub tls: bool,
+    /// The caller's explicit confirmation of an unencrypted connection. Without it `tls: false`
+    /// is refused.
+    #[serde(default)]
+    pub allow_plaintext: bool,
+    /// Folder shown after connecting; `None` = `/` below the base path.
+    #[serde(default)]
+    pub start_folder: Option<String>,
+}
+
+impl WebdavProfile {
+    pub fn default_port(tls: bool) -> u16 {
+        if tls {
+            443
+        } else {
+            80
+        }
+    }
+
+    /// Checks the profile before any network use.
+    pub fn validate(&self) -> Result<(), &'static str> {
+        // Strict host check: the host becomes the server part of the request URL, next to the
+        // credentials, so userinfo (`@`), ports, paths, query and fragment must be rejected or the
+        // Authorization header could be sent to another origin.
+        if !valid_webdav_host(&self.host) {
+            return Err("Ungültiger Servername");
+        }
+        if self.port == 0 {
+            return Err("Ungültiger Port");
+        }
+        if self.user.len() > 256 || self.user.chars().any(char::is_control) {
+            return Err("Ungültiger Benutzername");
+        }
+        if !self.tls && !self.allow_plaintext {
+            return Err("Unverschlüsselte Verbindungen brauchen eine ausdrückliche Bestätigung");
+        }
+        if !self.base_path.starts_with('/') || self.base_path.chars().any(char::is_control) {
+            return Err("Ungültiger Basispfad");
         }
         if let Some(folder) = &self.start_folder {
             if !folder.starts_with('/') || folder.chars().any(char::is_control) {
@@ -202,7 +262,7 @@ mod tests {
             |p| p.host = "a b".into(),
             |p| p.host = "a\r\nb".into(),
             |p| p.port = 0,
-            |p| p.user = "u\nPASS x".into(),
+            |p| p.user = "u\u{1}".into(),
             |p| p.start_folder = Some("rel".into()),
             |p| p.start_folder = Some("/a\nb".into()),
         ] {
@@ -237,5 +297,43 @@ mod ssh_profile_tests {
         profile.host = "nas".into();
         profile.user = "-bad".into();
         assert!(profile.validate().is_err());
+    }
+
+    fn webdav() -> WebdavProfile {
+        WebdavProfile {
+            name: "dav".into(),
+            host: "cloud.example.org".into(),
+            port: 443,
+            user: "u".into(),
+            base_path: "/dav".into(),
+            tls: true,
+            allow_plaintext: false,
+            start_folder: Some("/docs".into()),
+        }
+    }
+
+    #[test]
+    fn webdav_profile_validates_and_refuses_bad_values() {
+        assert!(webdav().validate().is_ok());
+        assert_eq!(WebdavProfile::default_port(true), 443);
+        assert_eq!(WebdavProfile::default_port(false), 80);
+        let mut p = webdav();
+        p.tls = false;
+        assert!(p.validate().is_err(), "plain http needs the explicit flag");
+        p.allow_plaintext = true;
+        assert!(p.validate().is_ok());
+        for mutate in [
+            (|p: &mut WebdavProfile| p.host.clear()) as fn(&mut WebdavProfile),
+            |p| p.host = "a/b".into(),
+            |p| p.host = "a".repeat(254),
+            |p| p.port = 0,
+            |p| p.base_path = "dav".into(),
+            |p| p.user = "u\n".replace("\\n", "\n") + "\u{1}",
+            |p| p.start_folder = Some("docs".into()),
+        ] {
+            let mut p = webdav();
+            mutate(&mut p);
+            assert!(p.validate().is_err());
+        }
     }
 }

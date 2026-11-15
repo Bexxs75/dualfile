@@ -13,6 +13,8 @@
 
 use crate::webdavvfs::{WebdavResponse, WebdavTransport};
 use dualfile_core::error::{Error, Result};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 const USER_AGENT: &str = "Dualfile-WebDAV/0.1";
@@ -26,6 +28,10 @@ pub struct UreqTransport {
     origin: String,
     /// Pre-built `Basic <base64>` header value, or `None` for an anonymous connection.
     auth: Option<String>,
+    /// Set once the connection is closed. Because WebDAV is stateless HTTP there is no socket to
+    /// drop, so a disconnect must be enforced here: every later request — including a pending
+    /// write's commit, which still holds a clone of this transport — is refused.
+    closed: Arc<AtomicBool>,
 }
 
 impl UreqTransport {
@@ -45,11 +51,16 @@ impl UreqTransport {
             agent,
             origin: origin.trim_end_matches('/').to_owned(),
             auth,
+            closed: Arc::new(AtomicBool::new(false)),
         }
     }
 }
 
 impl WebdavTransport for UreqTransport {
+    fn close(&self) {
+        self.closed.store(true, Ordering::Relaxed);
+    }
+
     fn request(
         &self,
         method: &str,
@@ -57,6 +68,11 @@ impl WebdavTransport for UreqTransport {
         headers: &[(&str, &str)],
         body: Option<Vec<u8>>,
     ) -> Result<WebdavResponse> {
+        // A disconnect revokes every not-yet-sent request, so a queued/paused job or a pending write
+        // commit cannot keep acting on the server after the connection was closed.
+        if self.closed.load(Ordering::Relaxed) {
+            return Err(Error::Disconnected);
+        }
         let uri = format!("{}{}", self.origin, encode_path(path));
         let mut request = self.agent.request(method, &uri);
         if let Some(auth) = &self.auth {
@@ -362,6 +378,29 @@ mod tests {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "datei.txt");
         assert_eq!(entries[0].size, 7);
+    }
+
+    #[test]
+    fn close_revokes_every_later_request() {
+        // WD-4A-02: after close() no request may reach the server, even though WebDAV keeps no
+        // socket. No mock is needed — a revoked transport must fail before touching the network.
+        let t = UreqTransport::new("http://127.0.0.1:1", None, None);
+        t.close();
+        match t.request("GET", "/dav/x", &[], None) {
+            Err(Error::Disconnected) => {}
+            other => panic!(
+                "expected Disconnected after close, got {:?}",
+                other.map(|_| "ok")
+            ),
+        }
+        // A PUT (write commit) is refused the same way.
+        match t.request("PUT", "/dav/x", &[], Some(b"data".to_vec())) {
+            Err(Error::Disconnected) => {}
+            other => panic!(
+                "expected Disconnected after close, got {:?}",
+                other.map(|_| "ok")
+            ),
+        }
     }
 
     #[test]

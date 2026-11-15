@@ -244,7 +244,10 @@ pub fn sftp_profile(p: &ConnectionProfile) -> SftpProfile {
 /// The pin protocol a profile's server is pinned under (plain FTP has no pin).
 pub fn pin_protocol(p: &ConnectionProfile) -> Option<PinProtocol> {
     match p.protocol {
-        ConnectionProtocol::System | ConnectionProtocol::Ftp | ConnectionProtocol::Smb => None,
+        ConnectionProtocol::System
+        | ConnectionProtocol::Ftp
+        | ConnectionProtocol::Smb
+        | ConnectionProtocol::Webdav => None,
         ConnectionProtocol::Ftps => Some(PinProtocol::Ftps),
         ConnectionProtocol::Sftp => Some(PinProtocol::Sftp),
     }
@@ -261,7 +264,7 @@ fn core_protocol(protocol: Protocol) -> Option<PinProtocol> {
     match protocol {
         Protocol::Ftps => Some(PinProtocol::Ftps),
         Protocol::Sftp => Some(PinProtocol::Sftp),
-        Protocol::Smb => None,
+        Protocol::Smb | Protocol::Webdav => None,
     }
 }
 
@@ -419,6 +422,11 @@ pub trait ConnectionBackend: Send + Sync {
         profile: dualfile_remote::smb::SmbProfile,
         secret: Secret,
     ) -> Result<ConnectionInfo, ConnectError>;
+    fn connect_webdav(
+        &self,
+        profile: dualfile_remote::profile::WebdavProfile,
+        secret: Secret,
+    ) -> Result<ConnectionInfo, ConnectError>;
     fn disconnect(&self, id: &str) -> bool;
     fn disconnect_all(&self);
     fn is_connected(&self, id: &str) -> bool;
@@ -448,6 +456,13 @@ impl<C: Connector, S: SftpConnector> ConnectionBackend for ConnectionManager<C, 
         secret: Secret,
     ) -> Result<ConnectionInfo, ConnectError> {
         ConnectionManager::connect_smb(self, profile, secret)
+    }
+    fn connect_webdav(
+        &self,
+        profile: dualfile_remote::profile::WebdavProfile,
+        secret: Secret,
+    ) -> Result<ConnectionInfo, ConnectError> {
+        ConnectionManager::connect_webdav(self, profile, secret)
     }
     fn disconnect(&self, id: &str) -> bool {
         ConnectionManager::disconnect(self, id)

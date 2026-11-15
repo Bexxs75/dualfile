@@ -18,7 +18,9 @@
 //! `propstat` blocks with a 2xx status, and a resource with a non-2xx response status is dropped.
 
 use dualfile_core::error::{Error, Result};
-use dualfile_core::vfs::{Caps, Entry, EntryKind, ReplaceMode, VPath, Vfs, WriteFinish, WriteMode};
+use dualfile_core::vfs::{
+    Caps, Entry, EntryKind, ReplaceMode, Scheme, VPath, Vfs, WriteFinish, WriteMode,
+};
 use std::io::Read;
 use std::sync::Arc;
 
@@ -46,6 +48,11 @@ pub trait WebdavTransport: Send + Sync {
         headers: &[(&str, &str)],
         body: Option<Vec<u8>>,
     ) -> Result<WebdavResponse>;
+
+    /// Permanently revoke the transport: after this, every `request` must fail. The default is a
+    /// no-op (for fakes); the real transport refuses all later requests. Called when the connection
+    /// is disconnected, so a lingering handle cannot keep acting on the server.
+    fn close(&self) {}
 }
 
 const PROPFIND_BODY: &[u8] = br#"<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:"><prop><resourcetype/><getcontentlength/></prop></propfind>"#;
@@ -54,6 +61,9 @@ pub struct WebdavVfs {
     transport: Arc<dyn WebdavTransport>,
     /// Base path of the connection on the server (e.g. "/dav"), without a trailing slash.
     base: String,
+    /// Connection id this back end is registered under (`Vfs::remote_endpoint`); `None` for a
+    /// stand-alone instance.
+    conn_id: Option<String>,
 }
 
 impl WebdavVfs {
@@ -61,7 +71,20 @@ impl WebdavVfs {
         Self {
             transport,
             base: normalize_base(base),
+            conn_id: None,
         }
+    }
+
+    /// Names the connection this back end serves, so the router accepts it.
+    pub fn with_connection(mut self, id: &str) -> Self {
+        self.conn_id = Some(id.to_owned());
+        self
+    }
+
+    /// Revoke the underlying transport, so no later request (an operation or a pending write commit)
+    /// can reach the server once the connection has been disconnected.
+    pub fn close(&self) {
+        self.transport.close();
     }
 
     /// Server path for a VFS path. The VFS path already holds real (decoded) names, so it is not
@@ -553,6 +576,12 @@ impl WebdavVfs {
         if resp.status == 404 {
             return Err(Error::NotFound(missing.path().to_path_buf()));
         }
+        // An auth failure must surface as PermissionDenied, not as a generic "not 207": the connect
+        // probe uses it to tell a wrong password ("Anmeldung fehlgeschlagen") from an unreachable
+        // server.
+        if resp.status == 401 || resp.status == 403 {
+            return Err(status_to_err(resp.status, missing));
+        }
         // PROPFIND must answer 207 Multi-Status; a 200/206/other "success" (e.g. a 206 partial body
         // that parses as a well-formed subset) must not pass as a complete listing.
         if resp.status != 207 {
@@ -574,6 +603,10 @@ impl WebdavVfs {
 }
 
 impl Vfs for WebdavVfs {
+    fn remote_endpoint(&self) -> Option<(Scheme, &str)> {
+        self.conn_id.as_deref().map(|id| (Scheme::Webdav, id))
+    }
+
     fn list(&self, p: &VPath) -> Result<Vec<Entry>> {
         let path = self.server_path(p);
         let responses = self.propfind(&path, 1, p)?;

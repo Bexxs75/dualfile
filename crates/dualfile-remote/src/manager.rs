@@ -135,6 +135,17 @@ impl<T: SftpTransport> Closable for SftpVfs<T> {
     }
 }
 
+/// WebDAV is stateless HTTP, so `close` cannot drop a socket; instead it revokes the transport so no
+/// later request (including a queued job or a pending write commit) can still reach the server.
+impl Closable for crate::webdavvfs::WebdavVfs {
+    fn is_live(&self) -> bool {
+        true
+    }
+    fn close(&self) {
+        crate::webdavvfs::WebdavVfs::close(self);
+    }
+}
+
 struct Session {
     info: ConnectionInfo,
     vfs: Arc<dyn Closable>,
@@ -267,6 +278,57 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
                 port: profile.port,
                 user: profile.user,
                 protocol: Protocol::Smb,
+                tls: None,
+                root,
+            };
+            Ok((info, vfs as Arc<dyn Closable>))
+        })();
+        self.finish(outcome)
+    }
+
+    pub fn connect_webdav(
+        &self,
+        profile: crate::profile::WebdavProfile,
+        secret: Secret,
+    ) -> Result<ConnectionInfo, ConnectError> {
+        profile.validate().map_err(ConnectError::Invalid)?;
+        self.reserve()?;
+        let outcome = (|| {
+            let scheme_str = if profile.tls { "https" } else { "http" };
+            let origin = format!("{scheme_str}://{}:{}", profile.host, profile.port);
+            let user = (!profile.user.is_empty()).then_some(profile.user.as_str());
+            let password = user.map(|_| secret.expose());
+            let transport = Arc::new(crate::webdav_transport::UreqTransport::new(
+                &origin, user, password,
+            ));
+            let id = self.next_id();
+            let vfs = Arc::new(
+                crate::webdavvfs::WebdavVfs::new(transport, &profile.base_path)
+                    .with_connection(&id),
+            );
+            let root = VPath::webdav(&id, profile.start_folder.as_deref().unwrap_or("/"))
+                .map_err(|_| ConnectError::Invalid("Ungültiger Startordner"))?;
+            // Verify reachability and credentials with one PROPFIND on the base before reporting
+            // success, so a wrong password is not accepted and later stored, and a reconnect with
+            // corrected credentials builds a fresh transport instead of reusing a failed one.
+            let base = VPath::webdav(&id, "/")
+                .map_err(|_| ConnectError::Invalid("Ungültiger WebDAV-Basispfad"))?;
+            vfs.stat(&base).map_err(|e| match e {
+                dualfile_core::error::Error::PermissionDenied(_) => {
+                    ConnectError::Invalid("WebDAV-Anmeldung fehlgeschlagen")
+                }
+                _ => ConnectError::Invalid("WebDAV-Server nicht erreichbar"),
+            })?;
+            self.router.register_remote(&id, vfs.clone()).map_err(|_| {
+                ConnectError::Invalid("Die Verbindung konnte nicht angemeldet werden")
+            })?;
+            let info = ConnectionInfo {
+                id,
+                name: profile.name,
+                host: profile.host,
+                port: profile.port,
+                user: profile.user,
+                protocol: Protocol::Webdav,
                 tls: None,
                 root,
             };

@@ -1155,3 +1155,140 @@ fn manager_reports_transport_loss_and_recovery_without_forgetting_session() {
     manager.disconnect(&info.id);
     assert!(!manager.is_live(&info.id));
 }
+
+#[test]
+fn manager_connects_a_webdav_profile_and_registers_it() {
+    use crate::profile::WebdavProfile;
+    use std::io::{BufRead, BufReader, Read, Write};
+
+    // One-shot loopback WebDAV server that answers the connect probe (a PROPFIND on the base) with a
+    // 207 collection, so `connect_webdav` can verify reachability over a real socket.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let l = line.trim_end();
+                if l.is_empty() {
+                    break;
+                }
+                if let Some((k, v)) = l.split_once(':') {
+                    if k.trim().eq_ignore_ascii_case("content-length") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+            }
+            let mut body = vec![0u8; len];
+            let _ = reader.read_exact(&mut body);
+            let xml = concat!(
+                r#"<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/</d:href>"#,
+                r#"<d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>"#,
+                r#"<d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>"#,
+            );
+            let resp = format!(
+                "HTTP/1.1 207 Multi-Status\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                xml.len(),
+                xml
+            );
+            let _ = stream.write_all(resp.as_bytes());
+        }
+    });
+
+    let (m, router, _) = manager(&FakeServer::new(), 2);
+    let profile = WebdavProfile {
+        name: "dav".into(),
+        host: "127.0.0.1".into(),
+        port,
+        user: String::new(),
+        base_path: "/dav".into(),
+        tls: false,
+        allow_plaintext: true,
+        start_folder: Some("/docs".into()),
+    };
+    let info = m.connect_webdav(profile.clone(), Secret::new("")).unwrap();
+    assert_eq!(info.protocol, Protocol::Webdav);
+    assert_eq!(info.root, VPath::webdav(&info.id, "/docs").unwrap());
+    assert!(m.is_connected(&info.id));
+    assert!(m.is_live(&info.id));
+    assert!(router.vfs_for(&info.root).is_ok());
+
+    // Plaintext without the explicit flag is refused before any network use.
+    let mut bad = profile.clone();
+    bad.allow_plaintext = false;
+    assert!(matches!(
+        m.connect_webdav(bad, Secret::new("")),
+        Err(ConnectError::Invalid(_))
+    ));
+    // An unreachable host fails the connect probe instead of reporting a false success.
+    let mut dead = profile;
+    dead.port = 1;
+    assert!(matches!(
+        m.connect_webdav(dead, Secret::new("")),
+        Err(ConnectError::Invalid(_))
+    ));
+
+    assert!(m.disconnect(&info.id));
+    assert!(!m.is_connected(&info.id));
+}
+
+#[test]
+fn manager_webdav_wrong_password_fails_connect_with_auth_message() {
+    // WD-4A-03/04: a 401 on the connect probe must fail the connect as "Anmeldung fehlgeschlagen"
+    // (not "Server nicht erreichbar"), and must not register a session or router entry.
+    use crate::profile::WebdavProfile;
+    use std::io::{BufRead, BufReader, Read, Write};
+
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            let mut len = 0usize;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let l = line.trim_end();
+                if l.is_empty() {
+                    break;
+                }
+                if let Some((k, v)) = l.split_once(':') {
+                    if k.trim().eq_ignore_ascii_case("content-length") {
+                        len = v.trim().parse().unwrap_or(0);
+                    }
+                }
+            }
+            let mut body = vec![0u8; len];
+            let _ = reader.read_exact(&mut body);
+            let _ = stream.write_all(
+                b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            );
+        }
+    });
+
+    let (m, router, _) = manager(&FakeServer::new(), 2);
+    let profile = WebdavProfile {
+        name: "dav".into(),
+        host: "127.0.0.1".into(),
+        port,
+        user: "u".into(),
+        base_path: "/dav".into(),
+        tls: false,
+        allow_plaintext: true,
+        start_folder: None,
+    };
+    match m.connect_webdav(profile, Secret::new("wrong")) {
+        Err(ConnectError::Invalid(msg)) => {
+            assert_eq!(msg, "WebDAV-Anmeldung fehlgeschlagen")
+        }
+        other => panic!("expected auth failure, got {other:?}"),
+    }
+    // The probe runs before register_remote, so a failed connect leaves no router entry; a fresh
+    // connect still has both slots free (the reservation was rolled back).
+    let _ = &router;
+    assert!(!m.is_connected("1"));
+    assert!(!m.is_connected("2"));
+}

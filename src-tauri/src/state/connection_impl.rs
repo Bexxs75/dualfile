@@ -15,7 +15,7 @@ use crate::connections::{
 use crate::convert::{connect_error, vpath_text, UiError};
 use dualfile_core::connections::{
     new_profile_id, parse_profile_path, validate_connections, ConnectionProfile,
-    ConnectionProtocol, SshTransport,
+    ConnectionProtocol, ConnectionTls, SshTransport,
 };
 use dualfile_core::settings::{self, LoadOutcome, Settings};
 use dualfile_core::vfs::VPath;
@@ -88,6 +88,7 @@ impl AppState {
         };
         Ok(match info.protocol {
             Protocol::Smb => VPath::smb(&info.id, &path)?,
+            Protocol::Webdav => VPath::webdav(&info.id, &path)?,
             Protocol::Sftp => VPath::sftp(&info.id, &path)?,
             Protocol::Ftps => VPath::ftp(&info.id, &path)?,
         })
@@ -448,6 +449,19 @@ impl AppState {
                     domain: profile.domain.clone(),
                     share: profile.share.clone(),
                     guest: profile.guest,
+                    start_folder: profile.start_folder.clone(),
+                },
+                secret,
+            ),
+            ConnectionProtocol::Webdav => self.connections.backend.connect_webdav(
+                dualfile_remote::profile::WebdavProfile {
+                    name: profile.name.clone(),
+                    host: profile.host.clone(),
+                    port: profile.port,
+                    user: profile.user.clone(),
+                    base_path: profile.share.clone(),
+                    tls: profile.tls != ConnectionTls::None,
+                    allow_plaintext: profile.allow_plaintext,
                     start_folder: profile.start_folder.clone(),
                 },
                 secret,

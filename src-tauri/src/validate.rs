@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 /// Start of every serialized archive location (local paths start with `/`).
 const ARCHIVE_PREFIX: &str = "archive:";
 /// Starts of serialized server locations (`ftp:<connection id>!<path>`).
-const REMOTE_PREFIXES: [&str; 3] = ["ftp:", "sftp:", "smb:"];
+const REMOTE_PREFIXES: [&str; 4] = ["ftp:", "sftp:", "smb:", "webdav:"];
 /// Start of a serialized plugin location (`plugin:<plugin id>!<path>`).
 const PLUGIN_PREFIX: &str = "plugin:";
 
@@ -96,9 +96,11 @@ pub fn parse_path(raw: &str, home: &Path) -> Result<VPath, UiError> {
 
 /// The scan API never resolves archive, connection or plugin locations.
 pub fn scan_path(raw: &str, home: &Path) -> Result<PathBuf, UiError> {
-    if ["archive:", "ftp:", "sftp:", "smb:", "conn:", "plugin:"]
-        .iter()
-        .any(|prefix| raw.starts_with(prefix))
+    if [
+        "archive:", "ftp:", "sftp:", "smb:", "webdav:", "conn:", "plugin:",
+    ]
+    .iter()
+    .any(|prefix| raw.starts_with(prefix))
     {
         return Err(UiError::new("invalidInput", "Nur lokale Ordner"));
     }
@@ -568,6 +570,7 @@ mod scan_tests {
             "ftp:id!/",
             "sftp:id!/",
             "smb:id!/",
+            "webdav:id!/",
             "conn:id!/",
             "plugin:id!/",
         ] {
@@ -597,5 +600,15 @@ mod smb_tests {
             Scheme::Smb
         );
         assert!(parse_path("smb:id!/../folder", home).is_err());
+    }
+
+    #[test]
+    fn webdav_paths_are_remote_and_traversal_is_rejected() {
+        let home = Path::new("/home/demo");
+        assert_eq!(
+            parse_path("webdav:id!/folder", home).unwrap().scheme(),
+            Scheme::Webdav
+        );
+        assert!(parse_path("webdav:id!/../folder", home).is_err());
     }
 }

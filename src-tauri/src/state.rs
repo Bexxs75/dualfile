@@ -207,9 +207,16 @@ pub fn title_of(kind: &str, paths: &[VPath]) -> JobTitleDto {
 /// Server locations have no watcher; the UI reloads them by hand (and gets a `dirChanged` for
 /// what its own jobs changed).
 fn is_remote_text(raw: &str) -> bool {
-    ["ftp:", "sftp:", "smb:", "plugin:", PROFILE_PATH_PREFIX]
-        .iter()
-        .any(|prefix| raw.starts_with(prefix))
+    [
+        "ftp:",
+        "sftp:",
+        "smb:",
+        "webdav:",
+        "plugin:",
+        PROFILE_PATH_PREFIX,
+    ]
+    .iter()
+    .any(|prefix| raw.starts_with(prefix))
 }
 
 /// What to watch for a location: the folder itself, or for a location inside an archive the
@@ -715,10 +722,12 @@ impl AppState {
         let (verb, kind) = match (moving, sources[0].scheme()) {
             (true, _) => ("Verschieben", "move"),
             (false, Scheme::Archive) => ("Entpacken", "extract"),
-            (false, Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Plugin) if to_server => {
+            (false, Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav | Scheme::Plugin)
+                if to_server =>
+            {
                 ("Kopieren", "copy")
             }
-            (false, Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Plugin) => {
+            (false, Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav | Scheme::Plugin) => {
                 ("Herunterladen", "download")
             }
             (false, Scheme::Local) if to_server => ("Hochladen", "upload"),
@@ -933,6 +942,7 @@ impl AppState {
                 let root = match scheme {
                     Scheme::Sftp => VPath::sftp(id, "/"),
                     Scheme::Smb => VPath::smb(id, "/"),
+                    Scheme::Webdav => VPath::webdav(id, "/"),
                     Scheme::Plugin => VPath::plugin(id, "/"),
                     _ => VPath::ftp(id, "/"),
                 }

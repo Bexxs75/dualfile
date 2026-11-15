@@ -24,6 +24,8 @@ pub enum Scheme {
     Sftp,
     /// A folder on an SMB2/3 connection (`smb:<connection id>!<path>`).
     Smb,
+    /// A folder on a WebDAV server (`webdav:<connection id>!<path>`).
+    Webdav,
     /// A folder in a file system served by a plugin process (`plugin:<plugin id>!<path>`). The
     /// plugin id takes the place of the connection id; the path is the plugin's own path.
     Plugin,
@@ -36,13 +38,16 @@ impl Scheme {
     pub fn is_remote(self) -> bool {
         matches!(
             self,
-            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Plugin
+            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav | Scheme::Plugin
         )
     }
 
     /// True for locations on an FTP/FTPS/SFTP server (a connection id names the server).
     pub fn is_server(self) -> bool {
-        matches!(self, Scheme::Ftp | Scheme::Sftp | Scheme::Smb)
+        matches!(
+            self,
+            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav
+        )
     }
 }
 
@@ -55,6 +60,7 @@ pub const MAX_ARCHIVE_NAME_LEN: usize = 255;
 const ARCHIVE_PREFIX: &str = "archive:";
 const FTP_PREFIX: &str = "ftp:";
 const SMB_PREFIX: &str = "smb:";
+const WEBDAV_PREFIX: &str = "webdav:";
 const SFTP_PREFIX: &str = "sftp:";
 const PLUGIN_PREFIX: &str = "plugin:";
 /// Longest connection id (characters `a-z`, `0-9`, `-`).
@@ -216,6 +222,11 @@ impl VPath {
         Self::remote(Scheme::Smb, conn, path)
     }
 
+    /// A path on the WebDAV connection `conn`.
+    pub fn webdav(conn: &str, path: &str) -> Result<Self> {
+        Self::remote(Scheme::Webdav, conn, path)
+    }
+
     /// A path on the SFTP connection `conn`.
     pub fn sftp(conn: &str, path: &str) -> Result<Self> {
         Self::remote(Scheme::Sftp, conn, path)
@@ -350,6 +361,7 @@ pub fn format_ipc_path(path: &VPath) -> String {
         let prefix = match path.scheme {
             Scheme::Ftp => FTP_PREFIX,
             Scheme::Smb => SMB_PREFIX,
+            Scheme::Webdav => WEBDAV_PREFIX,
             Scheme::Plugin => PLUGIN_PREFIX,
             _ => SFTP_PREFIX,
         };
@@ -375,6 +387,7 @@ pub fn parse_ipc_path(text: &str) -> Result<VPath> {
             (FTP_PREFIX, Scheme::Ftp),
             (SFTP_PREFIX, Scheme::Sftp),
             (SMB_PREFIX, Scheme::Smb),
+            (WEBDAV_PREFIX, Scheme::Webdav),
             (PLUGIN_PREFIX, Scheme::Plugin),
         ] {
             if let Some(rest) = text.strip_prefix(prefix) {

@@ -13,7 +13,9 @@ pub fn opaque(key: &str) -> String {
 pub fn destination_lane(dest: &VPath) -> Option<String> {
     match dest.scheme() {
         Scheme::Local => local_lane(dest.path()),
-        Scheme::Ftp | Scheme::Sftp | Scheme::Smb => dest.conn_id().map(|id| format!("conn:{id}")),
+        Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav => {
+            dest.conn_id().map(|id| format!("conn:{id}"))
+        }
         Scheme::Plugin => dest.conn_id().map(|id| format!("plugin:{id}")),
         Scheme::Archive => dest
             .outer()

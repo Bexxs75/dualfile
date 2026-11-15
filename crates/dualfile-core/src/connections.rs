@@ -36,6 +36,8 @@ pub enum ConnectionProtocol {
     Ftps,
     Sftp,
     Smb,
+    /// WebDAV over HTTP(S); `share` holds the server base path, `tls` other than `None` = https.
+    Webdav,
     System,
 }
 
@@ -164,6 +166,22 @@ fn valid_folder(folder: &str) -> bool {
     folder.starts_with('/') && folder.len() <= MAX_PATH_BYTES && plain(folder)
 }
 
+/// A WebDAV host: a DNS name / IPv4 literal (letters, digits, `.`, `-`) or a bracketed IPv6 literal.
+/// Stricter than [`valid_host`] because the host goes into a URL alongside the credentials: it must
+/// not carry userinfo (`@`), a port (`:` outside brackets), a path (`/`), query (`?`) or fragment
+/// (`#`), or the server part of the origin — and with it the `Authorization` header — could be
+/// redirected to another host.
+pub fn valid_webdav_host(host: &str) -> bool {
+    if host.is_empty() || host.len() > MAX_HOST_BYTES {
+        return false;
+    }
+    if let Some(inner) = host.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+        return !inner.is_empty() && inner.bytes().all(|b| b.is_ascii_hexdigit() || b == b':');
+    }
+    host.bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+}
+
 impl ConnectionProfile {
     /// Checks everything the profile itself says (not whether the name is unique; see
     /// `validate_connections`). The texts are shown to the user as they are.
@@ -216,7 +234,12 @@ impl ConnectionProfile {
         if self.port == 0 && !openssh {
             return Err("Ungültiger Port");
         }
-        if (!openssh && self.user.is_empty() && self.protocol != ConnectionProtocol::Smb)
+        if (!openssh
+            && self.user.is_empty()
+            && !matches!(
+                self.protocol,
+                ConnectionProtocol::Smb | ConnectionProtocol::Webdav
+            ))
             || self.user.len() > MAX_USER_BYTES
             || !plain(&self.user)
             || (openssh && !self.user.is_empty() && !valid_ssh_endpoint(&self.user))
@@ -252,6 +275,14 @@ impl ConnectionProfile {
                 return Err("Gast ausdrücklich auswählen");
             }
         }
+        if self.protocol == ConnectionProtocol::Webdav {
+            if !valid_webdav_host(&self.host) {
+                return Err("Ungültiger WebDAV-Servername");
+            }
+            if !valid_folder(&self.share) || VPath::webdav(&self.id, &self.share).is_err() {
+                return Err("Ungültiger WebDAV-Basispfad");
+            }
+        }
         match self.protocol {
             ConnectionProtocol::System => unreachable!(),
             ConnectionProtocol::Ftp => {
@@ -269,8 +300,20 @@ impl ConnectionProfile {
                     return Err("SFTP verwendet keinen TLS-Modus");
                 }
             }
+            ConnectionProtocol::Webdav => {
+                if self.tls == ConnectionTls::None && !self.allow_plaintext {
+                    return Err(
+                        "Unverschlüsselte Verbindungen brauchen eine ausdrückliche Bestätigung",
+                    );
+                }
+            }
         }
-        if self.allow_plaintext && self.protocol != ConnectionProtocol::Ftp {
+        if self.allow_plaintext
+            && !matches!(
+                self.protocol,
+                ConnectionProtocol::Ftp | ConnectionProtocol::Webdav
+            )
+        {
             return Err("Die Bestätigung für unverschlüsselte Verbindungen gilt nur für FTP");
         }
         match &self.auth {
@@ -289,7 +332,10 @@ impl ConnectionProfile {
         }
         for pin in &self.pins {
             let expected = match self.protocol {
-                ConnectionProtocol::System | ConnectionProtocol::Ftp | ConnectionProtocol::Smb => {
+                ConnectionProtocol::System
+                | ConnectionProtocol::Ftp
+                | ConnectionProtocol::Smb
+                | ConnectionProtocol::Webdav => {
                     return Err("FTP ohne TLS hat keine Fingerabdrücke")
                 }
                 ConnectionProtocol::Ftps => PinProtocol::Ftps,
@@ -393,6 +439,35 @@ pub fn parse_profile_path(text: &str) -> Result<(String, String)> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn webdav_host_rejects_url_injection_and_accepts_plain_hosts() {
+        // WD-4A-01: a host carrying userinfo/port/path/query/fragment could redirect the request —
+        // and the credentials — to another origin, so all of these are rejected.
+        for host in [
+            "dav.example.org",
+            "192.168.1.2",
+            "a-b.c",
+            "[::1]",
+            "[2001:db8::1]",
+        ] {
+            assert!(valid_webdav_host(host), "{host} should be valid");
+        }
+        for host in [
+            "",
+            "trusted.example@attacker.example",
+            "host:8080",
+            "host/path",
+            "host?q=1",
+            "host#frag",
+            "ho st",
+            "host\\x",
+            "[]",
+            "[zz::1]",
+        ] {
+            assert!(!valid_webdav_host(host), "{host} should be rejected");
+        }
+    }
+
     fn profile(id: &str, name: &str) -> ConnectionProfile {
         ConnectionProfile {
             id: id.into(),
@@ -402,6 +477,29 @@ mod tests {
             user: "u".into(),
             ..ConnectionProfile::default()
         }
+    }
+
+    #[test]
+    fn webdav_profiles_validate_base_path_and_plaintext() {
+        let dav = ConnectionProfile {
+            protocol: ConnectionProtocol::Webdav,
+            tls: ConnectionTls::Explicit,
+            port: 443,
+            share: "/dav".into(),
+            ..profile("dav1", "dav")
+        };
+        assert_eq!(dav.validate(), Ok(()));
+        let mut p = dav.clone();
+        p.tls = ConnectionTls::None;
+        assert!(p.validate().is_err());
+        p.allow_plaintext = true;
+        assert_eq!(p.validate(), Ok(()));
+        p = dav.clone();
+        p.share = "dav".into();
+        assert!(p.validate().is_err());
+        p = dav;
+        p.user.clear();
+        assert_eq!(p.validate(), Ok(()));
     }
 
     fn sftp(id: &str, name: &str) -> ConnectionProfile {

@@ -20,6 +20,7 @@ pub enum Protocol {
     Ftps,
     Sftp,
     Smb,
+    Webdav,
 }
 
 /// Where a pin applies: one (protocol, host, port).

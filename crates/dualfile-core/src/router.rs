@@ -209,7 +209,7 @@ impl VfsRouter {
                     _ => Err(Error::Disconnected),
                 }
             }
-            Scheme::Ftp | Scheme::Sftp | Scheme::Smb => {
+            Scheme::Ftp | Scheme::Sftp | Scheme::Smb | Scheme::Webdav => {
                 let id = path.conn_id().ok_or(Error::Disconnected)?;
                 let vfs = self
                     .remote
