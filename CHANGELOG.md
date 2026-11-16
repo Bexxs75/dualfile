@@ -3,6 +3,16 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Added
+
+- **Terminal colours** (Settings → Appearance → Terminal): choose *Like the theme*, *Classic*, *Green on black*, *Amber*, *Light* or *Custom…* (colour picker or `#rrggbb` hex for background and text, with a swap button). A live contrast indicator warns below 4.5 : 1, but the colours are still applied. Cursor and selection follow the text colour, and the ANSI colours of command output adapt to light and dark backgrounds. Changes apply to all open terminals immediately.
+
+### Changed
+
+- The terminal now defaults to *Green on black* (`terminalColors`: `green`), including for existing settings without a saved value. Choose *Like the theme* to get the previous look.
+
 ## [0.2.10] - 2026-11-15
 
 ### Fixed

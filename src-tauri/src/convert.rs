@@ -617,6 +617,12 @@ pub struct SettingsDto {
     pub terminal_height: u32,
     #[serde(default = "default_terminal_shell")]
     pub terminal_shell: String,
+    #[serde(default = "default_terminal_colors")]
+    pub terminal_colors: String,
+    #[serde(default = "default_terminal_bg")]
+    pub terminal_bg: String,
+    #[serde(default = "default_terminal_fg")]
+    pub terminal_fg: String,
     #[serde(default = "default_show_parent_entry")]
     pub check_updates_on_start: bool,
     #[serde(default)]
@@ -660,6 +666,18 @@ fn default_terminal_shell() -> String {
     "auto".into()
 }
 
+fn default_terminal_colors() -> String {
+    "green".into()
+}
+
+fn default_terminal_bg() -> String {
+    "#102030".into()
+}
+
+fn default_terminal_fg() -> String {
+    "#f0e6d2".into()
+}
+
 impl From<&settings::Settings> for SettingsDto {
     fn from(s: &settings::Settings) -> Self {
         Self {
@@ -671,6 +689,9 @@ impl From<&settings::Settings> for SettingsDto {
             show_parent_entry: s.show_parent_entry,
             terminal_height: s.terminal_height,
             terminal_shell: s.terminal_shell.clone(),
+            terminal_colors: s.terminal_colors.clone(),
+            terminal_bg: s.terminal_bg.clone(),
+            terminal_fg: s.terminal_fg.clone(),
             check_updates_on_start: s.check_updates_on_start,
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
@@ -732,6 +753,9 @@ impl From<&SettingsDto> for settings::Settings {
             show_parent_entry: s.show_parent_entry,
             terminal_height: s.terminal_height,
             terminal_shell: s.terminal_shell.clone(),
+            terminal_colors: s.terminal_colors.clone(),
+            terminal_bg: s.terminal_bg.clone(),
+            terminal_fg: s.terminal_fg.clone(),
             check_updates_on_start: s.check_updates_on_start,
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
@@ -1341,6 +1365,7 @@ mod tests {
             show_parent_entry: false,
             terminal_height: 420,
             terminal_shell: "login".into(),
+            terminal_colors: "amber".into(),
             mirror: true,
             ..settings::Settings::default()
         };
@@ -1364,6 +1389,11 @@ mod tests {
         assert_eq!(value["showParentEntry"], false);
         assert_eq!(value["terminalHeight"], 420);
         assert_eq!(value["terminalShell"], "login");
+        assert_eq!(value["terminalColors"], "amber");
+        let mut old = value.clone();
+        old.as_object_mut().unwrap().remove("terminalColors");
+        let old: SettingsDto = serde_json::from_value(old).unwrap();
+        assert_eq!((old.terminal_colors.as_str(), old.terminal_bg.as_str()), ("green", "#102030"));
         let mut legacy = value.clone();
         legacy.as_object_mut().unwrap().remove("showParentEntry");
         assert!(

@@ -31,6 +31,12 @@ pub struct Settings {
     /// when installed, else bash/sh), "bash" (always plain bash/sh), or "login"
     /// (the user's own `$SHELL` with their config, prompt and greeting).
     pub terminal_shell: String,
+    /// Terminal colour scheme: "theme" (from the active design), "classic", "green", "amber",
+    /// "light" or "custom" (uses `terminal_bg`/`terminal_fg`).
+    pub terminal_colors: String,
+    /// Only used when `terminal_colors` is "custom"; `#rrggbb`.
+    pub terminal_bg: String,
+    pub terminal_fg: String,
     pub check_updates_on_start: bool,
     pub tray_enabled: bool,
     pub start_menu_prompted: bool,
@@ -80,6 +86,9 @@ impl Default for Settings {
             show_parent_entry: true,
             terminal_height: 260,
             terminal_shell: "auto".into(),
+            terminal_colors: "green".into(),
+            terminal_bg: "#102030".into(),
+            terminal_fg: "#f0e6d2".into(),
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,
@@ -352,6 +361,9 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         show_parent_entry: field(&mut obj, "show_parent_entry", true, &mut fixes),
         terminal_height: field(&mut obj, "terminal_height", 260, &mut fixes),
         terminal_shell: field(&mut obj, "terminal_shell", d.terminal_shell.clone(), &mut fixes),
+        terminal_colors: field(&mut obj, "terminal_colors", d.terminal_colors.clone(), &mut fixes),
+        terminal_bg: field(&mut obj, "terminal_bg", d.terminal_bg.clone(), &mut fixes),
+        terminal_fg: field(&mut obj, "terminal_fg", d.terminal_fg.clone(), &mut fixes),
         check_updates_on_start: field(&mut obj, "check_updates_on_start", true, &mut fixes),
         tray_enabled: field(&mut obj, "tray_enabled", false, &mut fixes),
         start_menu_prompted: field(&mut obj, "start_menu_prompted", false, &mut fixes),
@@ -430,6 +442,19 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         &mut fixes,
     ) {
         s.terminal_shell = d.terminal_shell.clone();
+    }
+    if !bad(
+        ["theme", "classic", "green", "amber", "light", "custom"].contains(&s.terminal_colors.as_str()),
+        "terminal_colors",
+        &mut fixes,
+    ) {
+        s.terminal_colors = d.terminal_colors.clone();
+    }
+    if !bad(valid_color(&s.terminal_bg), "terminal_bg", &mut fixes) {
+        s.terminal_bg = d.terminal_bg.clone();
+    }
+    if !bad(valid_color(&s.terminal_fg), "terminal_fg", &mut fixes) {
+        s.terminal_fg = d.terminal_fg.clone();
     }
     for b in &mut s.bookmarks {
         if !bad(valid_color(&b.color), "bookmarks.color", &mut fixes) {
@@ -616,6 +641,24 @@ mod tests {
         settings.terminal_height = 400;
         save(dir.path(), &settings, false).unwrap();
         assert_eq!(load(dir.path()).0.terminal_height, 400);
+    }
+
+    #[test]
+    fn terminal_colors_default_to_green_roundtrip_and_repair() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), r#"{"version":6}"#);
+        let (mut settings, outcome) = load(dir.path());
+        assert_eq!(settings.terminal_colors, "green");
+        assert!(!matches!(outcome, LoadOutcome::Repaired(_)));
+        settings.terminal_colors = "custom".into();
+        settings.terminal_bg = "#112233".into();
+        save(dir.path(), &settings, false).unwrap();
+        let loaded = load(dir.path()).0;
+        assert_eq!((loaded.terminal_colors.as_str(), loaded.terminal_bg.as_str()), ("custom", "#112233"));
+        write(dir.path(), r#"{"version":6,"terminal_colors":"pink","terminal_fg":"red"}"#);
+        let (bad, outcome) = load(dir.path());
+        assert_eq!((bad.terminal_colors.as_str(), bad.terminal_fg.as_str()), ("green", "#f0e6d2"));
+        assert!(matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_colors".to_string()) && f.contains(&"terminal_fg".to_string())));
     }
 
     #[test]

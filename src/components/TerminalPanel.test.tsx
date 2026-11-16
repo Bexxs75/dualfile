@@ -12,9 +12,11 @@ const xterm = vi.hoisted(() => ({
   input: undefined as ((data: string) => void) | undefined,
   key: undefined as ((event: KeyboardEvent) => boolean) | undefined,
   resize: undefined as (() => void) | undefined,
+  last: undefined as { options: { theme?: Record<string, string> } } | undefined,
 }));
 vi.mock("@xterm/xterm", () => ({ Terminal: class {
-  rows = 24; cols = 80; options = {};
+  rows = 24; cols = 80; options: { theme?: Record<string, string> } = {};
+  constructor() { xterm.last = this; }
   loadAddon() {} open() {} focus() {}
   write = xterm.write; writeln = xterm.writeln; dispose = xterm.dispose;
   onData(handler: (data: string) => void) { xterm.input = handler; return { dispose() { xterm.input = undefined; } }; }
@@ -141,4 +143,15 @@ test("shortcut is unique and can close the focused terminal", async () => {
   act(() => { expect(xterm.key?.(new KeyboardEvent("keydown", { key: "`", ctrlKey: true }))).toBe(false); });
   expect(close).toHaveBeenCalledWith(1);
   view.unmount();
+});
+
+test("terminal colors come from the setting and change live for open terminals", async () => {
+  const { rt } = setup();
+  fireEvent.click(screen.getByText("toggle"));
+  await waitFor(() => expect(xterm.last).toBeDefined());
+  expect(xterm.last!.options.theme).toMatchObject({ background: "#0a120a", foreground: "#4af626", cursor: "#4af626" });
+  act(() => rt.controller.updateSettings(s => ({ ...s, terminalColors: "light" })));
+  expect(xterm.last!.options.theme).toMatchObject({ background: "#fbfaf6", foreground: "#1f2328", green: "#1a7f37" });
+  act(() => rt.controller.updateSettings(s => ({ ...s, terminalColors: "theme", theme: "papier" })));
+  expect(xterm.last!.options.theme).toMatchObject({ background: "#f6f3ec", foreground: "#2a2824" });
 });

@@ -432,6 +432,11 @@ export interface Settings {
   terminalHeight?: number;
   /** Shell des eingebetteten Terminals: "auto" (fish mit Vorschlägen, sonst bash/sh), "bash" (immer schlichte bash/sh) oder "login" (eigene $SHELL mit Konfiguration). Fehlt der Wert, gilt "auto". */
   terminalShell?: "auto" | "bash" | "login";
+  /** Farben des Terminals: "theme" (aus dem Design), "classic", "green", "amber", "light" oder "custom" (terminalBg/terminalFg). Fehlt der Wert, gilt "green". */
+  terminalColors?: "theme" | "classic" | "green" | "amber" | "light" | "custom";
+  /** Nur bei terminalColors "custom": #rrggbb. */
+  terminalBg?: string;
+  terminalFg?: string;
   extensionColumn?: boolean;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };

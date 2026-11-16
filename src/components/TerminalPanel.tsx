@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { useAppState, useController, useRuntime, useT } from "../app/context";
 import type { DualfileApi, TerminalOutput, TerminalExit } from "../ipc/api";
 import { mapKey } from "../state/keymap";
+import { terminalColorsFor, xtermTheme } from "../themes/terminal";
 import { isArchivePath, parseRemotePath } from "../state/paths";
 
 export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
@@ -93,18 +94,14 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
       fit.fit();
       if (id !== undefined && !exited) void api.terminalResize(id, term.rows, term.cols).catch(fail);
     };
-    const theme = () => {
-      const colors = getComputedStyle(element);
-      term.options.theme = {
-        background: colors.getPropertyValue("--panel").trim() || undefined,
-        foreground: colors.getPropertyValue("--fg").trim() || undefined,
-        cursor: colors.getPropertyValue("--fg").trim() || undefined,
-        selectionBackground: colors.getPropertyValue("--selection").trim() || undefined,
-      };
-    };
+    const theme = () => { term.options.theme = xtermTheme(terminalColorsFor(store.getState().settings)); };
     theme();
-    const themeObserver = new MutationObserver(theme);
-    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "data-theme"] });
+    // Only the colour fields matter; a plain store listener would reapply the theme on every state change.
+    let lastColors = JSON.stringify(terminalColorsFor(store.getState().settings));
+    const stopTheme = store.subscribe(() => {
+      const next = JSON.stringify(terminalColorsFor(store.getState().settings));
+      if (next !== lastColors) { lastColors = next; theme(); }
+    });
     const observer = new ResizeObserver(resize);
     observer.observe(element);
     window.addEventListener("resize", resize);
@@ -122,7 +119,7 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
     return () => {
       disposed = true;
       stopOutput(); stopExit(); input.dispose();
-      observer.disconnect(); themeObserver.disconnect();
+      observer.disconnect(); stopTheme();
       window.removeEventListener("resize", resize);
       if (id !== undefined) void api.terminalClose(id).catch(console.error);
       term.dispose();

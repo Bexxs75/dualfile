@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useAppState, useController, useT } from "../../app/context";
 import type { TranslationKey } from "../../i18n";
 import type { Settings } from "../../ipc/types";
@@ -13,6 +13,16 @@ import {
   themes,
   defaultAccent,
 } from "../../themes/tokens";
+import {
+  DEFAULT_TERMINAL_BG,
+  DEFAULT_TERMINAL_COLORS,
+  DEFAULT_TERMINAL_FG,
+  MIN_TERMINAL_CONTRAST,
+  terminalColorModes,
+  terminalColorsFor,
+  terminalContrast,
+  type TerminalColorMode,
+} from "../../themes/terminal";
 import { AboutSettings, SystemSettings, UpdateSettings } from "./SystemDialogs";
 import { KeybindingsSettings } from "./KeybindingsSettings";
 import { Modal } from "../Modal";
@@ -43,6 +53,83 @@ function Segmented<V extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+function ColorField({ id, label, hex, onValid }: { id: string; label: string; hex: string; onValid: (hex: string) => void }) {
+  const tr = useT();
+  const [text, setText] = useState(hex);
+  // Follows changes from outside (colour picker, swap button) unless the user is mid-typing an invalid value.
+  useEffect(() => setText(hex), [hex]);
+  const invalid = !isValidHex(text);
+  return (
+    <div className="cpick">
+      <input type="color" aria-label={tr("settings.terminal.pick", { name: label })} value={hex} onChange={e => onValid(e.target.value.toLowerCase())} />
+      <input
+        id={id}
+        className="hex"
+        aria-label={tr("settings.terminal.hex", { name: label })}
+        value={text}
+        maxLength={7}
+        spellCheck={false}
+        aria-invalid={invalid}
+        onChange={e => {
+          const value = e.target.value.trim();
+          const prefixed = value && !value.startsWith("#") ? `#${value}` : value;
+          setText(prefixed);
+          if (isValidHex(prefixed)) onValid(prefixed.toLowerCase());
+        }}
+      />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function TerminalColorSettings({ set }: { set: (patch: Partial<Settings>) => void }) {
+  const tr = useT();
+  const settings = useAppState((state) => state.settings);
+  const mode: TerminalColorMode = settings.terminalColors ?? DEFAULT_TERMINAL_COLORS;
+  const bg = settings.terminalBg ?? DEFAULT_TERMINAL_BG;
+  const fg = settings.terminalFg ?? DEFAULT_TERMINAL_FG;
+  const colors = terminalColorsFor(settings);
+  const ratio = terminalContrast(colors);
+  const good = ratio >= MIN_TERMINAL_CONTRAST;
+  return (
+    <section className="settings-section" aria-labelledby="terminal-colors-title">
+      <h3 id="terminal-colors-title">{tr("settings.terminal.title")}</h3>
+      <div className="fld tiles-fld">
+        <span id="terminal-colors-label">{tr("settings.terminal.colors")}</span>
+        <div className="presets" role="group" aria-labelledby="terminal-colors-label">
+          {terminalColorModes.map(value => {
+            const c = terminalColorsFor({ ...settings, terminalColors: value, terminalBg: bg, terminalFg: fg });
+            return (
+              <button key={value} type="button" className="preset" aria-pressed={value === mode} onClick={() => set({ terminalColors: value, terminalBg: bg, terminalFg: fg })}>
+                <span className="preview" aria-hidden="true" style={{ background: c.bg, color: c.fg }}>$ ls<br />src  docs</span>
+                <b>{tr(`settings.terminal.mode.${value}` as TranslationKey)}</b>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      {mode === "custom" && (
+        <div className="fld tiles-fld">
+          <span>{tr("settings.terminal.custom")}</span>
+          <div className="terminal-custom">
+            <ColorField id="terminal-bg" label={tr("settings.terminal.bg")} hex={bg} onValid={terminalBg => set({ terminalBg })} />
+            <ColorField id="terminal-fg" label={tr("settings.terminal.fg")} hex={fg} onValid={terminalFg => set({ terminalFg })} />
+            <button type="button" className="link" onClick={() => set({ terminalBg: fg, terminalFg: bg })}>{tr("settings.terminal.swap")}</button>
+          </div>
+        </div>
+      )}
+      <div className="fld">
+        <span />
+        <div className="contrast" role="status">
+          <span className={good ? "badge ok" : "badge bad"}>{tr("settings.terminal.ratio", { ratio: ratio.toFixed(1) })}</span>
+          {tr(good ? "settings.terminal.contrast.ok" : "settings.terminal.contrast.low")}
+        </div>
+      </div>
+      <p className="field-help">{tr(`settings.terminal.help.${mode === "theme" || mode === "custom" ? mode : "preset"}` as TranslationKey)}</p>
+    </section>
   );
 }
 
@@ -194,6 +281,7 @@ export function SettingsDialog() {
             onChange={(language) => set({ language })}
           />
         </div>
+        <TerminalColorSettings set={set} />
         </>}
         {tab === "system" && <>
         <div className="fld">

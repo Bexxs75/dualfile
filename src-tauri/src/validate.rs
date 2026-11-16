@@ -223,6 +223,12 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     if !["auto", "bash", "login"].contains(&s.terminal_shell.as_str()) {
         return Err(bad_settings("Terminal-Shell"));
     }
+    if !["theme", "classic", "green", "amber", "light", "custom"].contains(&s.terminal_colors.as_str()) {
+        return Err(bad_settings("Terminal-Farben"));
+    }
+    if !valid_color(&s.terminal_bg) || !valid_color(&s.terminal_fg) {
+        return Err(bad_settings("Terminal-Farbe"));
+    }
     if !valid_color(&s.accent) {
         return Err(bad_settings("Akzentfarbe"));
     }
@@ -507,6 +513,9 @@ mod tests {
             show_parent_entry: true,
             terminal_height: 260,
             terminal_shell: "auto".into(),
+            terminal_colors: "green".into(),
+            terminal_bg: "#102030".into(),
+            terminal_fg: "#f0e6d2".into(),
             check_updates_on_start: true,
             tray_enabled: false,
             start_menu_prompted: false,
@@ -551,6 +560,20 @@ mod tests {
         let mut s = settings();
         s.accent = "red".into();
         assert!(validate_settings(&s).is_err());
+        let mut s = settings();
+        s.terminal_colors = "pink".into();
+        assert!(validate_settings(&s).is_err());
+        let mut s = settings();
+        s.terminal_bg = "#12345".into();
+        assert!(validate_settings(&s).is_err());
+        let mut s = settings();
+        s.terminal_fg = "#12345g".into();
+        assert!(validate_settings(&s).is_err());
+        let mut s = settings();
+        for preset in ["theme", "classic", "green", "amber", "light", "custom"] {
+            s.terminal_colors = preset.into();
+            assert!(validate_settings(&s).is_ok(), "{preset}");
+        }
         let mut s = settings();
         s.font_size = 80;
         assert!(validate_settings(&s).is_err());
