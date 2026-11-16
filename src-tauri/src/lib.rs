@@ -157,6 +157,7 @@ pub fn run() {
             system::update_check,
             system::update_install,
             system::update_cancel,
+            system::app_restart,
             system::release_open,
             commands::undo_list,
             commands::undo_run,

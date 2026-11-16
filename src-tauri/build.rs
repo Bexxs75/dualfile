@@ -11,6 +11,7 @@ const COMMANDS: &[&str] = &[
     "update_check",
     "update_install",
     "update_cancel",
+    "app_restart",
     "release_open",
     "ssh_prompt_answer",
     "local_drives",

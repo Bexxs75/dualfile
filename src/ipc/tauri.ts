@@ -94,7 +94,7 @@ export function createTauriApi(): DualfileApi {
       return call("update_install", { version, progress });
     },
     updateCancel: () => call("update_cancel"),
-    restart: () => call("plugin:process|restart"),
+    restart: () => call("app_restart"),
     releaseOpen: () => call("release_open"),
     spaceFree: path => call("space_free", { path }),
     usageStart: (path, options) => call("usage_start", { path, options }),

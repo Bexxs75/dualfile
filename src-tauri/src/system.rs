@@ -309,6 +309,25 @@ async fn install_update(
     std::mem::forget(guard);
     Ok(())
 }
+/// Restart after an update. Tauri's own restart starts the new AppImage with this process's
+/// environment and working directory, which still point into the old AppImage mount: the new
+/// runtime then loads the old bundled libraries (on newer systems it does not start at all) and
+/// hands them on to every program Dualfile opens. Start it as the desktop would instead.
+#[tauri::command]
+pub fn app_restart(app: tauri::AppHandle) -> Result<(), String> {
+    let env = app.env();
+    let path = tauri::process::current_binary(&env).map_err(|e| e.to_string())?;
+    let mut command = std::process::Command::new(path);
+    command.args(env.args_os.iter().skip(1));
+    dualfile_core::appenv::apply_clean_env(&mut command);
+    dualfile_core::appenv::apply_external_current_dir(&mut command);
+    command.spawn().map_err(|e| {
+        log::error!("Neustart nach dem Update fehlgeschlagen: {e}");
+        e.to_string()
+    })?;
+    std::process::exit(0)
+}
+
 #[tauri::command]
 pub fn update_cancel() -> Result<bool, String> {
     let cancellation = DOWNLOAD_CANCEL

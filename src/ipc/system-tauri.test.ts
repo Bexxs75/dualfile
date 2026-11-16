@@ -16,6 +16,6 @@ test("system commands use the typed native bridge and a progress channel", async
   channel.progress.onmessage({ downloaded: 12, total: 20, phase: "download" });
   expect(progress).toHaveBeenCalledWith({ downloaded: 12, total: 20, phase: "download" });
   await api.updateCancel(); expect(invoke).toHaveBeenLastCalledWith("update_cancel", undefined);
-  await api.restart(); expect(invoke).toHaveBeenLastCalledWith("plugin:process|restart", undefined);
+  await api.restart(); expect(invoke).toHaveBeenLastCalledWith("app_restart", undefined);
   await api.releaseOpen(); expect(invoke).toHaveBeenLastCalledWith("release_open", undefined);
 });

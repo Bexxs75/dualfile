@@ -105,7 +105,7 @@
     "allow-update-check",
     "allow-update-install",
     "allow-update-cancel",
-    "allow-release-open",
-    "process:allow-restart"
+    "allow-app-restart",
+    "allow-release-open"
   ]
 }

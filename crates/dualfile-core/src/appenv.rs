@@ -30,12 +30,32 @@ pub fn clean_env(
     };
     let root = appdir.as_encoded_bytes();
     let root = root.strip_suffix(b"/").unwrap_or(root);
+    // After an in-app update the app restarts with the old process environment, so paths of
+    // the previous AppImage (still mounted while its runtime lingers) sit next to the current
+    // ones. Its bundled libraries would then be loaded by every program started from here.
+    // Every AppImage runtime mounts at `<tmp>/.mount_*`, so the previous one shares the parent
+    // directory of the current APPDIR.
+    let mount_prefix = root
+        .iter()
+        .rposition(|b| *b == b'/')
+        .filter(|_| {
+            root.rsplit(|b| *b == b'/')
+                .next()
+                .is_some_and(|name| name.starts_with(b".mount_"))
+        })
+        .map(|slash| [&root[..slash], b"/.mount_".as_slice()].concat());
+    let in_any_mount = |entry: &[u8]| {
+        mount_prefix
+            .as_deref()
+            .is_some_and(|p| entry.starts_with(p))
+    };
     let under_appdir = |entry: &[u8]| {
-        !appdir.is_empty()
+        (!appdir.is_empty()
             && (entry == root
                 || entry
                     .strip_prefix(root)
-                    .is_some_and(|tail| tail.starts_with(b"/")))
+                    .is_some_and(|tail| tail.starts_with(b"/"))))
+            || in_any_mount(entry)
     };
     for (key, value) in vars {
         if key == "GTK_THEME" {
@@ -126,6 +146,38 @@ mod tests {
     }
 
     #[test]
+    fn paths_of_a_previous_appimage_mount_are_removed_too() {
+        // Environment of the process restarted by an in-app update.
+        let result = plan(&[
+            ("APPDIR", "/tmp/.mount_x"),
+            (
+                "LD_LIBRARY_PATH",
+                "/tmp/.mount_x/usr/lib/:/tmp/.mount_old.AbC/usr/lib/:/opt/lib",
+            ),
+            (
+                "XDG_DATA_DIRS",
+                "/tmp/.mount_x/usr/share:/usr/share:/tmp/.mount_old.AbC/usr/share:/usr/local/share",
+            ),
+            (
+                "PATH",
+                "/tmp/.mount_x/usr/bin/:/tmp/.mount_old.AbC/usr/bin/:/usr/bin",
+            ),
+            ("HOME_VALUE", "/home/me/.mount_notes/file"),
+        ]);
+        assert_eq!(
+            result.replace.get(OsStr::new("LD_LIBRARY_PATH")).unwrap(),
+            "/opt/lib"
+        );
+        assert_eq!(
+            result.replace.get(OsStr::new("XDG_DATA_DIRS")).unwrap(),
+            "/usr/share:/usr/local/share"
+        );
+        assert_eq!(result.replace.get(OsStr::new("PATH")).unwrap(), "/usr/bin");
+        assert!(!result.replace.contains_key(OsStr::new("HOME_VALUE")));
+        assert!(!result.remove.contains(OsStr::new("HOME_VALUE")));
+    }
+
+    #[test]
     fn cleans_runtime_paths_and_preserves_user_values() {
         let result = plan(&[
             ("APPDIR", "/tmp/.mount_x"),
@@ -140,7 +192,7 @@ mod tests {
             ),
             ("UNKNOWN", "/tmp/.mount_x/other"),
             ("ROOT", "/tmp/.mount_x"),
-            ("PREFIX", "/tmp/.mount_xX/lib"),
+            ("PREFIX", "/tmp/.mountx/lib"),
             ("GDK_BACKEND", "wayland"),
             ("GTK_THEME", "/tmp/.mount_x/theme"),
             ("USER_VALUE", "hello"),
@@ -175,16 +227,13 @@ mod tests {
     #[test]
     fn handles_unknown_lists_empty_elements_and_path_boundaries() {
         let result = plan(&[
-            ("CUSTOM", ":/tmp/.mount_x/lib::/tmp/.mount_xX/lib:"),
+            ("CUSTOM", ":/tmp/.mount_x/lib::/tmp/.mountx/lib:"),
             ("LD_PRELOAD", "/tmp/.mount_x/a:/usr/lib/b"),
             ("XDG_DATA_DIRS", "/tmp/.mount_x/share:/tmp/.mount_x"),
             ("GDK_BACKEND", "/tmp/.mount_x/backend"),
             ("EMPTY", "::"),
         ]);
-        assert_eq!(
-            result.replace[OsStr::new("CUSTOM")],
-            "::/tmp/.mount_xX/lib:"
-        );
+        assert_eq!(result.replace[OsStr::new("CUSTOM")], "::/tmp/.mountx/lib:");
         assert_eq!(result.replace[OsStr::new("LD_PRELOAD")], "/usr/lib/b");
         assert_eq!(
             result.remove,
