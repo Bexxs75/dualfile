@@ -3,10 +3,13 @@
 
 use crate::convert::{path_text, CoreEventDto, UiError};
 use crate::state::EventSink;
-use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
-use notify_debouncer_mini::{new_debouncer, DebounceEventResult, Debouncer};
+use notify_debouncer_mini::notify::event::{AccessKind, AccessMode, EventKind};
+use notify_debouncer_mini::notify::{
+    self, EventHandler, RecommendedWatcher, RecursiveMode, Watcher, WatcherKind,
+};
+use notify_debouncer_mini::{new_debouncer_opt, Config, DebounceEventResult, Debouncer};
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -41,8 +44,53 @@ pub fn diff(
     )
 }
 
+/// Opening or reading a file or folder changes nothing. inotify reports it all the same, and
+/// the debouncer does not tell event kinds apart, so such events are dropped before it sees
+/// them. Without this, the listing that answers a `dirChanged` opens the folder, which counts
+/// as the next change: the folder reloads forever.
+fn is_change(kind: &EventKind) -> bool {
+    match kind {
+        EventKind::Access(AccessKind::Close(AccessMode::Write)) => true,
+        EventKind::Access(_) => false,
+        _ => true,
+    }
+}
+
+/// The system watcher, reduced to events that are changes (see `is_change`).
+pub struct ChangeWatcher(RecommendedWatcher);
+
+impl Watcher for ChangeWatcher {
+    fn new<F: EventHandler>(mut event_handler: F, config: notify::Config) -> notify::Result<Self> {
+        RecommendedWatcher::new(
+            move |event: notify::Result<notify::Event>| {
+                if event.as_ref().map_or(true, |e| is_change(&e.kind)) {
+                    event_handler.handle_event(event);
+                }
+            },
+            config,
+        )
+        .map(Self)
+    }
+
+    fn watch(&mut self, path: &Path, recursive_mode: RecursiveMode) -> notify::Result<()> {
+        self.0.watch(path, recursive_mode)
+    }
+
+    fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+        self.0.unwatch(path)
+    }
+
+    fn configure(&mut self, option: notify::Config) -> notify::Result<bool> {
+        self.0.configure(option)
+    }
+
+    fn kind() -> WatcherKind {
+        RecommendedWatcher::kind()
+    }
+}
+
 pub struct WatchService {
-    debouncer: Mutex<Debouncer<RecommendedWatcher>>,
+    debouncer: Mutex<Debouncer<ChangeWatcher>>,
     watched: Arc<Mutex<BTreeSet<PathBuf>>>,
 }
 
@@ -50,7 +98,8 @@ impl WatchService {
     pub fn new(sink: Arc<dyn EventSink>, debounce: Duration) -> Result<Self, UiError> {
         let watched: Arc<Mutex<BTreeSet<PathBuf>>> = Arc::default();
         let shared = watched.clone();
-        let debouncer = new_debouncer(debounce, move |result: DebounceEventResult| {
+        let config = Config::default().with_timeout(debounce);
+        let handler = move |result: DebounceEventResult| {
             // Errors of the watcher (queue overflow, vanished folder) carry nothing the UI
             // could act on; the manual refresh stays available.
             let Ok(events) = result else { return };
@@ -64,8 +113,10 @@ impl WatchService {
                     path: path_text(&dir),
                 });
             }
-        })
-        .map_err(|_| UiError::new("io", "Die Ordnerbeobachtung konnte nicht gestartet werden"))?;
+        };
+        let debouncer = new_debouncer_opt::<_, ChangeWatcher>(config, handler).map_err(|_| {
+            UiError::new("io", "Die Ordnerbeobachtung konnte nicht gestartet werden")
+        })?;
         Ok(Self {
             debouncer: Mutex::new(debouncer),
             watched,
@@ -226,6 +277,22 @@ mod tests {
         assert_eq!(service.watched().len(), 1);
         std::fs::write(other.path().join("f"), b"x").unwrap();
         assert!(rx.recv_timeout(Duration::from_millis(500)).is_err());
+    }
+
+    #[test]
+    fn listing_or_reading_a_watched_folder_reports_nothing() {
+        // The UI answers every dirChanged by listing the folder again. If merely opening
+        // the folder counted as a change, each reload would trigger the next one forever.
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        std::fs::write(root.join("f"), b"x").unwrap();
+        let (service, rx) = service();
+        assert!(service
+            .set_paths(&set(&[root.to_str().unwrap()]))
+            .is_empty());
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+        assert_eq!(std::fs::read(root.join("f")).unwrap(), b"x");
+        assert!(rx.recv_timeout(Duration::from_millis(600)).is_err());
     }
 
     #[test]

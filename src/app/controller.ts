@@ -1087,6 +1087,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
 
   let saveTimer: unknown = null;
   let lastSaved = "";
+  let scheduledSnapshot = "";
   let lastSettingsRef: Settings | null = null;
   let lastWindows: AppState["windows"] | null = null;
   let lastActive: WinIdx | null = null;
@@ -1144,7 +1145,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     lastSettingsRef = state.settings;
     lastWindows = state.windows;
     lastActive = state.active;
-    if (currentSnapshot() === lastSaved) return;
+    const snapshot = currentSnapshot();
+    if (snapshot === lastSaved) return;
+    // Only new content restarts the delay: a folder reloading over and over (new listing, same
+    // session) would otherwise keep pushing the save away and it would never be written.
+    if (saveTimer !== null && snapshot === scheduledSnapshot) return;
+    scheduledSnapshot = snapshot;
     if (saveTimer !== null) timers.clear(saveTimer);
     saveTimer = timers.set(() => {
       saveTimer = null;

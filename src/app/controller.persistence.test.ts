@@ -55,3 +55,15 @@ test("close signal flushes pending state and save failure still acknowledges", a
   expect(r.appCloseNow).toHaveBeenCalledTimes(1);
   r.controller.dispose();
 });
+test("a folder that keeps reporting changes does not postpone a pending save forever", async () => {
+  const r = await setup();
+  const home = r.store.getState().home;
+  r.controller.updateSettings(s => ({ ...s, language: s.language === "en" ? "de" : "en" }));
+  // The watcher debounces at 250 ms: a busy folder reloads faster than the save delay (400 ms).
+  for (let i = 0; i < 12; i++) {
+    await vi.advanceTimersByTimeAsync(250);
+    r.emit({ type: "dirChanged", path: home });
+  }
+  expect(r.saveSettings).toHaveBeenCalledTimes(1);
+  r.controller.dispose();
+});
