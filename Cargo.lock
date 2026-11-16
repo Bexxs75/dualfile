@@ -602,6 +602,7 @@ dependencies = [
  "base64ct",
  "dualfile-core",
  "libc",
+ "log",
  "rustix",
  "serde",
  "serde_json",

@@ -642,6 +642,27 @@ const de = {
   "notice.newerVersion": "Die Einstellungen stammen aus einer neueren Version ({version}) und werden nicht überschrieben.",
   "notice.migrated": "Die Einstellungen wurden von Version {from} auf {to} aktualisiert.",
 
+  // Logdatei
+  "log.heading": "Fehlersuche",
+  "log.intro": "Dualfile schreibt Fehler und Warnungen in eine Logdatei auf deinem Rechner. Sie wird nie von selbst verschickt.",
+  "log.location": "Ort",
+  "log.view": "Logdatei ansehen …",
+  "log.openFolder": "Ordner öffnen",
+  "log.report": "Problem auf GitHub melden",
+  "log.reportHelp": "„Problem auf GitHub melden“ öffnet ein neues Issue mit Version und System schon eingetragen. Die anonymisierte Logdatei fügst du dort selbst ein.",
+  "log.title": "Logdatei",
+  "log.anonymize": "Anonymisieren",
+  "log.anonymizeHelp": "Ersetzt Benutzername, Home-Ordner, Server-Adressen und Anmeldenamen. Passwörter stehen nie in der Logdatei.",
+  "log.content": "Inhalt der Logdatei",
+  "log.legend": "Neueste Einträge unten · die letzten 500 Zeilen",
+  "log.replaced": "grün",
+  "log.replacedHint": "ersetzt",
+  "log.copy": "Kopieren",
+  "log.copied": "In die Zwischenablage kopiert",
+  "log.save": "Im aktuellen Ordner speichern",
+  "log.saved": "Gespeichert: {path}",
+  "log.details": "Details in der Logdatei",
+
   // Einstellungen
   "settings.title": "Einstellungen",
   "settings.tabs": "Einstellungsbereiche",

@@ -156,7 +156,7 @@ impl PluginRuntime {
     pub fn log(&self, line: &str) {
         match &self.config.log {
             Some(sink) => sink(line),
-            None => eprintln!("dualfile-plugin: {line}"),
+            None => log::warn!("{line}"),
         }
     }
 }

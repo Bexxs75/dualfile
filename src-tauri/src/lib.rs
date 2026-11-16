@@ -1,6 +1,7 @@
 //! Dualfile: Tauri shell around `dualfile-core`. The web UI reaches the file system only
 //! through the commands in `commands.rs`; the core reports back through `core-event`.
 
+mod anonymize;
 mod close;
 mod close_policy;
 mod commands;
@@ -9,6 +10,7 @@ mod conflict;
 mod connections;
 mod convert;
 mod desktop_entry;
+mod diagnostics;
 mod item_error;
 mod keychain;
 mod lanes;
@@ -66,6 +68,7 @@ pub fn run() {
     // entry (and its icon) for the title bar as well as the task bar.
     #[cfg(target_os = "linux")]
     gtk::glib::set_prgname(Some("de.thebexxs.dualfile"));
+    diagnostics::install_panic_hook();
     let app = tauri::Builder::default()
         // Muss als erstes Plugin stehen: ein zweiter Start holt das vorhandene Fenster nach vorn.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -73,9 +76,11 @@ pub fn run() {
                 system::bring_to_front(&window);
             }
         }))
+        .plugin(diagnostics::plugin())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            diagnostics::log_start();
             // Title bar / task bar icon (X11 and XWayland; Wayland desktops take
             // it from the start-menu entry that matches the application id).
             if let (Some(window), Some(icon)) =
@@ -235,6 +240,12 @@ pub fn run() {
             commands::plugin_diagnostics,
             commands::plugin_columns,
             commands::plugin_preview,
+            diagnostics::log_info,
+            diagnostics::log_read,
+            diagnostics::log_save,
+            diagnostics::log_open_folder,
+            diagnostics::report_issue_url,
+            diagnostics::log_frontend,
         ])
         .build(tauri::generate_context!())
         .expect("Dualfile konnte nicht gestartet werden");

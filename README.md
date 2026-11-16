@@ -49,6 +49,7 @@ Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and b
 - Command palette (`Ctrl+K`), batch rename with preview, directory comparison and synchronization, text comparison.
 - Duplicate-file search, similar-image search and disk-usage inspection.
 - Light/dark themes, accent colors, density settings and English/German interface text.
+- Log file for troubleshooting with an anonymizing viewer (Settings → About → Troubleshooting).
 - Process-plugin interface with explicit permissions; not compatible with Total Commander DLLs.
 
 ## Download

@@ -61,6 +61,34 @@ export function AboutSettings() {
   </section>;
 }
 
+function formatBytes(bytes: number): string {
+  return bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function TroubleshootSettings() {
+  const { api, controller } = useRuntime();
+  const tr = useT();
+  const { error, run } = useAction();
+  const [info, setInfo] = useState<{ path: string; bytes: number } | null>(null);
+  useEffect(() => {
+    let current = true;
+    api.logInfo().then(value => { if (current) setInfo(value); }, () => {});
+    return () => { current = false; };
+  }, [api]);
+  return <section className="system-group" aria-labelledby="troubleshoot-heading">
+    <h3 id="troubleshoot-heading">{tr("log.heading")}</h3>
+    <p>{tr("log.intro")}</p>
+    {info && <p><span className="muted">{tr("log.location")}</span> <code>{info.path}</code> <span className="muted">{formatBytes(info.bytes)}</span></p>}
+    <div className="system-actions">
+      <button className="tb primary" onClick={() => controller.openDialog({ kind: "log" })}>{tr("log.view")}</button>
+      <button className="tb" onClick={() => void run(() => api.logOpenFolder())}>{tr("log.openFolder")}</button>
+      <button className="tb" onClick={() => void run(async () => api.openUrl(await api.reportIssueUrl()))}>{tr("log.report")}</button>
+    </div>
+    <p className="muted">{tr("log.reportHelp")}</p>
+    {error && <p role="alert" className="field-error">{error}</p>}
+  </section>;
+}
+
 export function UpdateSettings() {
   const { system, state } = useSystem();
   const { controller } = useRuntime();

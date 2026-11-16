@@ -172,7 +172,7 @@ pub fn tray_set(app: tauri::AppHandle, enabled: bool, language: String) -> Resul
         Ok(())
     })();
     if result.is_err() {
-        eprintln!("Dualfile: tray unavailable");
+        log::warn!("Tray-Symbol nicht verfügbar");
         if let Some(w) = app.get_webview_window("main") {
             let _ = w.show();
         }
@@ -195,13 +195,28 @@ pub async fn update_check(app: tauri::AppHandle) -> Result<Option<AvailableUpdat
         }))
     }
     .await;
-    if result.is_err() {
-        eprintln!("Dualfile: update check failed");
+    if let Err(error) = &result {
+        log::warn!("Update-Prüfung fehlgeschlagen: {error}");
     }
     result
 }
 #[tauri::command]
 pub async fn update_install(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<AppState>>,
+    version: String,
+    progress: Channel<UpdateProgress>,
+) -> Result<(), String> {
+    log::info!("Update auf {version} wird geladen");
+    let result = install_update(app, state, version, progress).await;
+    match &result {
+        Ok(()) => log::info!("Update heruntergeladen und eingespielt, Neustart folgt"),
+        Err(error) => log::warn!("Update fehlgeschlagen: {error}"),
+    }
+    result
+}
+
+async fn install_update(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
     version: String,

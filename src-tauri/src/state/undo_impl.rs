@@ -31,7 +31,7 @@ impl Recorder {
                 drop(dirs);
                 self.sink.emit(CoreEventDto::UndoChanged);
             }
-            Err(_) => eprintln!("undo: recording failed"),
+            Err(error) => log::warn!("Rückgängig-Eintrag konnte nicht gespeichert werden: {error}"),
             Ok(None) => {}
         }
     }

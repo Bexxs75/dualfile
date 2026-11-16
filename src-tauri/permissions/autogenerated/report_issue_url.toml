@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-report-issue-url"
+description = "Enables the report_issue_url command without any pre-configured scope."
+commands.allow = ["report_issue_url"]
+
+[[permission]]
+identifier = "deny-report-issue-url"
+description = "Denies the report_issue_url command without any pre-configured scope."
+commands.deny = ["report_issue_url"]

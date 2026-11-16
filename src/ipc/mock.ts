@@ -886,6 +886,18 @@ const describe = (verb: string, paths: string[]): string =>
   `${verb}: ${basename(paths[0] ?? "")}${paths.length > 1 ? ` (+${paths.length - 1})` : ""}`;
 const titleOf = (kind: string, paths: string[]): JobTitle => ({ kind, first: basename(paths[0] ?? ""), more: Math.max(0, paths.length - 1) });
 
+/** Beispielinhalt der Logdatei für Demo und Tests; die Platzhalter ersetzt `logRead`. */
+const MOCK_LOG = [
+  "2026-11-16 14:58:02 INFO  Dualfile 0.3.0 gestartet · Linux x86_64 · KDE Plasma 6.2 (Wayland) · AppImage",
+  "2026-11-16 14:58:02 INFO  Einstellungen geladen aus {HOME}/.config/dualfile/settings.json",
+  "2026-11-16 14:59:40 WARN  Ordner nicht lesbar: {HOME}/Projekte/.cache (Zugriff verweigert)",
+  "2026-11-16 15:01:12 INFO  Verbindung SMB {SRV}/daten als {USR} aufgebaut",
+  "2026-11-16 15:01:31 ERROR Kopieren {HOME}/Dokumente/bericht.pdf → smb://{SRV}/daten/bericht.pdf fehlgeschlagen",
+  "                            Ursache: Verbindung vom Server getrennt (os error 104) nach 4,2 MB von 6,8 MB",
+  "2026-11-16 15:01:31 INFO  Teildatei auf dem Ziel gelöscht, Quelle unverändert",
+  "2026-11-16 15:02:05 WARN  Update-Prüfung: keine Antwort von GitHub (Zeitüberschreitung 10 s)",
+].join("\n");
+
 export function createMockApi(options: MockOptions = {}): MockApi {
   const unmountedSystemPlaces = new Set<string>();
   const home = normalize(options.home ?? "/home/demo");
@@ -2543,6 +2555,22 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     },
 
     async openUrl(): Promise<void> {},
+
+    async logInfo() {
+      return { path: "~/.local/state/dualfile/dualfile.log", bytes: 38_912 };
+    },
+    async logRead(anonymize) {
+      const text = MOCK_LOG.replaceAll("{HOME}", "/home/demo").replaceAll("{SRV}", "192.168.2.40").replaceAll("{USR}", "demo");
+      return anonymize ? text.replaceAll("/home/demo", "~").replaceAll("192.168.2.40", "<server-1>").replaceAll("demo", "<benutzer>") : text;
+    },
+    async logSave(dir) {
+      return `${dir.replace(/\/$/, "")}/dualfile-log-20261116-1502.txt`;
+    },
+    async logOpenFolder(): Promise<void> {},
+    async reportIssueUrl() {
+      return "https://github.com/Bexxs75/dualfile/issues/new?title=&body=Dualfile";
+    },
+    async logFrontend(): Promise<void> {},
 
     async openExternal(path): Promise<void> {
       if (isRemotePath(path)) {

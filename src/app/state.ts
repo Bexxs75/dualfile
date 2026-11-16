@@ -44,6 +44,7 @@ export type Dialog =
   | { kind: "properties"; entry: Entry; path: string }
   | { kind: "pattern"; mode: "select" | "deselect"; w: WinIdx }
   | { kind: "settings" }
+  | { kind: "log" }
   | { kind: "search"; w: WinIdx }
   | { kind: "bookmark"; path: string };
 

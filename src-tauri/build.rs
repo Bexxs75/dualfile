@@ -93,6 +93,12 @@ const COMMANDS: &[&str] = &[
     "plugin_diagnostics",
     "plugin_columns",
     "plugin_preview",
+    "log_info",
+    "log_read",
+    "log_save",
+    "log_open_folder",
+    "report_issue_url",
+    "log_frontend",
 ];
 
 fn main() {

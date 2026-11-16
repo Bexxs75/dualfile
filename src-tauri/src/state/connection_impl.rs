@@ -155,6 +155,17 @@ impl AppState {
             .collect()
     }
 
+    /// Hosts of the saved profiles (nothing else), for hiding them in a shared log.
+    pub fn connection_hosts(&self) -> Vec<String> {
+        let (loaded, _) = settings::load(&self.config_dir);
+        loaded
+            .connections
+            .into_iter()
+            .map(|profile| profile.host)
+            .filter(|host| !host.is_empty())
+            .collect()
+    }
+
     /// Creates (empty id) or changes a profile. Pins stay as they are as long as the server
     /// (protocol, host, port) is the same; the UI cannot set them.
     pub fn connection_save(
@@ -592,6 +603,15 @@ impl AppState {
                 pins.clone(),
             ),
         };
+        match &result {
+            Ok(_) => log::info!("{}", crate::diagnostics::connection_line(&profile, None)),
+            // Asking the user to trust a key is a step of the dialog, not a failure.
+            Err(error) if error.trust_error().is_some() => {}
+            Err(error) => log::error!(
+                "{}",
+                crate::diagnostics::connection_line(&profile, Some(&connect_error(error)))
+            ),
+        }
         // Keychain access can prompt too, so it also stays outside settings_lock.
         let kind = if result.is_ok() && profile.transport != SshTransport::Openssh {
             match provided.as_ref() {

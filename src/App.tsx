@@ -20,6 +20,7 @@ import { MakeDirDialog, RenameDialog } from "./components/dialogs/NameDialog";
 import { MultiRenameDialog } from "./components/dialogs/MultiRenameDialog";
 import { PatternDialog } from "./components/dialogs/PatternDialog";
 import { PropertiesDialog } from "./components/dialogs/PropertiesDialog";
+import { LogDialog } from "./components/dialogs/LogDialog";
 import { SettingsDialog } from "./components/dialogs/SettingsDialog";
 import { SearchDialog } from "./components/dialogs/SearchDialog";
 import { ContextMenu } from "./components/ContextMenu";
@@ -61,6 +62,7 @@ function Dialogs({ api }: { api: DualfileApi }) {
       {dialog?.kind === "history" ? <UndoHistory /> : null}
       {dialog?.kind === "connections" ? <ConnectionsDialog entry={dialog.entry} api={api} onClose={() => controller.closeDialog()} /> : null}
       {dialog?.kind === "settings" ? <SettingsDialog /> : null}
+      {dialog?.kind === "log" ? <LogDialog /> : null}
       {dialog?.kind === "search" ? <SearchDialog w={dialog.w} /> : null}
       {dialog?.kind === "bookmark" ? <BookmarkDialog path={dialog.path} /> : null}
       {lister ? <Lister w={lister.w} /> : null}

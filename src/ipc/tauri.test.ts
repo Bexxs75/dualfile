@@ -91,6 +91,12 @@ describe("Befehle: Name und Argumentform", () => {
     ],
     ["makeDir", (a) => a.makeDir("/p", "n"), "make_dir", { parent: "/p", name: "n" }],
     ["openExternal", (a) => a.openExternal("/a"), "open_external", { path: "/a" }],
+    ["logInfo", (a) => a.logInfo(), "log_info", undefined],
+    ["logRead", (a) => a.logRead(true), "log_read", { anonymize: true }],
+    ["logSave", (a) => a.logSave("/d", false), "log_save", { dir: "/d", anonymize: false }],
+    ["logOpenFolder", (a) => a.logOpenFolder(), "log_open_folder", undefined],
+    ["reportIssueUrl", (a) => a.reportIssueUrl(), "report_issue_url", undefined],
+    ["logFrontend", (a) => a.logFrontend("warn", "m"), "log_frontend", { level: "warn", message: "m" }],
     ["cancelJob", (a) => a.cancelJob(4), "cancel_job", { id: 4 }],
     [
       "answerConflict",

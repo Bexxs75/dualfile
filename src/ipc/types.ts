@@ -3,6 +3,14 @@
 
 export type EntryKind = "file" | "dir" | "symlink";
 
+/** Ort und Größe der Logdatei; `path` mit `~` statt Home-Ordner. */
+export interface LogInfo {
+  path: string;
+  bytes: number;
+}
+
+export type LogLevel = "error" | "warn" | "info";
+
 export interface Entry {
   name: string;
   kind: EntryKind;

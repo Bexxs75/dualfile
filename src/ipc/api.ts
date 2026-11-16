@@ -149,6 +149,16 @@ export interface DualfileApi extends SystemApi {
   openExternal(path: string): Promise<void>; // nur xdg-open
   /** Öffnet eine https-Adresse im Standardbrowser. */
   openUrl(url: string): Promise<void>;
+  logInfo(): Promise<import("./types").LogInfo>;
+  /** Letzte 500 Zeilen der Logdatei, auf Wunsch anonymisiert. */
+  logRead(anonymize: boolean): Promise<string>;
+  /** Schreibt das Log in einen lokalen Ordner und liefert den vollen Pfad der neuen Datei. */
+  logSave(dir: string, anonymize: boolean): Promise<string>;
+  logOpenFolder(): Promise<void>;
+  /** https-Adresse eines vorbefüllten GitHub-Issues. */
+  reportIssueUrl(): Promise<string>;
+  /** Nur zum Protokollieren; scheitert nie sichtbar. */
+  logFrontend(level: import("./types").LogLevel, message: string): Promise<void>;
   appCloseNow(): Promise<void>;
   appConfirmClose(): Promise<void>;
   answerItemError(jobId: number, decision: import("./types").ItemErrorDecision): Promise<void>;

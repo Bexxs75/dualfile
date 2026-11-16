@@ -67,6 +67,9 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// A job over thousands of files must not flood the log with one line per file.
+const MAX_LOGGED_FAILURES: usize = 20;
+
 type JobWork = Box<dyn FnOnce(&JobHandle) -> OpReport + Send>;
 
 struct JobMeta {
@@ -132,6 +135,46 @@ impl Shared {
         });
     }
 
+    /// Every item a finished job could not handle goes into the log with its cause. Only paths
+    /// and the core's error texts are written, which never carry credentials.
+    fn log_failures(&self, id: u64) {
+        let Some(report) = self
+            .manager
+            .get()
+            .and_then(Weak::upgrade)
+            .and_then(|m| m.status(id))
+            .and_then(|status| status.report)
+        else {
+            return;
+        };
+        let failed: Vec<_> = report
+            .failed
+            .iter()
+            .filter(|(_, error)| !matches!(error, dualfile_core::Error::Cancelled))
+            .collect();
+        if failed.is_empty() {
+            return;
+        }
+        let (name, dirs) = {
+            let metas = lock(&self.metas);
+            metas.get(&id).map_or_else(
+                || (String::new(), Vec::new()),
+                |meta| (meta.name.clone(), meta.dirs.clone()),
+            )
+        };
+        log::error!(
+            "Auftrag \"{name}\" mit {} Fehler(n) beendet; betroffene Ordner: {}",
+            failed.len(),
+            dirs.join(", ")
+        );
+        for (path, error) in failed.iter().take(MAX_LOGGED_FAILURES) {
+            log::error!("  {} fehlgeschlagen. Ursache: {error}", vpath_text(path));
+        }
+        if failed.len() > MAX_LOGGED_FAILURES {
+            log::error!("  … und {} weitere", failed.len() - MAX_LOGGED_FAILURES);
+        }
+    }
+
     fn emit_current(&self, id: u64) {
         let manager = self.manager.get().and_then(Weak::upgrade);
         if let Some(status) = manager.and_then(|m| m.status(id)) {
@@ -161,6 +204,7 @@ impl JobSink for Shared {
                 }
             }
             JobEvent::Finished(id, _) => {
+                self.log_failures(id);
                 self.emit_current(id);
                 let dirs = lock(&self.metas)
                     .get(&id)
@@ -272,6 +316,10 @@ pub fn xdg_open_command(path: &Path) -> Command {
 /// not detected, or no default application is set); previously its exit code and stderr were
 /// discarded, so a failed open produced no feedback at all. A handler that keeps running — the
 /// normal case — is detached after a short grace, exactly as before.
+pub(crate) fn open_with_system(path: &Path) -> Result<(), UiError> {
+    spawn_opener_reporting(xdg_open_command(path))
+}
+
 fn spawn_opener_reporting(mut command: Command) -> Result<(), UiError> {
     use std::io::Read;
     command.stderr(Stdio::piped());

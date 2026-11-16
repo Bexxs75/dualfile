@@ -23,7 +23,7 @@ import {
   terminalContrast,
   type TerminalColorMode,
 } from "../../themes/terminal";
-import { AboutSettings, SystemSettings, UpdateSettings } from "./SystemDialogs";
+import { AboutSettings, SystemSettings, TroubleshootSettings, UpdateSettings } from "./SystemDialogs";
 import { KeybindingsSettings } from "./KeybindingsSettings";
 import { Modal } from "../Modal";
 
@@ -300,7 +300,7 @@ export function SettingsDialog() {
         </div>
           <SystemSettings />
         </>}
-        {tab === "info" && <><AboutSettings /><UpdateSettings /></>}
+        {tab === "info" && <><AboutSettings /><UpdateSettings /><TroubleshootSettings /></>}
         {tab === "keyboard" && <KeybindingsSettings />}
       </div>
     </Modal>

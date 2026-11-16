@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- **Log file for troubleshooting** (Settings → About → Troubleshooting). Dualfile now writes errors and warnings (failed file jobs, connection and update problems, panics) to `dualfile.log` in `$XDG_STATE_HOME/dualfile/` (default `~/.local/state/dualfile/`), 1 MiB per file with two older files kept. Passwords, keys and file contents are never logged. *View log file…* shows the last 500 lines, optionally anonymized (home folder, user name, computer name, server addresses and e-mail addresses are replaced), and can copy them or save them into the current folder. *Open folder* and *Report a problem on GitHub* (opens a new issue with version and system filled in) sit next to it, and error messages get a *Details in the log file* button. Nothing is ever sent automatically.
+
 ### Fixed
 
 - **Tray "Open" brings the window back.** When Dualfile was minimized or behind other windows, *Open* in the tray menu (and starting Dualfile a second time) did nothing on KDE: the window manager refused the focus request (focus-stealing prevention). The window is now re-shown, so it comes to the front.

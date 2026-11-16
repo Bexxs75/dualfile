@@ -136,9 +136,21 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     return error instanceof Error ? error.message : tr("error.unknown");
   }
 
+  /** Fehlermeldungen der Oberfläche landen auch in der Logdatei; ein Fehler dabei wird verschluckt, damit kein Toast-Kreis entsteht. */
+  function logToFile(text: string): void {
+    // eslint-disable-next-line no-control-regex
+    const message = text.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 2000);
+    try {
+      void Promise.resolve(api.logFrontend("error", message)).catch(() => {});
+    } catch {
+      /* nichts tun */
+    }
+  }
+
   function toast(text: string, kind: "info" | "error" = "info"): void {
     const id = get().nextToastId;
     dispatch({ type: "toastAdd", text, kind });
+    if (kind === "error") logToFile(text);
     later(() => dispatch({ type: "toastRemove", id }), kind === "error" ? Math.max(6000, toastMs * 2) : toastMs);
   }
   const fail = (error: unknown, context?: { path?: string; name?: string }): void =>

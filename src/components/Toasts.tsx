@@ -18,6 +18,18 @@ export function Toasts() {
           onClick={() => controller.removeToast(toast.id)}
         >
           {toast.text}
+          {toast.kind === "error" ? (
+            <button
+              className="tb"
+              onClick={(event) => {
+                event.stopPropagation();
+                controller.removeToast(toast.id);
+                controller.openDialog({ kind: "log" });
+              }}
+            >
+              {tr("log.details")}
+            </button>
+          ) : null}
         </div>
       ))}
     </div>
