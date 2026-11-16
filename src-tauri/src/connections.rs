@@ -471,6 +471,9 @@ pub struct PendingTrust {
     pub fingerprint: String,
     pub secret: Option<Secret>,
     pub created: Instant,
+    /// The profile the question was asked for: the answer must not finish a connect for an
+    /// edited target (the typed password belongs to the old one).
+    pub profile: ConnectionProfileDto,
 }
 
 // ---------------------------------------------------------------- Backend seam

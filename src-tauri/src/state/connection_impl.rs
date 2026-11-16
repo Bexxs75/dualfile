@@ -438,7 +438,7 @@ impl AppState {
             pending.secret,
             DecisionConfirm::decided(decision, given),
             Some((pending.pin_key, pending.generation)),
-            None,
+            Some(&pending.profile),
         )
     }
 
@@ -679,7 +679,7 @@ impl AppState {
                 }
                 outcome
             }
-            Err(error) => self.connect_failed(profile_id, error, provided),
+            Err(error) => self.connect_failed(profile_id, &profile, error, provided),
         }
     }
 
@@ -753,6 +753,7 @@ impl AppState {
     fn connect_failed(
         &self,
         profile_id: &str,
+        profile: &ConnectionProfile,
         error: ConnectError,
         provided: Option<Secret>,
     ) -> Result<ConnectOutcomeDto, UiError> {
@@ -768,6 +769,7 @@ impl AppState {
                         fingerprint: request.sha256.clone(),
                         secret: provided,
                         created: Instant::now(),
+                        profile: shown(profile),
                     },
                 );
                 Ok(ConnectOutcomeDto::NeedsTrust {
@@ -1489,6 +1491,38 @@ mod tests {
         f.state.save_settings(&settings).unwrap();
         assert_eq!(f.state.connections_list().len(), 1);
         assert_eq!(f.state.load_settings().settings.font_size, 20);
+    }
+
+    #[test]
+    fn a_trust_answer_for_a_profile_edited_meanwhile_is_rejected_and_connects_nothing() {
+        let f = fixture();
+        let id = f.save(dto("FTPS", ConnectionProtocol::Ftps));
+        let ConnectOutcomeDto::NeedsTrust { fingerprint, .. } = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap()
+        else {
+            panic!("expected a trust question");
+        };
+        // The answer is already running (question taken) when the editor window saves another
+        // user; a save alone would void the question, so put it back to model that window.
+        let pending = lock(&f.state.connections.pending).remove(&id).unwrap();
+        let mut edited = ConnectionProfileDto::from(f.state.profile(&id).unwrap());
+        edited.user = "someone-else".into();
+        f.state.connection_save(edited).unwrap();
+        lock(&f.state.connections.pending).insert(id.clone(), pending);
+        let err = f
+            .state
+            .connection_trust(&id, TrustDecisionDto::Always, &fingerprint)
+            .unwrap_err();
+        assert_eq!(err.kind, "invalidInput");
+        assert_eq!(err.message, "Das Verbindungsprofil wurde geändert");
+        assert!(f.state.connections_list()[0].connection_id.is_none());
+        assert!(lock(&f.state.connections.pending).is_empty());
+        assert!(
+            f.state.profile(&id).unwrap().pins.is_empty(),
+            "nothing pinned"
+        );
     }
 
     #[test]
