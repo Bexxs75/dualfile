@@ -544,7 +544,7 @@ Codex (gpt-6-astra) checked the plan against `ed51901`. Confirmed: missing setti
 - **P2 Missing API for step 2.** `system_mount_unmount` needs a saved `profile_id` (`commands.rs:901`, `connection_impl.rs:837`), so profile-less GVfs mounts cannot be unmounted. Add a validated mount-key endpoint; move the helper extraction and unmount protection from step 3 forward.
 - **P3** Update references to the reviewed commit; `:300` (job status) is a wrong source; name the `system_mount` tests by function, not line range.
 
-### Open owner decisions (from the mockup round)
-1. F9 = show/hide (Dolphin), Shift+F9 = icons ↔ full — mockup currently has it the other way round.
-2. Ribbon bookmark bar only when the sidebar is hidden, or always?
-3. Default after update: `full` or `icons`?
+### Owner decisions (2026-11-16)
+1. **F9 = show/hide** the sidebar (as in Dolphin, back to the last visible mode); **Shift+F9 = icons ↔ full**. (Still subject to the keyboard-compatibility rule above: if a user already bound F9, the new command stays unbound.)
+2. **Ribbon bookmark bar is shown only while the sidebar is hidden.** Alt+1..9 keeps working in every mode; the numbers appear as hints next to the bookmarks in the sidebar.
+3. **Default after update and for new installs: `full`.** The automatic narrowing to the icon rail on narrow windows (§1.1) still applies and is never persisted.
