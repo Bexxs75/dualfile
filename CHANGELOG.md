@@ -3,7 +3,7 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
-## [Unreleased]
+## [0.2.11] - 2026-11-16
 
 ### Added
 
