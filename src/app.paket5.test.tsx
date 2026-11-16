@@ -25,6 +25,7 @@ test.each(["de", "en"] as const)("remote badges, crumbs and connection count fol
   const indicator = screen.getByRole("button", { name: language === "de" ? "SSH Home · SFTP · verbunden" : "SSH Home · SFTP · connected" });
   expect(indicator).toHaveAttribute("title", expect.stringContaining("SSH Home"));
   await app.user.click(indicator);
+  await app.user.click(screen.getByRole("menuitem", { name: /^SSH Home · SFTP/ }));
   await app.user.click(screen.getByRole("menuitem", { name: language === "de" ? /SSH Home.*Trennen/ : /SSH Home.*Disconnect/ }));
   await waitFor(() => expect(screen.getByRole("button", { name: language === "de" ? "SSH Home · SFTP · getrennt" : "SSH Home · SFTP · disconnected" })).toBeVisible());
   expect(badge.querySelector(".connection-dot")).toHaveClass("disconnected");
@@ -45,25 +46,21 @@ test("listing failure refreshes status, retains old session identity across reco
     await app.runtime.controller.refreshConnections();
   });
   await app.user.click(screen.getByRole("button", { name: "nas · SFTP · verbunden" }));
-  expect(screen.getByText("backup-box · SFTP · verbunden")).toBeVisible();
-  expect(screen.getByRole("menuitem", { name: /backup-box.*Trennen/ })).toBeVisible();
+  expect(screen.getByRole("menuitem", { name: "backup-box · SFTP · verbunden" })).toBeVisible();
   await app.user.keyboard("{Escape}");
   expect(within(app.pane(0)).getByRole("button", { name: "nas" })).toBeVisible();
   await act(async () => { await app.api.connectionDisconnect(a.profile.id); await app.runtime.controller.reload(0); });
   expect(within(app.pane(0)).getByRole("button", { name: /Ort wählen: nas/ }).querySelector(".connection-dot")).toHaveClass("disconnected");
   expect(screen.getByRole("button", { name: "nas · SFTP · getrennt" })).toBeVisible();
   await app.user.click(screen.getByRole("button", { name: "nas · SFTP · getrennt" }));
-  expect(screen.getByText("backup-box · SFTP · verbunden")).toBeVisible();
-  expect(screen.getByRole("menuitem", { name: /backup-box.*Trennen/ })).toBeVisible();
+  expect(screen.getByRole("menuitem", { name: "backup-box · SFTP · verbunden" })).toBeVisible();
   await app.user.keyboard("{Escape}");
   await act(async () => { await app.api.connectionConnect(a.profile.id); await app.runtime.controller.refreshConnections(); });
   expect(within(app.pane(0)).getByRole("button", { name: /Ort wählen: nas/ }).querySelector(".connection-dot")).toHaveClass("disconnected");
   expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(root);
   await app.user.click(screen.getByRole("button", { name: "nas · SFTP · getrennt" }));
-  expect(screen.getByText("nas · SFTP · verbunden")).toBeVisible();
-  expect(screen.getByRole("menuitem", { name: /nas.*Trennen/ })).toBeVisible();
-  expect(screen.getByText("backup-box · SFTP · verbunden")).toBeVisible();
-  expect(screen.getByRole("menuitem", { name: /backup-box.*Trennen/ })).toBeVisible();
+  expect(screen.getByRole("menuitem", { name: "nas · SFTP · verbunden" })).toBeVisible();
+  expect(screen.getByRole("menuitem", { name: "backup-box · SFTP · verbunden" })).toBeVisible();
 });
 
 test.each(["sftp", "ftp", "ftps"])("%s paths never expose session IDs and crumbs keep the connection", protocol => {

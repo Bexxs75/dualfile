@@ -424,6 +424,10 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .header-menu-heading { display: flex; align-items: center; gap: 8px; padding: 9px; border-top: 1px solid var(--line); font-weight: 600; overflow-wrap: anywhere; }
 .header-menu-heading:first-child { border-top: 0; }
 .header-menu-heading .connection-dot { flex-shrink: 0; }
+.header-menu-separator { height: 0; margin: 4px 0; border-top: 1px solid var(--line); }
+.header-dropdown .menu-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-dropdown .menu-detail { margin-left: 0; color: var(--muted); white-space: nowrap; }
+.header-dropdown .menu-chevron { margin-left: auto; color: var(--muted); }
 
 /* Command palette: shared theme tokens and restrained overlay. */
 .modal:has(.command-palette) { align-items: flex-start; padding-top: min(12vh, 100px); }

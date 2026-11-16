@@ -25,7 +25,8 @@ test("pane place menu: not-connected openssh profile loads the remote listing", 
 test("toolbar menu: reconnect of openssh profile loads the remote listing in the active pane", async () => {
   const { app } = await prepare();
   await app.user.click(screen.getByRole("button", { name: /eddie · SFTP/ }));
-  await app.user.click(screen.getByRole("menuitem", { name: /eddie — Neu verbinden/ }));
+  await app.user.click(screen.getByRole("menuitem", { name: /^eddie · SFTP/ }));
+  await app.user.click(screen.getByRole("menuitem", { name: /eddie — Verbinden/ }));
   await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), app.runtime.store.getState().active).path).toMatch(/^sftp:/));
   const w = app.runtime.store.getState().active;
   const path = activeTabOf(app.runtime.store.getState(), w).path;

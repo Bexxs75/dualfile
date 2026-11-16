@@ -3,6 +3,12 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Changed
+
+- **The connection menu is more compact.** Each connection is now a single row (status, name, protocol and state); its actions *Connect*/*Disconnect* and *Edit …* open in a side submenu next to the menu. The submenu opens with a click, Enter, Space or the right arrow key, closes with the left arrow key or Escape, and flips to the left side when there is no room on the right.
+
 ## [0.3.3] - 2026-11-16
 
 ### Fixed
