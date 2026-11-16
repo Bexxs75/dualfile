@@ -1,21 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppState, useController, useT } from "../../app/context";
 import { CoreError, type DualfileApi } from "../../ipc/api";
-import type { ConnectionEntry, ConnectionProfile, ConnectOutcome, SystemPlace } from "../../ipc/types";
+import type { ConnectionProfile, ConnectOutcome, SystemPlace } from "../../ipc/types";
 import { errorKey } from "../../i18n";
 import { Modal } from "../Modal";
-import { ConnectionProfileForm, newSshProfile } from "./ConnectionProfileForm";
+import { newSshProfile } from "./ConnectionProfileForm";
 import "./ssh.css";
 import { SystemPlacesDialog } from "./SystemPlacesDialog";
 
-export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; onClose: () => void; entry?: { action: "new" | "import" | "system" | "edit" | "connect" | "disconnect"; profile?: ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }) {
+export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; onClose: () => void; entry?: { action: "import" | "system" | "connect" | "disconnect"; profile?: ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }) {
   const tr = useT();
   const controller = useController();
   const active = useAppState((s) => s.active);
   const [places, setPlaces] = useState<SystemPlace[]>([]);
   const [showSystem, setShowSystem] = useState(false);
-  const [entries, setEntries] = useState<ConnectionEntry[]>([]);
-  const [editing, setEditing] = useState<ConnectionProfile | null>(null);
+  const entries = useAppState((s) => s.connections);
+  // Comparing sub-views against the list only makes sense once the list was fetched at least once.
+  const [synced, setSynced] = useState(false);
   const [hosts, setHosts] = useState<string[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [password, setPassword] = useState<ConnectionProfile | null>(null);
@@ -45,9 +46,16 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
     }
     setAttemptError({ id: profile.id, text: `${tr(errorKey(e instanceof CoreError ? e.kind : "unknown")).replace(/[.。]$/, "")}: ${host.includes(":") ? `[${host}]` : host}:${port}` });
   };
-  const edit = (profile: ConnectionProfile) => { setAttemptError(null); setError(""); setEditing(profile); };
-  const refresh = async () => { await controller.refreshConnections(); setEntries(await api.connectionsList()); };
-  useEffect(() => { void refresh().catch(fail); void api.systemPlacesList().then(setPlaces).catch(fail); }, [api]);
+  const edit = (profile?: ConnectionProfile) => { setAttemptError(null); setError(""); void controller.openConnectionEditor(profile); };
+  const refresh = () => controller.refreshConnections();
+  useEffect(() => { void refresh().catch(fail).finally(() => setSynced(true)); void api.systemPlacesList().then(setPlaces).catch(fail); }, [api]);
+  // The editor window can change a profile while a password or host-key question for its old target is open.
+  useEffect(() => {
+    if (!synced) return;
+    const changed = (shown: ConnectionProfile) => JSON.stringify(entries.find((e) => e.profile.id === shown.id)?.profile) !== JSON.stringify(shown);
+    if (password && changed(password)) { setPassword(null); controller.toast(tr("ssh.profileChanged"), "error"); }
+    if (trust && changed(trust.profile)) { setTrust(null); controller.toast(tr("ssh.profileChanged"), "error"); }
+  }, [entries, synced, password, trust]);
   async function outcome(profile: ConnectionProfile, result: ConnectOutcome) {
     if (result.state === "connected") {
       await controller.refreshConnections();
@@ -63,7 +71,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
         const root = await api.systemMountConnect(profile.id);
         if (await (entry?.onConnected ? entry.onConnected(root) : controller.navigateTo(active, root))) onClose(); return;
       }
-      await outcome(profile, await api.connectionConnect(profile.id, secret)); } catch (e) { await failAttempt(profile, e); }
+      await outcome(profile, await api.connectionConnect(profile.id, secret, profile)); } catch (e) { await failAttempt(profile, e); }
     finally { await refresh(); setBusy(false); }
   }
   const openSystem = () => api.systemPlacesList().then(p => { setPlaces(p); setShowSystem(true); }).catch(fail);
@@ -79,12 +87,10 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
   useEffect(() => {
     if (entered.current || !entry) return;
     entered.current = true;
-    if (entry.action === "new") edit(newSshProfile());
-    else if (entry.action === "import") void api.sshHostsList().then(setHosts).catch(fail);
+    if (entry.action === "import") void api.sshHostsList().then(setHosts).catch(fail);
     else if (entry.action === "system") void openSystem();
     else if (entry.profile) {
-      if (entry.action === "edit") edit(entry.profile);
-      else if (entry.action === "disconnect") void disconnect(entry.profile);
+      if (entry.action === "disconnect") void disconnect(entry.profile);
       else if (entry.profile.protocol === "system" || entry.profile.transport === "openssh" || (entry.profile.protocol === "smb" && entry.profile.guest) || entry.profile.protocol === "nfs") void connect(entry.profile);
       else setPassword(entry.profile);
     }
@@ -98,10 +104,6 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
         .catch(fail).finally(() => setBusy(false));
     }}>{tr("ssh.delete")}</button>
   </>}><p>{tr("ssh.deleteConfirm", { name: deleting.name })}</p>{error && <p role="alert">{error}</p>}</Modal>;
-  if (editing && !hosts) return <Modal title={tr("ssh.profile")} onClose={() => setEditing(null)}>
-    {error && <p role="alert">{error}</p>}
-    <ConnectionProfileForm api={api} initial={editing} onImport={(draft) => { setEditing(draft); setSelected([]); setError(""); void api.sshHostsList().then(setHosts).catch(fail); }} onCancel={() => { setEditing(null); void refresh().catch(fail); }} onSaved={() => { setEditing(null); void refresh().catch(fail); }} />
-  </Modal>;
   if (password) return <Modal title={tr("ssh.prompt.password")} onClose={() => setPassword(null)}>
     <form autoComplete="off" onSubmit={(event) => { event.preventDefault(); const secret = input.current?.value ?? ""; if (input.current) input.current.value = ""; void connect(password, secret); }}>
       <label>{tr("ssh.answer")}<input ref={input} data-autofocus type="password" autoComplete="off" /></label>
@@ -141,7 +143,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
     {error && <p role="alert">{error}</p>}
   </Modal>;
   return <Modal title={tr("ssh.connections")} onClose={onClose} footer={<>
-    <button className="tb" disabled={busy} onClick={() => edit(newSshProfile())}>{tr("ssh.new")}</button>
+    <button className="tb" disabled={busy} onClick={() => edit()}>{tr("ssh.new")}</button>
     <button className="tb" disabled={busy} onClick={() => { setSelected([]); setError(""); void api.sshHostsList().then(setHosts).catch(fail); }}>{tr("ssh.import")}</button>
     <button className="tb" disabled={busy} onClick={() => { setError(""); void openSystem(); }}>{tr("system.import")}</button>
     <button className="tb" onClick={onClose}>{tr("action.close")}</button>

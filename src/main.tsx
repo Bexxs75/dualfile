@@ -11,7 +11,13 @@ import { createApi } from "./ipc/factory";
 
 // Im Tauri-Fenster trägt der Rust-Kern die API; im Browser-Entwurf die Mock-API.
 const api = createApi();
-// Nur für die Sichtprüfung (VITE_DEMO=1 beim Bauen); im normalen Bau entfällt dieser Zweig vollständig.
-const runtime = import.meta.env.VITE_DEMO ? createRuntime(api) : undefined;
-createRoot(document.getElementById("root")!).render(<App api={api} runtime={runtime} />);
-if (runtime) void import("./devDemo").then((demo) => demo.runDemo(runtime));
+const root = createRoot(document.getElementById("root")!);
+if (new URLSearchParams(location.search).get("view") === "connection-editor") {
+  // Second OS window: same bundle, only the editor is loaded and the main app never starts.
+  void import("./ConnectionEditorWindow").then(({ ConnectionEditorWindow }) => root.render(<ConnectionEditorWindow api={api} search={location.search} />));
+} else {
+  // Nur für die Sichtprüfung (VITE_DEMO=1 beim Bauen); im normalen Bau entfällt dieser Zweig vollständig.
+  const runtime = import.meta.env.VITE_DEMO ? createRuntime(api) : undefined;
+  root.render(<App api={api} runtime={runtime} />);
+  if (runtime) void import("./devDemo").then((demo) => demo.runDemo(runtime));
+}

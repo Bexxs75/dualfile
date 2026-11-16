@@ -187,9 +187,11 @@ describe("Befehle: Name und Argumentform", () => {
       "connectionConnect mit Geheimnis",
       (a) => a.connectionConnect("p-1", "geheim-marker"),
       "connection_connect",
-      { profileId: "p-1", secret: "geheim-marker" },
+      { profileId: "p-1", secret: "geheim-marker", expected: null },
     ],
-    ["connectionConnect ohne Geheimnis", (a) => a.connectionConnect("p-1"), "connection_connect", { profileId: "p-1", secret: null }],
+    ["connectionConnect ohne Geheimnis", (a) => a.connectionConnect("p-1"), "connection_connect", { profileId: "p-1", secret: null, expected: null }],
+    ["connectionEditorOpen", (a) => a.connectionEditorOpen("p-1", "Profil", { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 13, lang: "de" }), "connection_editor_open", { profileId: "p-1", title: "Profil", appearance: { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 13, lang: "de" } }],
+    ["connectionEditorClose", (a) => a.connectionEditorClose(), "connection_editor_close", undefined],
     [
       "connectionTrust",
       (a) => a.connectionTrust("p-1", "always", "ab".repeat(32)),
@@ -436,7 +438,8 @@ describe("Ereignisse", () => {
     emit(jobEvent);
     emit(conflict);
     emit({ type: "dirChanged", path: "/x" });
-    expect(handler.mock.calls.map((c) => (c[0] as CoreEvent).type)).toEqual(["job", "conflict", "dirChanged"]);
+    emit({ type: "connectionsChanged" });
+    expect(handler.mock.calls.map((c) => (c[0] as CoreEvent).type)).toEqual(["job", "conflict", "dirChanged", "connectionsChanged"]);
     expect(handler.mock.calls[0]?.[0]).toBe(jobEvent);
   });
 

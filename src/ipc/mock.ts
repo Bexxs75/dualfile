@@ -2237,6 +2237,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       if (profile.protocol !== "system" || !profile.systemUrl) throw new CoreError("Invalid profile", "invalidInput");
       unmountedSystemPlaces.add(profile.systemUrl);
     },
+    async connectionEditorOpen() { return true; },
+    async connectionEditorClose() { /* no second window in the browser design */ },
     async sshHostsList() { return ["backup-box", "fileserver", "nas", "web-vps"]; },
     async sshHostResolve(alias) {
       if (!/^[A-Za-z0-9._@:%[\]-]{1,255}$/.test(alias) || alias.startsWith("-")) throw new CoreError("Ungültiger Alias", "invalidInput");
@@ -2981,9 +2983,10 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     },
 
     // Unbekannte Hosts melden `remote` (der Server ist nicht erreichbar bzw. kennt das Konto nicht).
-    async connectionConnect(profileId, secret): Promise<ConnectOutcome> {
+    async connectionConnect(profileId, secret, expected): Promise<ConnectOutcome> {
       const rec = record(profileId);
       const { profile } = rec;
+      if (expected && JSON.stringify(expected) !== JSON.stringify(profile)) throw new CoreError("Das Verbindungsprofil wurde geändert", "invalidInput");
       if (profile.protocol === "system") return { state: "connected", connectionId: profileId, root: await this.systemMountConnect(profileId), secretStore: "none" };
       pending.delete(profileId); // eine neue Anfrage ersetzt eine offene Bestätigung
       const existingId = byProfile.get(profileId);

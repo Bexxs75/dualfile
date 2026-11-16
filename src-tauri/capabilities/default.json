@@ -18,6 +18,7 @@
     "allow-system-mount-unmount",
     "allow-ssh-hosts-list",
     "allow-ssh-host-resolve",
+    "allow-connection-editor-open",
     "allow-undo-list",
     "allow-undo-run",
     "allow-list",

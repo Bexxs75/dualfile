@@ -21,6 +21,8 @@ const COMMANDS: &[&str] = &[
     "system_mount_unmount",
     "ssh_hosts_list",
     "ssh_host_resolve",
+    "connection_editor_open",
+    "connection_editor_close",
     "undo_list",
     "undo_run",
     "list",

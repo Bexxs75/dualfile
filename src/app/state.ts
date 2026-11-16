@@ -31,7 +31,7 @@ export type JobKind = "copy" | "move" | "trash" | "delete" | "rename" | "extract
 
 export type Dialog =
   | { kind: "history" }
-  | { kind: "connections"; entry?: { action: "new" | "import" | "system" | "edit" | "connect" | "disconnect"; profile?: import("../ipc/types").ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }
+  | { kind: "connections"; entry?: { action: "import" | "system" | "connect" | "disconnect"; profile?: import("../ipc/types").ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }
   | { kind: "transfer"; plan: OperationPlan; from: WinIdx }
   | { kind: "delete"; model: DeleteDialogModel; plan: DeletePlan; reason: "permanent" | "trashFailed" }
   | { kind: "rename"; w: WinIdx; dir: string; name: string; existing: readonly string[] }

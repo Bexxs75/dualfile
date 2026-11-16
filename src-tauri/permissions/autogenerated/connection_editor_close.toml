@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-connection-editor-close"
+description = "Enables the connection_editor_close command without any pre-configured scope."
+commands.allow = ["connection_editor_close"]
+
+[[permission]]
+identifier = "deny-connection-editor-close"
+description = "Denies the connection_editor_close command without any pre-configured scope."
+commands.deny = ["connection_editor_close"]

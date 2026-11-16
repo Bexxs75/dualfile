@@ -155,7 +155,7 @@ function PathBar({ w }: { w: WinIdx }) {
     ...drives.map(drive => ({ label: drive.name, icon: "disk" as const, hint: drive.path, current: path === drive.path,
       action: () => { void controller.navigatePlace(w, drive.path); } })),
     { label: tr("header.manageConnections"), icon: "list", action: () => controller.openDialog({ kind: "connections" }) },
-    { label: tr("places.new"), icon: "plus", action: () => controller.openDialog({ kind: "connections", entry: { action: "new" } }) },
+    { label: tr("places.new"), icon: "plus", action: () => { void controller.openConnectionEditor(); } },
   ];
 
   // Strg+F aus dem globalen Handler: Filterfeld fokussieren.
