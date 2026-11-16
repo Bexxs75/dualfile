@@ -294,7 +294,7 @@ export function SettingsDialog() {
         </div>
         <div className="fld">
           <label htmlFor="terminal-shell">{tr("settings.terminalShell")}</label>
-          <select id="terminal-shell" value={settings.terminalShell ?? "auto"} aria-describedby="terminal-shell-help" onChange={e => set({ terminalShell: e.target.value as Settings["terminalShell"] })}>
+          <select id="terminal-shell" value={settings.terminalShell ?? "login"} aria-describedby="terminal-shell-help" onChange={e => set({ terminalShell: e.target.value as Settings["terminalShell"] })}>
             {(["auto", "bash", "login"] as const).map(value => <option key={value} value={value}>{tr(`settings.terminalShell.${value}`)}</option>)}
           </select>
           <p id="terminal-shell-help" className="field-help">{tr("settings.terminalShell.help")}</p>

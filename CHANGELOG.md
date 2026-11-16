@@ -3,6 +3,12 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Changed
+
+- **The embedded terminal now starts your own shell by default** (`$SHELL` with your configuration, functions and prompt), so your own commands and abbreviations work there too. Existing installations keep the shell they had; switch under Settings → System → Terminal shell.
+
 ## [0.3.3] - 2026-11-16
 
 ### Fixed
