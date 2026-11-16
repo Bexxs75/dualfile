@@ -50,7 +50,8 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   add("settings", "menu.view.settings", "settings", "Ctrl+,", () => controller.openDialog({ kind: "settings" }));
   add("search", "search.title", "search", "", () => controller.openDialog({ kind: "search", w: state.active }));
   add("connections", "header.manageConnections", "connect", "Ctrl+N", () => controller.openDialog({ kind: "connections" }));
-  for (const [action, key] of [["new", "ssh.new"], ["import", "ssh.import"], ["system", "system.import"]] as const) {
+  add("new", "ssh.new", "import", "", () => { void controller.openConnectionEditor(); });
+  for (const [action, key] of [["import", "ssh.import"], ["system", "system.import"]] as const) {
     add(action, key, "import", "", () => controller.openDialog({ kind: "connections", entry: { action } }));
   }
   for (const theme of ["schiefer", "papier", "werkstatt"] as const) {

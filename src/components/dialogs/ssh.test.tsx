@@ -16,7 +16,7 @@ function setup(node: (api: ReturnType<typeof createMockApi>) => ReactNode) {
   const runtime = createRuntime(api);
   runtime.store.dispatch({ type: "settings", update: (s) => ({ ...s, language: "de" }) });
   render(<RuntimeProvider runtime={runtime}>{node(api)}</RuntimeProvider>);
-  return { api, user: userEvent.setup() };
+  return { api, runtime, user: userEvent.setup() };
 }
 
 test("transport switches hints, inherits empty values and resolves host selection", async () => {
@@ -98,15 +98,58 @@ test("one prompt at a time in FIFO order, focus stays trapped, cancel clears inp
   expect(await second).toBeNull();
 });
 
-test("OpenSSH profile import keeps the unsaved profile draft", async () => {
-  const { api, user } = setup((api) => <ConnectionsDialog api={api} onClose={() => {}} />);
-  await user.click(screen.getByRole("button", { name: "Neue Verbindung…" }));
-  await user.type(screen.getByLabelText("Name"), "unsaved draft");
-  await user.click(screen.getByRole("button", { name: "Aus ~/.ssh/config und known_hosts importieren…" }));
-  await user.click(await screen.findByLabelText("backup-box"));
-  await user.click(screen.getByRole("button", { name: "Gewählte Hosts importieren" }));
-  await waitFor(() => expect(screen.getByLabelText("Name")).toHaveValue("unsaved draft"));
-  expect((await api.connectionsList())[0]?.profile.host).toBe("backup-box");
+test("New and Edit open the editor window instead of an in-page form", async () => {
+  const { api, user } = setup((api) => {
+    vi.spyOn(api, "connectionsList").mockResolvedValue([{ profile: { ...newSshProfile("example"), id: "p", name: "Example" }, connected: false, connectionId: null, root: null, secretSet: false, secretStore: "none", pins: [] }]);
+    return <ConnectionsDialog api={api} onClose={() => {}} />;
+  });
+  const open = vi.spyOn(api, "connectionEditorOpen");
+  await user.click(await screen.findByRole("button", { name: "Neue Verbindung…" }));
+  expect(open).toHaveBeenLastCalledWith(null, "Verbindungsprofil", expect.anything());
+  await user.click(screen.getByRole("button", { name: "Bearbeiten" }));
+  expect(open).toHaveBeenLastCalledWith("p", "Verbindungsprofil", expect.anything());
+  expect(screen.queryByLabelText("Name")).toBeNull();
+});
+
+test("a second editor request tells the user instead of opening another window", async () => {
+  const { api, runtime, user } = setup((api) => <ConnectionsDialog api={api} onClose={() => {}} />);
+  vi.spyOn(api, "connectionEditorOpen").mockResolvedValue(false);
+  await user.click(await screen.findByRole("button", { name: "Neue Verbindung…" }));
+  await waitFor(() => expect(runtime.store.getState().toasts.some((t) => /schon in einem eigenen Fenster/.test(t.text))).toBe(true));
+});
+
+const shown = (host: string) => ({ profile: { ...newSshProfile(host), id: "p", name: "Example", transport: "builtin" as const, port: 22 }, connected: false, connectionId: null, root: null, secretSet: false, secretStore: "none" as const, pins: [] });
+
+test("the connect call carries the profile the dialog showed", async () => {
+  const { api, user } = setup((api) => {
+    vi.spyOn(api, "connectionsList").mockResolvedValue([shown("old.example")]);
+    return <ConnectionsDialog api={api} onClose={() => {}} />;
+  });
+  await user.click(await screen.findByRole("button", { name: "Verbinden" }));
+  await user.type(screen.getByLabelText("Antwort"), "pw");
+  const connect = vi.spyOn(api, "connectionConnect").mockResolvedValue({ state: "connected", connectionId: "c", root: "/", secretStore: "none" });
+  await user.click(screen.getAllByRole("button", { name: "Verbinden" }).at(-1)!);
+  expect(connect).toHaveBeenCalledWith("p", "pw", shown("old.example").profile);
+});
+
+test("a password question is dropped when the editor window changed that profile", async () => {
+  const api = createMockApi();
+  const list = vi.spyOn(api, "connectionsList").mockResolvedValue([shown("old.example")]);
+  const runtime = createRuntime(api);
+  runtime.store.dispatch({ type: "settings", update: (s) => ({ ...s, language: "de" }) });
+  render(<RuntimeProvider runtime={runtime}><ConnectionsDialog api={api} onClose={() => {}} /></RuntimeProvider>);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Verbinden" }));
+  expect(screen.getByLabelText("Antwort")).toBeVisible();
+  list.mockResolvedValue([shown("new.example")]);
+  await act(async () => { await runtime.controller.refreshConnections(); });
+  await waitFor(() => expect(screen.queryByLabelText("Antwort")).toBeNull());
+  expect(runtime.store.getState().toasts.some((t) => /inzwischen geändert/.test(t.text))).toBe(true);
+  // Vanished profile: same treatment.
+  await user.click(await screen.findByRole("button", { name: "Verbinden" }));
+  list.mockResolvedValue([]);
+  await act(async () => { await runtime.controller.refreshConnections(); });
+  await waitFor(() => expect(screen.queryByLabelText("Antwort")).toBeNull());
 });
 
 test("profile deletion requires in-dialog confirmation and supports cancel", async () => {

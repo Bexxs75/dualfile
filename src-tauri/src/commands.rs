@@ -393,8 +393,12 @@ pub async fn connection_connect(
     state: Shared<'_>,
     profile_id: String,
     secret: Option<String>,
+    expected: Option<ConnectionProfileDto>,
 ) -> Result<ConnectOutcomeDto, UiError> {
-    run(state, move |s| s.connection_connect(&profile_id, secret)).await
+    run(state, move |s| {
+        s.connection_connect(&profile_id, secret, expected.as_ref())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -537,6 +541,18 @@ pub fn ssh_prompt_answer(id: String, text: Option<String>) -> Result<(), &'stati
     Err("SSH-Abfragen nicht verfügbar")
 }
 
+/// The SSH host list and resolver are also needed by the connection editor window.
+fn ssh_config_window(label: &str) -> Result<(), UiError> {
+    if label == "main" || label == crate::connection_editor::EDITOR_LABEL {
+        Ok(())
+    } else {
+        Err(UiError::new(
+            "unsupported",
+            "SSH-Konfiguration nicht verfügbar",
+        ))
+    }
+}
+
 fn ssh_main_window(label: &str) -> Result<(), UiError> {
     if label == "main" {
         Ok(())
@@ -550,7 +566,7 @@ fn ssh_main_window(label: &str) -> Result<(), UiError> {
 
 #[tauri::command]
 pub async fn ssh_hosts_list(window: tauri::WebviewWindow) -> Result<Vec<String>, UiError> {
-    ssh_main_window(window.label())?;
+    ssh_config_window(window.label())?;
     #[cfg(unix)]
     {
         tauri::async_runtime::spawn_blocking(|| {
@@ -575,7 +591,7 @@ pub async fn ssh_host_resolve(
     window: tauri::WebviewWindow,
     alias: String,
 ) -> Result<serde_json::Value, UiError> {
-    ssh_main_window(window.label())?;
+    ssh_config_window(window.label())?;
     #[cfg(unix)]
     {
         tauri::async_runtime::spawn_blocking(move || {
@@ -600,6 +616,20 @@ pub async fn ssh_host_resolve(
 
 #[cfg(test)]
 mod ssh_command_tests {
+    #[test]
+    fn ssh_configuration_is_available_to_main_and_the_editor() {
+        assert!(super::ssh_config_window("main").is_ok());
+        assert!(super::ssh_config_window("connection-editor").is_ok());
+        for label in ["", "preview", "MAIN", "connection-editor2"] {
+            assert!(super::ssh_config_window(label).is_err());
+        }
+    }
+
+    #[test]
+    fn ssh_places_stay_main_only() {
+        assert!(super::ssh_main_window("connection-editor").is_err());
+    }
+
     #[test]
     fn ssh_configuration_is_only_available_to_main() {
         assert!(super::ssh_main_window("main").is_ok());

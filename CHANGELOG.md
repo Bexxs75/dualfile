@@ -8,6 +8,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 ### Changed
 
 - **The connection menu is more compact.** Each connection is now a single row (status, name, protocol and state); its actions *Connect*/*Disconnect* and *Edit …* open in a side submenu next to the menu. The submenu opens with a click, Enter, Space or the right arrow key, closes with the left arrow key or Escape, and flips to the left side when there is no room on the right.
+- **Creating and editing a connection opens its own window.** The connection form is no longer a dialog inside the main window but a separate window that you can move and resize freely, also outside the main window. It stays on top of the main window without blocking it; the connection list refreshes as soon as you save. Only one editor window is open at a time (asking for another brings the open one forward). If a profile's host, user or port changes while a password or host-key question for it is open, that question is closed and connecting refuses the outdated target.
 - **The embedded terminal now starts your own shell by default** (`$SHELL` with your configuration, functions and prompt), so your own commands and abbreviations work there too. Existing installations keep the shell they had; switch under Settings → System → Terminal shell.
 
 ## [0.3.3] - 2026-11-16

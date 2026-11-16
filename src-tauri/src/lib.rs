@@ -7,6 +7,7 @@ mod close_policy;
 mod commands;
 mod compare;
 mod conflict;
+mod connection_editor;
 mod connections;
 mod convert;
 mod desktop_entry;
@@ -129,7 +130,7 @@ pub fn run() {
                     window.app_handle().tray_by_id("dualfile").is_some()
                         && !system::QUIT_REQUESTED.load(Ordering::SeqCst),
                 ) {
-                    close::Decision::Allow => {}
+                    close::Decision::Allow => connection_editor::mark_main_closing(),
                     close::Decision::Hide => {
                         api.prevent_close();
                         let _ = window.hide();
@@ -169,6 +170,8 @@ pub fn run() {
             commands::system_mount_unmount,
             commands::ssh_hosts_list,
             commands::ssh_host_resolve,
+            connection_editor::connection_editor_open,
+            connection_editor::connection_editor_close,
             commands::list,
             commands::home_dir,
             commands::copy,
@@ -252,6 +255,11 @@ pub fn run() {
         .expect("Dualfile konnte nicht gestartet werden");
 
     app.run(|handle, event| {
+        // An editor window alone would keep the process alive after the main window is gone.
+        if matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
+            connection_editor::mark_main_closing();
+            connection_editor::destroy_editor(handle);
+        }
         if matches!(&event, RunEvent::Exit) || matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
             if let Some(manager) = handle.try_state::<Arc<terminal::TerminalManager>>() { manager.shutdown(); }
         }

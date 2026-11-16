@@ -1043,7 +1043,20 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         return dispatch({ type: "conflictAdd", conflict: event.conflict });
       case "dirChanged":
         return reloadMatching(event.path);
+      // A profile was saved, deleted or imported, possibly in the editor window.
+      case "connectionsChanged":
+        return void refreshConnections();
     }
+  }
+
+  /** Opens the profile editor in its own window; `profile` undefined = new connection. */
+  async function openConnectionEditor(profile?: import("../ipc/types").ConnectionProfile): Promise<void> {
+    const { theme, accent, accentAutomatic, density, fontSize } = get().settings;
+    try {
+      const opened = await api.connectionEditorOpen(profile?.id ?? null, tr("ssh.profile"), { theme, accent, accentAutomatic: accentAutomatic ?? false, density, fontSize, lang: language() });
+      // A second editor is never opened: the first one is brought forward, and the user is told why.
+      if (!opened) toast(tr("ssh.editorOpen"));
+    } catch (error) { fail(error); }
   }
 
   const rememberedErrors = new Set<number>();
@@ -1206,6 +1219,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     ...compareFeature,
     api,
     refreshConnections,
+    openConnectionEditor,
     disconnectConnection: async (profileId: string): Promise<void> => {
       try {
         await api.connectionDisconnect(profileId);

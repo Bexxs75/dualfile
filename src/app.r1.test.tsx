@@ -55,10 +55,10 @@ test("connection chip empty, disconnected, connected and targeted dialog entries
   const empty = screen.getByRole("button", { name: "Verbindungen …" });
   expect(empty.querySelector(".connection-dot")).toBeNull();
   await app.user.click(empty);
+  const open = vi.spyOn(app.api, "connectionEditorOpen");
   await app.user.click(screen.getByRole("menuitem", { name: "Neue Verbindung…" }));
-  expect(screen.getByRole("dialog", { name: "Verbindungsprofil" })).toBeVisible();
-  await app.user.keyboard("{Escape}");
-  await app.user.keyboard("{Escape}");
+  expect(open).toHaveBeenLastCalledWith(null, "Verbindungsprofil", expect.objectContaining({ lang: "de" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
   const saved = await app.api.connectionSave(newSshProfile("nas"));
   await act(async () => { await app.runtime.controller.refreshConnections(); });
   const chip = screen.getByRole("button", { name: "nas · SFTP · getrennt" });
@@ -71,8 +71,8 @@ test("connection chip empty, disconnected, connected and targeted dialog entries
   await app.user.click(live);
   await app.user.click(screen.getByRole("menuitem", { name: "nas · SFTP · verbunden" }));
   await app.user.click(screen.getByRole("menuitem", { name: /nas.*Bearbeiten/ }));
-  expect(screen.getByRole("dialog", { name: "Verbindungsprofil" })).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(saved.profile.name);
+  expect(open).toHaveBeenLastCalledWith(saved.profile.id, "Verbindungsprofil", expect.anything());
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 

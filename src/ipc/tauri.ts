@@ -54,6 +54,7 @@ function isCoreEvent(value: unknown): value is CoreEvent {
       return isRecord(value.conflict);
     case "dirChanged":
       return typeof value.path === "string";
+    case "connectionsChanged": return true;
     default:
       return false;
   }
@@ -176,7 +177,9 @@ export function createTauriApi(): DualfileApi {
     connectionsList: () => call("connections_list"),
     connectionSave: (profile) => call("connection_save", { profile }),
     connectionDelete: (profileId) => call("connection_delete", { profileId }),
-    connectionConnect: (profileId, secret) => call("connection_connect", { profileId, secret: secret ?? null }),
+    connectionConnect: (profileId, secret, expected) => call("connection_connect", { profileId, secret: secret ?? null, expected: expected ?? null }),
+    connectionEditorOpen: (profileId, title, appearance) => call("connection_editor_open", { profileId, title, appearance }),
+    connectionEditorClose: () => call("connection_editor_close"),
     connectionTrust: (profileId, decision, fingerprint) => call("connection_trust", { profileId, decision, fingerprint }),
     connectionResetTrust: (profileId) => call("connection_reset_trust", { profileId }),
     connectionDisconnect: (profileId) => call("connection_disconnect", { profileId }),

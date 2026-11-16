@@ -9,6 +9,7 @@ import type {
   CompareFilter,
   ConnectOutcome,
   ConnectionEntry,
+  EditorAppearance,
   ConnectionProfile,
   CompareOptions,
   ComparePage,
@@ -273,8 +274,17 @@ export interface DualfileApi extends SystemApi {
    * Fingerabdruck muss bestätigt werden (`needsTrust`, dann `connectionTrust`) oder Pin-Abweichung
    * (`pinMismatch`, es wird nie verbunden). Fehler als CoreError: `auth`, `timeout`, `trust`,
    * `algorithmNotAllowed`, `remote`, `tooManyConnections`, `invalidInput`.
+   * `expected` ist das Profil, wie die Oberfläche es zeigt: hat es sich inzwischen geändert (z. B. im
+   * Editor-Fenster), scheitert der Aufruf mit `invalidInput`, statt zu einem anderen Ziel zu verbinden.
    */
-  connectionConnect(profileId: string, secret?: string): Promise<ConnectOutcome>;
+  connectionConnect(profileId: string, secret?: string, expected?: ConnectionProfile): Promise<ConnectOutcome>;
+  /**
+   * Öffnet das Editor-Fenster für ein Verbindungsprofil (`null` = neues). `false`, wenn schon eins offen ist
+   * (es kommt dann nach vorn). Nur vom Hauptfenster aus.
+   */
+  connectionEditorOpen(profileId: string | null, title: string, appearance: EditorAppearance): Promise<boolean>;
+  /** Schließt das Editor-Fenster, aus dem der Aufruf kommt. */
+  connectionEditorClose(): Promise<void>;
   /**
    * Bestätigt NUR den zuletzt von `connectionConnect` gemeldeten Fingerabdruck und verbindet dann.
    * Anderer Fingerabdruck oder keine ausstehende Bestätigung: `invalidInput` (die Bestätigung ist danach verworfen).

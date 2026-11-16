@@ -856,13 +856,25 @@ pub struct ItemErrorInfoDto {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CoreEventDto {
-    CloseRequested { count: usize },
+    CloseRequested {
+        count: usize,
+    },
     CloseSaveRequested,
-    ItemError { error: ItemErrorInfoDto },
+    ItemError {
+        error: ItemErrorInfoDto,
+    },
     UndoChanged,
-    Job { status: JobStatusDto },
-    Conflict { conflict: ConflictInfoDto },
-    DirChanged { path: String },
+    Job {
+        status: JobStatusDto,
+    },
+    Conflict {
+        conflict: ConflictInfoDto,
+    },
+    DirChanged {
+        path: String,
+    },
+    /// A profile was saved, deleted or imported (possibly from the editor window).
+    ConnectionsChanged,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

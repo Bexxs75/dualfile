@@ -486,7 +486,18 @@ export type CoreEvent =
   | { type: "itemError"; error: ItemErrorInfo }
   | { type: "job"; status: JobStatus }
   | { type: "conflict"; conflict: ConflictInfo }
-  | { type: "dirChanged"; path: string };
+  | { type: "dirChanged"; path: string }
+  | { type: "connectionsChanged" };
+
+/** Look of the main window, handed to the connection editor window (it never reads the settings file). */
+export interface EditorAppearance {
+  theme: Settings["theme"];
+  accent: string;
+  accentAutomatic: boolean;
+  density: Settings["density"];
+  fontSize: number;
+  lang: "de" | "en";
+}
 
 // ---------------------------------------------------------------- Server-Verbindungen (FTP/FTPS/SFTP)
 

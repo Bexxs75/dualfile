@@ -12,7 +12,7 @@ use crate::connections::{
     DecisionConfirm, PendingTrust, SecretStoreDto, SessionPins, TrustDecisionDto, MAX_SECRET_BYTES,
     TRUST_QUESTION_TTL,
 };
-use crate::convert::{connect_error, vpath_text, UiError};
+use crate::convert::{connect_error, vpath_text, CoreEventDto, UiError};
 use dualfile_core::connections::{
     new_profile_id, parse_profile_path, validate_connections, ConnectionProfile,
     ConnectionProtocol, ConnectionTls, SshTransport,
@@ -41,6 +41,18 @@ fn secret_removal_failed() -> UiError {
 
 fn invalid(message: &str) -> UiError {
     UiError::new("invalidInput", message)
+}
+
+/// The profile as the UI shows it (no pins), for comparing against what the UI saw.
+fn shown(profile: &ConnectionProfile) -> ConnectionProfileDto {
+    ConnectionProfileDto::from(ConnectionProfile {
+        pins: Vec::new(),
+        ..profile.clone()
+    })
+}
+
+fn profile_changed() -> UiError {
+    invalid("Das Verbindungsprofil wurde geändert")
 }
 
 /// Frees the "connecting" mark of a profile when the attempt ends, however it ends.
@@ -241,6 +253,7 @@ impl AppState {
         if transport_changed || server_changed {
             self.drop_connection(&profile.id);
         }
+        self.shared.sink.emit(CoreEventDto::ConnectionsChanged);
         Ok(self.entry_for(&profile))
     }
 
@@ -284,6 +297,7 @@ impl AppState {
         }
         current.connections.retain(|p| p.id != profile_id);
         self.save_profiles_and_pins(&current)?;
+        self.shared.sink.emit(CoreEventDto::ConnectionsChanged);
         Ok(())
     }
 
@@ -373,8 +387,14 @@ impl AppState {
         &self,
         profile_id: &str,
         secret: Option<String>,
+        expected: Option<&ConnectionProfileDto>,
     ) -> Result<ConnectOutcomeDto, UiError> {
-        if self.profile(profile_id)?.protocol == ConnectionProtocol::System {
+        let stored = self.profile(profile_id)?;
+        // The editor window can change host/user/port while the UI still shows the old target.
+        if expected.is_some_and(|shown_to_user| shown(&stored) != *shown_to_user) {
+            return Err(profile_changed());
+        }
+        if stored.protocol == ConnectionProtocol::System {
             let root = self.system_mount_connect(profile_id)?;
             return Ok(ConnectOutcomeDto::Connected {
                 connection_id: profile_id.into(),
@@ -385,7 +405,7 @@ impl AppState {
         let provided = secret.map(Self::secret_from).transpose()?;
         // A new attempt ends an older open question of this profile.
         lock(&self.connections.pending).remove(profile_id);
-        self.connect_with(profile_id, provided, DecisionConfirm::ask(), None)
+        self.connect_with(profile_id, provided, DecisionConfirm::ask(), None, expected)
     }
 
     /// Answers the trust question of `connection_connect`: only the fingerprint that was
@@ -418,6 +438,7 @@ impl AppState {
             pending.secret,
             DecisionConfirm::decided(decision, given),
             Some((pending.pin_key, pending.generation)),
+            None,
         )
     }
 
@@ -427,9 +448,14 @@ impl AppState {
         provided: Option<Secret>,
         confirm: std::sync::Arc<DecisionConfirm>,
         confirmation: Option<(PinKey, u64)>,
+        expected: Option<&ConnectionProfileDto>,
     ) -> Result<ConnectOutcomeDto, UiError> {
         let settings_guard = lock(&self.connections.settings_lock);
         let profile = self.profile(profile_id)?;
+        // Checked on the snapshot every later step is verified against.
+        if expected.is_some_and(|shown_to_user| shown(&profile) != *shown_to_user) {
+            return Err(profile_changed());
+        }
         let pin_key = pin_protocol(&profile)
             .filter(|_| profile.transport != SshTransport::Openssh)
             .map(|protocol| {
@@ -784,6 +810,7 @@ impl AppState {
                 .map_err(invalid)?;
         settings::save(&self.config_dir, &settings, false)?;
         drop(_guard);
+        self.shared.sink.emit(CoreEventDto::ConnectionsChanged);
         Ok(settings
             .connections
             .iter()
@@ -976,8 +1003,10 @@ mod tests {
         let f = fixture();
         let a = f.save(dto("A", ConnectionProtocol::Ftps));
         let b = f.save(dto("B", ConnectionProtocol::Ftps));
-        let ConnectOutcomeDto::NeedsTrust { fingerprint, .. } =
-            f.state.connection_connect(&b, Some(PW.into())).unwrap()
+        let ConnectOutcomeDto::NeedsTrust { fingerprint, .. } = f
+            .state
+            .connection_connect(&b, Some(PW.into()), None)
+            .unwrap()
         else {
             panic!("expected trust question")
         };
@@ -1096,6 +1125,7 @@ mod tests {
                         dualfile_remote::trust::hex(&[7; 32]),
                     ),
                     None,
+                    None,
                 )
             });
             entered_rx
@@ -1139,7 +1169,7 @@ mod tests {
         assert_eq!((back.uid, back.gid), (1234, 4321));
         assert_eq!(back.into_profile().export, "relative/path");
         // The FTP route would try the network; only NfsProfile::validate rejects this export.
-        let err = f.state.connection_connect(&id, None).unwrap_err();
+        let err = f.state.connection_connect(&id, None, None).unwrap_err();
         assert_eq!(err.kind, "invalidInput");
     }
 
@@ -1175,6 +1205,56 @@ mod tests {
         }
     }
 
+    fn drain_events(f: &Fx) -> Vec<CoreEventDto> {
+        f.events.try_iter().collect()
+    }
+
+    #[test]
+    fn connections_changed_is_emitted_on_success_only() {
+        let f = fixture();
+        let id = f.save(dto("A", ConnectionProtocol::Ftps));
+        assert_eq!(drain_events(&f), vec![CoreEventDto::ConnectionsChanged]);
+        // A rejected save changes nothing, so it tells nobody.
+        let mut bad = dto("A", ConnectionProtocol::Ftps);
+        bad.id = "missing".into();
+        assert!(f.state.connection_save(bad).is_err());
+        assert!(f.state.connection_delete("missing").is_err());
+        assert!(drain_events(&f).is_empty());
+        f.state.connection_delete(&id).unwrap();
+        assert_eq!(drain_events(&f), vec![CoreEventDto::ConnectionsChanged]);
+    }
+
+    #[test]
+    fn connect_refuses_a_profile_that_changed_since_the_ui_saw_it() {
+        let f = fixture();
+        let id = f.save(dto("A", ConnectionProtocol::Ftps));
+        let seen = ConnectionProfileDto::from(f.state.profile(&id).unwrap());
+        // Same profile: connects (pins are not part of what the UI sees).
+        let ok = f
+            .state
+            .connection_connect(&id, Some(PW.into()), Some(&seen))
+            .unwrap();
+        assert!(matches!(
+            ok,
+            ConnectOutcomeDto::Connected { .. } | ConnectOutcomeDto::NeedsTrust { .. }
+        ));
+        // The editor window changes the target meanwhile.
+        let mut edited = seen.clone();
+        edited.host = "other.example.org".into();
+        f.state.connection_save(edited).unwrap();
+        let err = f
+            .state
+            .connection_connect(&id, Some(PW.into()), Some(&seen))
+            .unwrap_err();
+        assert_eq!(err.kind, "invalidInput");
+        assert_eq!(err.message, "Das Verbindungsprofil wurde geändert");
+        // Without the expectation the old call shape still works (no host reached in the fake).
+        assert!(f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .is_ok());
+    }
+
     impl Fx {
         fn save(&self, d: ConnectionProfileDto) -> String {
             self.state.connection_save(d).unwrap().profile.id
@@ -1186,7 +1266,11 @@ mod tests {
         /// FTPS profile, connected (trust given).
         fn connect_ftps(&self) -> (String, String) {
             let id = self.save(dto("FTPS", ConnectionProtocol::Ftps));
-            let fingerprint = match self.state.connection_connect(&id, Some(PW.into())).unwrap() {
+            let fingerprint = match self
+                .state
+                .connection_connect(&id, Some(PW.into()), None)
+                .unwrap()
+            {
                 ConnectOutcomeDto::NeedsTrust { fingerprint, .. } => fingerprint,
                 other => panic!("{other:?}"),
             };
@@ -1253,7 +1337,9 @@ mod tests {
         let mut d = dto("FTPS", ConnectionProtocol::Ftps);
         d.save_secret = true;
         let id = f.save(d.clone());
-        f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        f.state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         assert_eq!(f.keychain.keys(), [format!("dualfile:{id}")]);
         d.id = id.clone();
         // same server, other name: nothing is lost
@@ -1280,7 +1366,10 @@ mod tests {
         assert!(!entry.connected);
         assert_eq!(entry.connection_id, old);
         f.ftp.state().refuse_connects_after = None;
-        let outcome = f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        let outcome = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         assert!(matches!(outcome, ConnectOutcomeDto::Connected { .. }));
         let entry = &f.state.connections_list()[0];
         assert!(entry.connected);
@@ -1406,7 +1495,10 @@ mod tests {
     fn connect_asks_first_trusts_exactly_the_shown_fingerprint_and_pins_it() {
         let f = fixture();
         let id = f.save(dto("FTPS", ConnectionProtocol::Ftps));
-        let outcome = f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        let outcome = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         let ConnectOutcomeDto::NeedsTrust {
             fingerprint,
             kind: trust_kind,
@@ -1438,7 +1530,9 @@ mod tests {
         );
         assert!(f.state.connections_list()[0].pins.is_empty());
         // ask again, confirm with the shown (differently written) fingerprint
-        f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        f.state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         let shown = fingerprint.to_uppercase();
         let connected = f
             .state
@@ -1452,10 +1546,13 @@ mod tests {
         // pinned: after disconnecting, connecting needs no question
         f.state.connection_disconnect(&id).unwrap();
         assert!(!f.state.connections_list()[0].connected);
-        let again = f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        let again = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         assert!(matches!(again, ConnectOutcomeDto::Connected { .. }));
         // connecting a connected profile gives the same connection back
-        let same = f.state.connection_connect(&id, None).unwrap();
+        let same = f.state.connection_connect(&id, None, None).unwrap();
         assert_eq!(same, again);
     }
 
@@ -1463,7 +1560,9 @@ mod tests {
     fn trust_once_is_not_stored_and_asks_again_next_time() {
         let f = fixture();
         let id = f.save(dto("FTPS", ConnectionProtocol::Ftps));
-        f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        f.state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         let fingerprint = "07".repeat(32);
         let once = f
             .state
@@ -1473,7 +1572,9 @@ mod tests {
         assert!(f.state.connections_list()[0].pins.is_empty());
         f.state.connection_disconnect(&id).unwrap();
         assert!(matches!(
-            f.state.connection_connect(&id, Some(PW.into())).unwrap(),
+            f.state
+                .connection_connect(&id, Some(PW.into()), None)
+                .unwrap(),
             ConnectOutcomeDto::NeedsTrust { .. }
         ));
     }
@@ -1484,7 +1585,10 @@ mod tests {
         let (id, _) = f.connect_ftps();
         f.state.connection_disconnect(&id).unwrap();
         f.ftp.state().cert.as_mut().unwrap().sha256 = [9; 32];
-        let outcome = f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        let outcome = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         assert_eq!(
             outcome,
             ConnectOutcomeDto::PinMismatch {
@@ -1506,7 +1610,9 @@ mod tests {
         f.state.connection_reset_trust(&id).unwrap();
         assert!(f.state.connections_list()[0].pins.is_empty());
         assert!(matches!(
-            f.state.connection_connect(&id, Some(PW.into())).unwrap(),
+            f.state
+                .connection_connect(&id, Some(PW.into()), None)
+                .unwrap(),
             ConnectOutcomeDto::NeedsTrust { .. }
         ));
     }
@@ -1526,7 +1632,9 @@ mod tests {
         assert!(f.state.connections_list()[0].pins.is_empty());
         f.state.connection_disconnect(&id).unwrap();
         assert!(matches!(
-            f.state.connection_connect(&id, Some(PW.into())).unwrap(),
+            f.state
+                .connection_connect(&id, Some(PW.into()), None)
+                .unwrap(),
             ConnectOutcomeDto::NeedsTrust { .. }
         ));
     }
@@ -1538,7 +1646,7 @@ mod tests {
         let id = f.save(dto("FTPS", ConnectionProtocol::Ftps));
         let error = f
             .state
-            .connection_connect(&id, Some(PW.into()))
+            .connection_connect(&id, Some(PW.into()), None)
             .unwrap_err();
         assert_eq!(error.kind, "trust");
     }
@@ -1550,7 +1658,7 @@ mod tests {
         let id = f.save(dto("FTPS", ConnectionProtocol::Ftps));
         let fp = "07".repeat(32);
         f.state
-            .connection_connect(&id, Some("falsch-XYZ".into()))
+            .connection_connect(&id, Some("falsch-XYZ".into()), None)
             .unwrap();
         let error = f
             .state
@@ -1568,13 +1676,16 @@ mod tests {
         let mut d = dto("Alt", ConnectionProtocol::Ftp);
         let id = f.save(d.clone());
         assert_eq!(
-            kind(f.state.connection_connect(&id, Some(PW.into()))),
+            kind(f.state.connection_connect(&id, Some(PW.into()), None)),
             "invalidInput"
         );
         d.id = id.clone();
         d.allow_plaintext = true;
         f.state.connection_save(d).unwrap();
-        let connected = f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        let connected = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         assert!(matches!(connected, ConnectOutcomeDto::Connected { .. }));
     }
 
@@ -1587,7 +1698,10 @@ mod tests {
             key_type,
             kind: trust_kind,
             ..
-        } = f.state.connection_connect(&id, Some(PW.into())).unwrap()
+        } = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap()
         else {
             panic!()
         };
@@ -1602,7 +1716,9 @@ mod tests {
         f.state.connection_disconnect(&id).unwrap();
         f.sftp.state().host_key = HostKey::ed25519(2);
         assert!(matches!(
-            f.state.connection_connect(&id, Some(PW.into())).unwrap(),
+            f.state
+                .connection_connect(&id, Some(PW.into()), None)
+                .unwrap(),
             ConnectOutcomeDto::PinMismatch { .. }
         ));
         f.sftp.state().host_key = HostKey {
@@ -1612,7 +1728,7 @@ mod tests {
         };
         f.state.connection_reset_trust(&id).unwrap();
         assert_eq!(
-            kind(f.state.connection_connect(&id, Some(PW.into()))),
+            kind(f.state.connection_connect(&id, Some(PW.into()), None)),
             "algorithmNotAllowed"
         );
     }
@@ -1657,7 +1773,7 @@ mod tests {
         f.ftp.state().cert.as_mut().unwrap().chain = ChainStatus::Valid;
         let error = f
             .state
-            .connection_connect(&id2, Some("other-secret-9".into()))
+            .connection_connect(&id2, Some("other-secret-9".into()), None)
             .unwrap_err();
         assert!(!format!("{error:?}").contains("other-secret-9"));
     }
@@ -1669,7 +1785,10 @@ mod tests {
         let mut d = dto("FTPS", ConnectionProtocol::Ftps);
         d.save_secret = true;
         let id = f.save(d);
-        let connected = f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        let connected = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         let ConnectOutcomeDto::Connected { secret_store, .. } = connected else {
             panic!()
         };
@@ -1681,7 +1800,7 @@ mod tests {
         // the stored one is used without typing it again
         f.state.connection_disconnect(&id).unwrap();
         assert!(matches!(
-            f.state.connection_connect(&id, None).unwrap(),
+            f.state.connection_connect(&id, None, None).unwrap(),
             ConnectOutcomeDto::Connected { .. }
         ));
         // clearing removes it
@@ -1701,14 +1820,14 @@ mod tests {
         assert!(f.keychain.keys().is_empty());
         f.state.connection_disconnect(&id).unwrap();
         assert!(matches!(
-            f.state.connection_connect(&id, None).unwrap(),
+            f.state.connection_connect(&id, None, None).unwrap(),
             ConnectOutcomeDto::Connected { .. }
         ));
         assert!(!f.settings_text().contains(PW));
         // without a stored or typed secret the login fails
         f.state.connection_disconnect(&id).unwrap();
         f.state.secret_clear(&id).unwrap();
-        assert_eq!(kind(f.state.connection_connect(&id, None)), "auth");
+        assert_eq!(kind(f.state.connection_connect(&id, None, None)), "auth");
     }
 
     #[test]
@@ -1718,7 +1837,9 @@ mod tests {
         let mut d = dto("FTPS", ConnectionProtocol::Ftps);
         d.save_secret = true;
         let id = f.save(d.clone());
-        f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        f.state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         f.state.connection_disconnect(&id).unwrap();
         assert_eq!(f.keychain.keys(), [format!("dualfile:{id}")]);
         d.id = id.clone();
@@ -1727,7 +1848,7 @@ mod tests {
         assert!(!entry.secret_set);
         assert!(f.keychain.keys().is_empty());
         // the connect asks for a password again instead of using an old one
-        assert_eq!(kind(f.state.connection_connect(&id, None)), "auth");
+        assert_eq!(kind(f.state.connection_connect(&id, None, None)), "auth");
     }
 
     #[test]
@@ -1805,8 +1926,10 @@ mod tests {
         let mut d = dto("FTPS", ConnectionProtocol::Ftps);
         d.save_secret = true;
         let id = f.save(d);
-        let ConnectOutcomeDto::Connected { root, .. } =
-            f.state.connection_connect(&id, Some(PW.into())).unwrap()
+        let ConnectOutcomeDto::Connected { root, .. } = f
+            .state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap()
         else {
             panic!()
         };
@@ -1951,7 +2074,9 @@ mod tests {
         };
         // the connection is closed and opened again (another connection id): refused
         f.state.connection_disconnect(&id).unwrap();
-        f.state.connection_connect(&id, Some(PW.into())).unwrap();
+        f.state
+            .connection_connect(&id, Some(PW.into()), None)
+            .unwrap();
         assert_eq!(
             kind(f.state.delete_permanent(&input, &plan.token)),
             "invalidToken"
