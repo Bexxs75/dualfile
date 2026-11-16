@@ -30,11 +30,19 @@ export function Toolbar() {
   const connectionLabel = connection ? `${connection.profile.name} · ${connection.profile.protocol.toUpperCase()}` : tr("ssh.connections");
   const connectionState = connection ? tr(connection.connected ? "header.connected" : "ssh.disconnected") : "";
   const entry = (action: "new" | "import" | "edit" | "connect", profile?: typeof connections[number]["profile"]) => controller.openDialog({ kind: "connections", entry: { action, profile } });
-  const connectionItems: HeaderMenuItem[] = connections.flatMap(({ profile, connected }) => [
-    { kind: "heading", label: `${profile.name} · ${profile.protocol.toUpperCase()} · ${tr(connected ? "header.connected" : "ssh.disconnected")}`, connected },
-    { label: tr(connected ? "ssh.disconnect" : "header.reconnect"), ariaLabel: `${profile.name} — ${tr(connected ? "ssh.disconnect" : "header.reconnect")}`, icon: connected ? "disconnect" : "connect", action: () => { if (connected) void controller.disconnectConnection(profile.id); else entry("connect", profile); } },
-    { label: `${tr("ssh.edit")} …`, ariaLabel: `${profile.name} — ${tr("ssh.edit")} …`, icon: "edit", action: () => entry("edit", profile) },
-  ]);
+  const connectionItems: HeaderMenuItem[] = connections.map(({ profile, connected }): HeaderMenuItem => {
+    const state = tr(connected ? "header.connected" : "ssh.disconnected");
+    const toggle = tr(connected ? "ssh.disconnect" : "ssh.connect");
+    return {
+      label: profile.name, detail: `${profile.protocol.toUpperCase()} · ${state}`, connected,
+      ariaLabel: `${profile.name} · ${profile.protocol.toUpperCase()} · ${state}`,
+      submenu: [
+        { label: toggle, ariaLabel: `${profile.name} — ${toggle}`, icon: connected ? "disconnect" : "connect", action: () => { if (connected) void controller.disconnectConnection(profile.id); else entry("connect", profile); } },
+        { label: `${tr("ssh.edit")} …`, ariaLabel: `${profile.name} — ${tr("ssh.edit")} …`, icon: "edit", action: () => entry("edit", profile) },
+      ],
+    };
+  });
+  if (connections.length) connectionItems.push({ kind: "separator" });
   connectionItems.push(
     { label: tr("ssh.new"), icon: "plus", action: () => entry("new") },
     { label: tr("ssh.import"), icon: "import", action: () => entry("import") },

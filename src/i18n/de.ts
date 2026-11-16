@@ -77,7 +77,6 @@ const de = {
 
   "header.tools": "Werkzeuge",
   "header.connected": "verbunden",
-  "header.reconnect": "Neu verbinden",
   "header.manageConnections": "Alle Verbindungen verwalten …",
   "header.soon": "folgt",
   "header.command": "Befehl, Ordner oder Verbindung …",

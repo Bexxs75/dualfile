@@ -77,7 +77,6 @@ const en: Record<keyof typeof de, string> = {
 
   "header.tools": "Tools",
   "header.connected": "connected",
-  "header.reconnect": "Reconnect",
   "header.manageConnections": "Manage all connections …",
   "header.soon": "coming soon",
   "header.command": "Command, folder or connection …",
