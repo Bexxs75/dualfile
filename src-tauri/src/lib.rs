@@ -89,6 +89,9 @@ pub fn run() {
             {
                 let _ = window.set_icon(icon.clone());
             }
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_title(&format!("Dualfile {}", app.package_info().version));
+            }
             let sink = Arc::new(TauriSink(app.handle().clone()));
             #[cfg(unix)]
             let state = {
