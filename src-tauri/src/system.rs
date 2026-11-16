@@ -321,6 +321,9 @@ pub fn app_restart(app: tauri::AppHandle) -> Result<(), String> {
     command.args(env.args_os.iter().skip(1));
     dualfile_core::appenv::apply_clean_env(&mut command);
     dualfile_core::appenv::apply_external_current_dir(&mut command);
+    // As Tauri's own restart does: release the single-instance lock first, or the new process
+    // may find this one still running and quit as a second instance.
+    app.cleanup_before_exit();
     command.spawn().map_err(|e| {
         log::error!("Neustart nach dem Update fehlgeschlagen: {e}");
         e.to_string()
