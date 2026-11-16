@@ -1112,6 +1112,10 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       try {
         await api.saveSettings(settings);
         lastSaved = text;
+        // A change made while this write ran was compared against the old lastSaved and may have
+        // been skipped (e.g. switching back to it): catch up instead of keeping the stale file.
+        const now = currentSnapshot();
+        if (!disposed && saveTimer === null && now !== text) scheduleSave(now);
       } catch (error) {
         lastSaved = "";
         if (!disposed) fail(error);
@@ -1150,6 +1154,10 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     // Only new content restarts the delay: a folder reloading over and over (new listing, same
     // session) would otherwise keep pushing the save away and it would never be written.
     if (saveTimer !== null && snapshot === scheduledSnapshot) return;
+    scheduleSave(snapshot);
+  }
+
+  function scheduleSave(snapshot: string): void {
     scheduledSnapshot = snapshot;
     if (saveTimer !== null) timers.clear(saveTimer);
     saveTimer = timers.set(() => {

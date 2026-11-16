@@ -67,3 +67,18 @@ test("a folder that keeps reporting changes does not postpone a pending save for
   expect(r.saveSettings).toHaveBeenCalledTimes(1);
   r.controller.dispose();
 });
+test("switching back to the saved state while a save is running is written afterwards", async () => {
+  const r = await setup();
+  const original = r.store.getState().settings.language;
+  let release!: () => void;
+  r.saveSettings.mockImplementationOnce(() => new Promise<void>(resolve => { release = resolve; }));
+  r.controller.updateSettings(s => ({ ...s, language: s.language === "en" ? "de" : "en" }));
+  await vi.advanceTimersByTimeAsync(400);
+  expect(r.saveSettings).toHaveBeenCalledTimes(1);
+  r.controller.updateSettings(s => ({ ...s, language: original }));
+  release();
+  await vi.advanceTimersByTimeAsync(400);
+  expect(r.saveSettings).toHaveBeenCalledTimes(2);
+  expect(r.saveSettings.mock.calls[1]![0].language).toBe(original);
+  r.controller.dispose();
+});
