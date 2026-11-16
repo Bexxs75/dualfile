@@ -50,7 +50,7 @@ Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and b
 - Duplicate-file search, similar-image search and disk-usage inspection.
 - Light/dark themes, accent colors, density settings and English/German interface text.
 - Log file for troubleshooting with an anonymizing viewer (Settings → About → Troubleshooting).
-- Process-plugin interface with explicit permissions; not compatible with Total Commander DLLs.
+- Plugin interface (process plugins with explicit permissions) is planned: the groundwork exists, but there is no UI and no plugins yet. Total Commander DLLs will not be supported.
 
 ## Download
 
@@ -116,7 +116,7 @@ Bug reports and proposals are welcome in English through [GitHub Issues](https:/
 
 ## Status and roadmap
 
-The original plan covers the core, viewer, batch rename, archives, comparison, remote connections and plugins. Implementations now exist for these areas, followed by background jobs, disk tools, system-place imports, native SMB and the command palette. The `0.1.0` version is a development baseline, not a claim of a published stable release.
+The original plan covers the core, viewer, batch rename, archives, comparison, remote connections and plugins. Implementations now exist for these areas except plugins (only the groundwork is there), followed by background jobs, disk tools, system-place imports, native SMB and the command palette. The `0.1.0` version is a development baseline, not a claim of a published stable release.
 
 Next release work includes validated packaging, complete license metadata and final screenshots. Native updater/tray verification remains outstanding. The new CI and draft-release workflows have not yet run.
 
