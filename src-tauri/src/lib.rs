@@ -70,9 +70,7 @@ pub fn run() {
         // Muss als erstes Plugin stehen: ein zweiter Start holt das vorhandene Fenster nach vorn.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
+                system::bring_to_front(&window);
             }
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())

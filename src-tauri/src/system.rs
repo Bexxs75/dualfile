@@ -83,6 +83,20 @@ pub async fn start_menu_set(enabled: bool) -> Result<(), String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Brings the main window to the front, also when it is minimized or behind other windows.
+pub(crate) fn bring_to_front(w: &tauri::WebviewWindow) {
+    // Linux: KWin and other window managers refuse present() without a user timestamp
+    // (focus-stealing prevention), so a minimized or covered window stays put. Re-mapping
+    // it counts as a new window, which the window manager raises and focuses.
+    #[cfg(target_os = "linux")]
+    if w.is_visible().unwrap_or(false) && !w.is_focused().unwrap_or(false) {
+        let _ = w.hide();
+    }
+    let _ = w.unminimize();
+    let _ = w.show();
+    let _ = w.set_focus();
+}
+
 /// Set by the tray's Quit item: closing then really exits instead of hiding to the tray.
 pub(crate) static QUIT_REQUESTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -120,9 +134,7 @@ pub fn tray_set(app: tauri::AppHandle, enabled: bool, language: String) -> Resul
             .show_menu_on_left_click(false)
             .on_menu_event(|app, event| {
                 if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.unminimize();
-                    let _ = w.set_focus();
+                    bring_to_front(&w);
                     // Reset on Open, so a cancelled quit (job confirmation) hides again later.
                     let quit = event.id.as_ref() == "quit";
                     QUIT_REQUESTED.store(quit, std::sync::atomic::Ordering::SeqCst);
@@ -141,12 +153,14 @@ pub fn tray_set(app: tauri::AppHandle, enabled: bool, language: String) -> Resul
                     }
                 ) {
                     if let Some(w) = tray.app_handle().get_webview_window("main") {
-                        if w.is_visible().unwrap_or(false) {
+                        // Hide only a window that is really in front; otherwise fetch it.
+                        let in_front = w.is_visible().unwrap_or(false)
+                            && w.is_focused().unwrap_or(false)
+                            && !w.is_minimized().unwrap_or(false);
+                        if in_front {
                             let _ = w.hide();
                         } else {
-                            let _ = w.unminimize();
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                            bring_to_front(&w);
                         }
                     }
                 }

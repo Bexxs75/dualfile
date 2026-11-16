@@ -3,6 +3,12 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Fixed
+
+- **Tray "Open" brings the window back.** When Dualfile was minimized or behind other windows, *Open* in the tray menu (and starting Dualfile a second time) did nothing on KDE: the window manager refused the focus request (focus-stealing prevention). The window is now re-shown, so it comes to the front.
+
 ## [0.2.11] - 2026-11-16
 
 ### Added
