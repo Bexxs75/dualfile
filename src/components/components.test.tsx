@@ -18,7 +18,7 @@ async function runtime(language: "de" | "en" = "de") {
   const api = createMockApi({
     initialSettings: {
       version: 1, verifyPolicy: "auto", theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13, language,
-      bookmarks: [], mirror: false, session: { windows: [], activeWindow: 0 },
+      bookmarks: [], session: { windows: [], activeWindow: 0 },
     },
   });
   const rt = createRuntime(api, { toastMs: 50 });

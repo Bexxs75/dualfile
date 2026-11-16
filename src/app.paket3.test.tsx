@@ -48,11 +48,6 @@ test.each([["de", "Speicherbelegung"], ["en", "Disk usage"]] as const)("B11 %s d
   expect(screen.getByRole("dialog", { name: title })).toBeInTheDocument();
 });
 
-test.each([["de", "Panels koppeln"], ["en", "Link panes"]] as const)("B12 %s pane linking label", async (language, label) => {
-  await setupApp({ language });
-  expect(screen.getByRole("button", { name: new RegExp(label) })).toHaveAttribute("aria-pressed", "false");
-});
-
 test("B13 bookmark tooltip follows pinned state", async () => {
   const app = await setupApp({ left: DOCS });
   const bar = within(app.pane(0));

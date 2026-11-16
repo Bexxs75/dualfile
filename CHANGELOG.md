@@ -10,6 +10,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 - **The connection menu is more compact.** Each connection is now a single row (status, name, protocol and state); its actions *Connect*/*Disconnect* and *Edit …* open in a side submenu next to the menu. The submenu opens with a click, Enter, Space or the right arrow key, closes with the left arrow key or Escape, and flips to the left side when there is no room on the right.
 - **The embedded terminal now starts your own shell by default** (`$SHELL` with your configuration, functions and prompt), so your own commands and abbreviations work there too. Existing installations keep the shell they had; switch under Settings → System → Terminal shell.
 
+### Removed
+
+- **The "Link panes" toggle was removed.** Opening a bookmark now always changes the active pane only; the other pane no longer follows. An old `mirror` entry in an existing settings file is ignored and dropped on the next save.
+
 ## [0.3.3] - 2026-11-16
 
 ### Fixed

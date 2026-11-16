@@ -533,7 +533,6 @@ mod tests {
                 color: "#112233".into(),
                 order: 0,
             }],
-            mirror: false,
             extension_column: false,
             pane_color_left: String::new(),
             pane_color_right: String::new(),

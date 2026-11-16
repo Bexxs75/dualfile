@@ -82,18 +82,3 @@ export function byShortcut(bookmarks: readonly Bookmark[], n: number): Bookmark 
   return normalize(bookmarks)[n - 1] ?? null;
 }
 
-/**
- * Spiegeln: Hat das aktive Fenster zu einem angehefteten Ordner gewechselt (Lesezeichen angeklickt
- * oder Alt+n), soll das andere Fenster denselben Ordner öffnen. Gibt den Zielpfad zurück oder null.
- * Nur der Wechsel auf genau einen angehefteten Ordner löst das aus – gewöhnliches Navigieren
- * (Unterordner, Rücktaste) soll das andere Fenster nicht mitziehen.
- */
-export function mirrorTarget(
-  bookmarks: readonly Bookmark[],
-  mirror: boolean,
-  activeWindowNavigatedPath: string,
-): string | null {
-  if (!mirror) return null;
-  const norm = normalizePath(activeWindowNavigatedPath);
-  return bookmarks.some((b) => normalizePath(b.path) === norm) ? norm : null;
-}

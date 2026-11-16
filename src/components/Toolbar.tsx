@@ -21,7 +21,6 @@ export function Toolbar() {
   const showHidden = useAppState(state => state.showHidden);
   const terminal = useAppState(state => state.terminal);
   const quickView = useAppState(state => state.quickView);
-  const mirror = useAppState(state => state.settings.mirror);
   const controller = useController();
   const tr = useT();
   const remote = parseRemotePath(path);
@@ -75,7 +74,6 @@ export function Toolbar() {
       <HeaderMenu className="connections-menu" label={`${connectionLabel}${connectionState ? ` · ${connectionState}` : ""}`} title={`${connectionLabel}${connectionState ? ` · ${connectionState}` : ""} (Ctrl+N)`} items={connectionItems}>
         {connection && <span className={`connection-dot ${connection.connected ? "connected" : "disconnected"}`} />}<Icon name="connect" /><span className="connection-name">{connectionLabel}</span>
       </HeaderMenu>
-      <button type="button" className="header-chip" onMouseDown={e => e.preventDefault()} aria-label={tr("menu.view.mirror")} aria-pressed={mirror} title={tr("tip.mirror")} onClick={() => controller.setMirror(!mirror)}><Icon name="couple" /><span>{tr("header.couple")}</span><span className="text-muted">{tr(mirror ? "header.on" : "header.off")}</span></button>
       {iconButton("settings", tr("menu.view.settings"), `${tr("tip.settings")} (Ctrl+,)`, () => controller.openDialog({ kind: "settings" }))}
     </div>
     {palette && <CommandPalette commands={commands} recent={recent} onRun={id => setRecent(previous => [id, ...previous.filter(item => item !== id)].slice(0, 5))} onClose={() => setPalette(false)} />}

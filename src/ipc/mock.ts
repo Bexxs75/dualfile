@@ -2640,7 +2640,6 @@ export function createMockApi(options: MockOptions = {}): MockApi {
           fontSize: 13,
           language: "auto",
           bookmarks: [],
-          mirror: false,
           session: { windows: [], activeWindow: 0 },
         };
         return { settings: fresh, outcome: { kind: "fresh" as const } };

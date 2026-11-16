@@ -6,7 +6,7 @@ import { createMockApi } from "../ipc/mock";
 import { TerminalShortcutHint } from "./ShortcutHint";
 
 async function setup(language: "de" | "en") {
-  const api = createMockApi({ initialSettings: { version: 1, verifyPolicy: "auto", theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13, language, bookmarks: [], mirror: false, session: { windows: [], activeWindow: 0 } } });
+  const api = createMockApi({ initialSettings: { version: 1, verifyPolicy: "auto", theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13, language, bookmarks: [], session: { windows: [], activeWindow: 0 } } });
   const rt = createRuntime(api, { toastMs: 50 });
   await rt.controller.start();
   return render(<RuntimeProvider runtime={rt}><TerminalShortcutHint><button type="button" title="Fallback">T</button></TerminalShortcutHint></RuntimeProvider>);

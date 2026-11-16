@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Bookmark } from "../ipc/types";
-import { byShortcut, isValidColor, mirrorTarget, move, pin, rename, setColor, unpin } from "./bookmarks";
+import { byShortcut, isValidColor, move, pin, rename, setColor, unpin } from "./bookmarks";
 
 function must(result: ReturnType<typeof pin>): Bookmark[] {
   if (!result.ok) throw new Error(`unerwartet: ${result.error}`);
@@ -84,19 +84,5 @@ describe("Alt+1…9", () => {
     expect(byShortcut(three(), 0)).toBeNull();
     expect(byShortcut(three(), 10)).toBeNull();
     expect(byShortcut([], 1)).toBeNull();
-  });
-});
-
-describe("Spiegeln", () => {
-  it("gibt bei aktivem Spiegeln das Ziel für das andere Fenster zurück", () => {
-    expect(mirrorTarget(three(), true, "/b")).toBe("/b");
-    expect(mirrorTarget(three(), true, "/b/")).toBe("/b");
-  });
-  it("tut nichts, wenn Spiegeln aus ist", () => {
-    expect(mirrorTarget(three(), false, "/b")).toBeNull();
-  });
-  it("zieht bei gewöhnlicher Navigation (kein Lesezeichen) nicht mit", () => {
-    expect(mirrorTarget(three(), true, "/b/unter")).toBeNull();
-    expect(mirrorTarget([], true, "/b")).toBeNull();
   });
 });

@@ -761,11 +761,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   }
 
   async function openBookmark(path: string): Promise<void> {
-    const { settings, active } = get();
-    const ok = await navigateTo(active, path);
-    if (!ok) return;
-    const mirrored = bookmarkOps.mirrorTarget(settings.bookmarks, settings.mirror, path);
-    if (mirrored) await navigateTo(otherWindow(active), mirrored);
+    await navigateTo(get().active, path);
   }
 
   function openBookmarkNumber(n: number): void {
@@ -793,10 +789,6 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   function moveBookmark(from: number, to: number): void {
     const result = bookmarkOps.move(get().settings.bookmarks, from, to);
     if (result.ok) updateSettings((s) => ({ ...s, bookmarks: result.bookmarks }));
-  }
-  function setMirror(on: boolean): void {
-    updateSettings((s) => ({ ...s, mirror: on }));
-    toast(tr(on ? "toast.mirrorOn" : "toast.mirrorOff"));
   }
 
   // ---------------------------------------------------------------- Lister und Schnellansicht
@@ -1279,7 +1271,6 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     editBookmark,
     unpinBookmark,
     moveBookmark,
-    setMirror,
     dragStart,
     dragOver,
     dragEnd,

@@ -140,7 +140,6 @@ export const defaultSettings: Settings = {
   fontSize: 13,
   language: "auto",
   bookmarks: [],
-  mirror: false,
   session: { windows: [], activeWindow: 0 },
 };
 
