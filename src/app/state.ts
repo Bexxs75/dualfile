@@ -43,8 +43,8 @@ export type Dialog =
   | { kind: "archiveError"; path: string; message: string; external: boolean }
   | { kind: "properties"; entry: Entry; path: string }
   | { kind: "pattern"; mode: "select" | "deselect"; w: WinIdx }
-  | { kind: "settings" }
-  | { kind: "log" }
+  | { kind: "settings"; tab?: "info" }
+  | { kind: "log"; fromSettings?: boolean }
   | { kind: "search"; w: WinIdx }
   | { kind: "bookmark"; path: string };
 

@@ -25,6 +25,16 @@ test("Info: Fehlersuche zeigt Ort und Größe, öffnet Ordner, Issue und Logdial
   expect(await screen.findByRole("dialog", { name: "Logdatei" })).toBeInTheDocument();
 });
 
+test("Logdialog aus den Einstellungen: Schließen führt zurück zum Info-Reiter", async () => {
+  const app = await setupApp();
+  const dlg = await settingsDialog(app);
+  await app.user.click(await dlg.findByRole("button", { name: "Logdatei ansehen …" }));
+  const log = within(await screen.findByRole("dialog", { name: "Logdatei" }));
+  await app.user.click(log.getByRole("button", { name: "Schließen" }));
+  const back = within(await screen.findByRole("dialog", { name: "Einstellungen" }));
+  expect(back.getByRole("tab", { name: "Info" })).toHaveAttribute("aria-selected", "true");
+});
+
 test("Logdialog: anonymisiert vorab, Umschalter liest ohne Anonymisierung, Kopieren und Speichern", async () => {
   const logRead = vi.fn(async (anonymize: boolean) => (anonymize ? "ERROR ~/a <server-1>" : "ERROR /home/demo/a 10.0.0.1"));
   const logSave = vi.fn(async (dir: string) => `${dir}/dualfile-log-1.txt`);

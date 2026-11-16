@@ -143,7 +143,8 @@ export function SettingsDialog() {
   const currentAccent = settings.accentAutomatic ? defaultAccent(settings.theme) : settings.accent;
   const warnings = accentWarning(hex, settings.theme);
   const tabs = ["appearance", "system", "info", "keyboard"] as const;
-  const [tab, setTab] = useState<(typeof tabs)[number]>("appearance");
+  const startTab = useAppState((state) => (state.dialog?.kind === "settings" ? state.dialog.tab : undefined));
+  const [tab, setTab] = useState<(typeof tabs)[number]>(startTab ?? "appearance");
 
   function onHex(value: string): void {
     setHex(value);

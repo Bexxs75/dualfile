@@ -80,7 +80,7 @@ export function TroubleshootSettings() {
     <p>{tr("log.intro")}</p>
     {info && <p><span className="muted">{tr("log.location")}</span> <code>{info.path}</code> <span className="muted">{formatBytes(info.bytes)}</span></p>}
     <div className="system-actions">
-      <button className="tb primary" onClick={() => controller.openDialog({ kind: "log" })}>{tr("log.view")}</button>
+      <button className="tb primary" onClick={() => controller.openDialog({ kind: "log", fromSettings: true })}>{tr("log.view")}</button>
       <button className="tb" onClick={() => void run(() => api.logOpenFolder())}>{tr("log.openFolder")}</button>
       <button className="tb" onClick={() => void run(async () => api.openUrl(await api.reportIssueUrl()))}>{tr("log.report")}</button>
     </div>

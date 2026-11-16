@@ -16,6 +16,9 @@ export function LogDialog() {
   const { api } = useRuntime();
   const controller = useController();
   const tr = useT();
+  // Opened from Settings → Info: closing goes back there instead of closing everything.
+  const fromSettings = useAppState((state) => state.dialog?.kind === "log" && state.dialog.fromSettings === true);
+  const close = () => (fromSettings ? controller.openDialog({ kind: "settings", tab: "info" }) : controller.closeDialog());
   const [anonymize, setAnonymize] = useState(true);
   const [text, setText] = useState("");
   const [note, setNote] = useState("");
@@ -55,7 +58,7 @@ export function LogDialog() {
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   };
 
-  return <Modal title={tr("log.title")} wide onClose={() => controller.closeDialog()} footer={<>
+  return <Modal title={tr("log.title")} wide onClose={close} footer={<>
     {note && <span className="log-note" role="status">{note}</span>}
     <button className="tb" onClick={() => void save()}>{tr("log.save")}</button>
     <button className="tb primary" data-autofocus onClick={() => void copy()}>{tr("log.copy")}</button>
