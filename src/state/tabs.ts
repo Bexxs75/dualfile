@@ -139,10 +139,16 @@ export const setFilter = (w: WindowState, filter: string): WindowState => replac
 export const setSelection = (w: WindowState, selection: SelectionState): WindowState =>
   replaceActive(w, (tab) => ({ ...tab, selection }));
 
+// Direct server addresses may carry user and host names and are refused by the core when
+// saving; saved connections (`conn:`) and local folders are kept.
+const UNSAVED_PATH = /^(ftp|sftp|smb|webdav|plugin):/;
+
 export function toSession(w: WindowState): WindowSession {
+  const kept = w.tabs.filter((tab) => !UNSAVED_PATH.test(tab.path));
+  const active = kept.indexOf(w.tabs[w.activeTab]!);
   return {
-    tabs: w.tabs.map(({ path, sort, filter, lockRoot }) => (lockRoot ? { path, sort, filter, lockRoot } : { path, sort, filter })),
-    activeTab: w.activeTab,
+    tabs: kept.map(({ path, sort, filter, lockRoot }) => (lockRoot ? { path, sort, filter, lockRoot } : { path, sort, filter })),
+    activeTab: active < 0 ? 0 : active,
   };
 }
 

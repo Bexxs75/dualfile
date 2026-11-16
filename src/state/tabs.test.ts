@@ -188,6 +188,21 @@ describe("Sitzung", () => {
     });
     expect(toSession(fromSession(session, "/h"))).toEqual(session);
   });
+  it("speichert keine direkten Serveradressen, gespeicherte Verbindungen schon", () => {
+    let w = navigate(newTab(createWindow("/a")), "sftp://otto@server/home");
+    w = navigate(newTab(w), "conn:abc/docs");
+    w = navigate(newTab(w), "/b");
+    w = { ...w, activeTab: 3 };
+    expect(toSession(w)).toEqual({
+      tabs: [
+        { path: "/a", sort: "name", filter: "" },
+        { path: "conn:abc/docs", sort: "name", filter: "" },
+        { path: "/b", sort: "name", filter: "" },
+      ],
+      activeTab: 2,
+    });
+    expect(toSession({ ...w, activeTab: 1 }).activeTab).toBe(0);
+  });
   it("repariert leere Sitzung und ungültigen Aktiv-Index", () => {
     expect(toSession(fromSession({ tabs: [], activeTab: 3 }, "/home"))).toEqual({
       tabs: [{ path: "/home", sort: "name", filter: "" }],

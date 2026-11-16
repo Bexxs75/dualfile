@@ -8,6 +8,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 ### Fixed
 
 - **After an update from within the app, links and other programs did not open, and on newer systems Dualfile did not start again at all.** The restart after an update started the new AppImage with the settings of the old one: paths into the old AppImage, which stayed mounted, so its bundled libraries were loaded by everything Dualfile started (browser, terminal, default applications). On newer systems (e.g. Ubuntu 26.04) the new version did not even start. Quitting and starting Dualfile again fixed it. The restart now starts the new version cleanly, and paths of any older AppImage are no longer passed on. **Updating to this version still uses the old restart:** if links do not open or Dualfile does not come back after this update, quit it and start it again once.
+- **"Invalid settings: tabs" when a tab showed a server.** A tab opened on a server address (`sftp://…` and the like) made every save of the session fail with this error, for example when switching tabs. Such tabs are now left out of the saved session; tabs of saved connections and local folders are kept.
 
 ## [0.3.2] - 2026-11-16
 
