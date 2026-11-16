@@ -1393,7 +1393,10 @@ mod tests {
         let mut old = value.clone();
         old.as_object_mut().unwrap().remove("terminalColors");
         let old: SettingsDto = serde_json::from_value(old).unwrap();
-        assert_eq!((old.terminal_colors.as_str(), old.terminal_bg.as_str()), ("green", "#102030"));
+        assert_eq!(
+            (old.terminal_colors.as_str(), old.terminal_bg.as_str()),
+            ("green", "#102030")
+        );
         let mut legacy = value.clone();
         legacy.as_object_mut().unwrap().remove("showParentEntry");
         assert!(

@@ -360,8 +360,18 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         accent_automatic: field(&mut obj, "accent_automatic", false, &mut fixes),
         show_parent_entry: field(&mut obj, "show_parent_entry", true, &mut fixes),
         terminal_height: field(&mut obj, "terminal_height", 260, &mut fixes),
-        terminal_shell: field(&mut obj, "terminal_shell", d.terminal_shell.clone(), &mut fixes),
-        terminal_colors: field(&mut obj, "terminal_colors", d.terminal_colors.clone(), &mut fixes),
+        terminal_shell: field(
+            &mut obj,
+            "terminal_shell",
+            d.terminal_shell.clone(),
+            &mut fixes,
+        ),
+        terminal_colors: field(
+            &mut obj,
+            "terminal_colors",
+            d.terminal_colors.clone(),
+            &mut fixes,
+        ),
         terminal_bg: field(&mut obj, "terminal_bg", d.terminal_bg.clone(), &mut fixes),
         terminal_fg: field(&mut obj, "terminal_fg", d.terminal_fg.clone(), &mut fixes),
         check_updates_on_start: field(&mut obj, "check_updates_on_start", true, &mut fixes),
@@ -444,7 +454,8 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         s.terminal_shell = d.terminal_shell.clone();
     }
     if !bad(
-        ["theme", "classic", "green", "amber", "light", "custom"].contains(&s.terminal_colors.as_str()),
+        ["theme", "classic", "green", "amber", "light", "custom"]
+            .contains(&s.terminal_colors.as_str()),
         "terminal_colors",
         &mut fixes,
     ) {
@@ -631,7 +642,6 @@ mod tests {
         assert!(!load(dir.path()).0.show_parent_entry);
     }
 
-
     #[test]
     fn terminal_height_defaults_to_260_and_roundtrips() {
         let dir = tempfile::tempdir().unwrap();
@@ -654,11 +664,22 @@ mod tests {
         settings.terminal_bg = "#112233".into();
         save(dir.path(), &settings, false).unwrap();
         let loaded = load(dir.path()).0;
-        assert_eq!((loaded.terminal_colors.as_str(), loaded.terminal_bg.as_str()), ("custom", "#112233"));
-        write(dir.path(), r#"{"version":6,"terminal_colors":"pink","terminal_fg":"red"}"#);
+        assert_eq!(
+            (loaded.terminal_colors.as_str(), loaded.terminal_bg.as_str()),
+            ("custom", "#112233")
+        );
+        write(
+            dir.path(),
+            r#"{"version":6,"terminal_colors":"pink","terminal_fg":"red"}"#,
+        );
         let (bad, outcome) = load(dir.path());
-        assert_eq!((bad.terminal_colors.as_str(), bad.terminal_fg.as_str()), ("green", "#f0e6d2"));
-        assert!(matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_colors".to_string()) && f.contains(&"terminal_fg".to_string())));
+        assert_eq!(
+            (bad.terminal_colors.as_str(), bad.terminal_fg.as_str()),
+            ("green", "#f0e6d2")
+        );
+        assert!(
+            matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_colors".to_string()) && f.contains(&"terminal_fg".to_string()))
+        );
     }
 
     #[test]
@@ -673,7 +694,9 @@ mod tests {
         write(dir.path(), r#"{"version":6,"terminal_shell":"zsh"}"#);
         let (bad, outcome) = load(dir.path());
         assert_eq!(bad.terminal_shell, "auto");
-        assert!(matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_shell".to_string())));
+        assert!(
+            matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_shell".to_string()))
+        );
     }
 
     fn sample() -> Settings {

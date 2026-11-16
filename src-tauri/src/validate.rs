@@ -223,7 +223,9 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     if !["auto", "bash", "login"].contains(&s.terminal_shell.as_str()) {
         return Err(bad_settings("Terminal-Shell"));
     }
-    if !["theme", "classic", "green", "amber", "light", "custom"].contains(&s.terminal_colors.as_str()) {
+    if !["theme", "classic", "green", "amber", "light", "custom"]
+        .contains(&s.terminal_colors.as_str())
+    {
         return Err(bad_settings("Terminal-Farben"));
     }
     if !valid_color(&s.terminal_bg) || !valid_color(&s.terminal_fg) {

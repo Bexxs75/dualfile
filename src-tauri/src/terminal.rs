@@ -378,7 +378,12 @@ pub async fn terminal_open(
         .settings
         .terminal_shell;
     run(manager, move |manager| {
-        manager.open(shell_command(cwd, &shell), rows, cols, Arc::new(TauriSink(app)))
+        manager.open(
+            shell_command(cwd, &shell),
+            rows,
+            cols,
+            Arc::new(TauriSink(app)),
+        )
     })
     .await
 }
@@ -441,7 +446,10 @@ mod tests {
             plain_shell(Some("/usr/bin/fish"), true),
             ("/usr/bin/fish".to_string(), vec!["--no-config"])
         );
-        assert_eq!(plain_shell(None, true), ("/bin/bash".to_string(), vec!["--norc"]));
+        assert_eq!(
+            plain_shell(None, true),
+            ("/bin/bash".to_string(), vec!["--norc"])
+        );
         assert_eq!(plain_shell(None, false), ("/bin/sh".to_string(), vec![]));
     }
     #[test]

@@ -199,7 +199,10 @@ cgroup2 /sys/fs/cgroup cgroup2 rw 0 0
 Dualfile.AppImage /tmp/.mount_DualfiAbc123 fuse.Dualfile.AppImage ro 0 0
 ";
         let drives = parse_mounts(table, Some("/tmp/.mount_DualfiAbc123"));
-        assert_eq!(drives.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), vec!["/"]);
+        assert_eq!(
+            drives.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(),
+            vec!["/"]
+        );
     }
 
     #[test]
