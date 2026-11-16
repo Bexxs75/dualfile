@@ -41,6 +41,7 @@ Read-only investigation of `/mnt/claude/projekte/dualfile` at 0.3.4 (`bc59641`).
 ## 1. UX design
 
 ### 1.1 Placement and modes
+- **The sidebar is part of the main window (left of the panes), NOT a separate OS window** (owner, 2026-11-16, explicit). Only the settings dialog becomes its own window (separate plan).
 - **One sidebar for the whole window**, to the left of both panes. Reasons:
   - It matches Dolphin, Nautilus and Total Commander's tree.
   - Per-pane sidebars would cost twice the width at a 900 px minimum.
