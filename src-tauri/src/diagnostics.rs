@@ -204,7 +204,8 @@ pub fn plugin<R: Runtime>() -> TauriPlugin<R> {
     ] {
         builder = builder.level_for(own, log::LevelFilter::Info);
     }
-    builder.build()
+    // The FTP library logs protocol commands (including PASS) below Warn; keep it out entirely.
+    builder.level_for("suppaftp", log::LevelFilter::Off).build()
 }
 
 pub fn log_start() {
@@ -488,6 +489,13 @@ pub async fn log_frontend(level: String, message: String) -> Result<(), UiError>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logging_is_not_compiled_out() {
+        // A dependency feature such as suppaftp's `no-log` sets `log/max_level_off` for the whole
+        // program, and the log file then stays empty without any error.
+        assert!(log::STATIC_MAX_LEVEL >= log::LevelFilter::Info);
+    }
 
     #[test]
     fn log_dir_prefers_an_absolute_state_home() {

@@ -13,7 +13,7 @@ thiserror = "2"
 sha2 = "0.11"
 zeroize = "1"
 # FTP/FTPS: rustls only (no OpenSSL, no system TLS library).
-suppaftp = { version = "12.2.1", default-features = false, features = ["rustls-ring", "deprecated", "no-log"] }
+suppaftp = { version = "12.2.1", default-features = false, features = ["rustls-ring", "deprecated"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-webpki = { version = "0.103", default-features = false, features = ["ring", "std"] }
 rustls-native-certs = "0.8"
