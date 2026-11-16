@@ -548,3 +548,6 @@ Codex (gpt-6-astra) checked the plan against `ed51901`. Confirmed: missing setti
 1. **F9 = show/hide** the sidebar (as in Dolphin, back to the last visible mode); **Shift+F9 = icons ↔ full**. (Still subject to the keyboard-compatibility rule above: if a user already bound F9, the new command stays unbound.)
 2. **Ribbon bookmark bar is shown only while the sidebar is hidden.** Alt+1..9 keeps working in every mode; the numbers appear as hints next to the bookmarks in the sidebar.
 3. **Default after update and for new installs: `full`.** The automatic narrowing to the icon rail on narrow windows (§1.1) still applies and is never persisted.
+
+### Mockup approved (2026-11-16)
+The owner approved the clickable mockup (https://claude.ai/artifact/TWagKuzfRQrPvZcSTLybn7, version 2) as the visual and interaction reference. Not yet built; start date open.
