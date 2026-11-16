@@ -3,6 +3,16 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [0.3.1] - 2026-11-16
+
+### Fixed
+
+- **Settings were often not saved.** Changes such as the language took effect at once but frequently never reached `settings.json`, without any error message. The folder watcher treated merely opening or listing a folder as a change, so the shown folder reloaded about four times a second, and every reload pushed the pending save back again. Reading a folder no longer counts as a change, a reload no longer postpones a pending save, and a change made while a save is still running is written afterwards. This also ends the constant background reloading of the shown folder.
+
+### Changed
+
+- README: the plugin interface is listed as planned (groundwork only, no UI and no plugins yet).
+
 ## [0.3.0] - 2026-11-16
 
 ### Added
