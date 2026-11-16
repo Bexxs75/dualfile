@@ -163,13 +163,16 @@ pub async fn open_url(url: String) -> Result<(), UiError> {
     if !is_safe_external_url(&url) {
         return Err(UiError::new("invalidInput", "Ungültige Adresse"));
     }
-    let mut child = crate::state::xdg_open_command(std::path::Path::new(&url))
-        .spawn()
-        .map_err(|_| UiError::new("unsupported", "xdg-open konnte nicht gestartet werden"))?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(())
+    // Same opener as for files, so a missing or failing browser handler is reported instead of
+    // the click silently doing nothing.
+    // It waits briefly for an early exit, so it runs off the async runtime.
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::state::open_with_system(std::path::Path::new(&url)).inspect_err(|e| {
+            log::warn!("Link konnte nicht geöffnet werden: {url}: {}", e.message);
+        })
+    })
+    .await
+    .map_err(|_| UiError::new("unsupported", "Link konnte nicht geöffnet werden"))?
 }
 
 #[tauri::command]

@@ -3,6 +3,13 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Fixed
+
+- **Folder views now catch up after the system dropped change notifications.** When too many changes happen at once, Linux discards the queued notifications and only reports that it did; that notice used to get lost, so a view could stay stale until refreshed by hand. All watched folders now reload.
+- **Opening a link that fails is reported.** *Project on GitHub*, *Report a problem on GitHub* and other links used to fail silently when the system could not open a browser; the reason is now shown and written to the log file.
+
 ## [0.3.1] - 2026-11-16
 
 ### Fixed

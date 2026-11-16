@@ -18,7 +18,11 @@ pub const DEBOUNCE: Duration = Duration::from_millis(250);
 
 /// Which watched folders a set of changed paths concerns: the folder itself (renamed or
 /// deleted) or a direct child of it. Deeper paths belong to folders that are not watched.
+/// The empty path stands for "everything may have changed" (see `RESCAN`).
 pub fn affected_dirs(watched: &BTreeSet<PathBuf>, changed: &[PathBuf]) -> BTreeSet<PathBuf> {
+    if changed.iter().any(|path| path.as_os_str().is_empty()) {
+        return watched.clone();
+    }
     let mut result = BTreeSet::new();
     for path in changed {
         if watched.contains(path) {
@@ -56,6 +60,20 @@ fn is_change(kind: &EventKind) -> bool {
     }
 }
 
+/// After a queue overflow the system reports one `Rescan` event without paths, and the debouncer
+/// only passes on paths: it would drop it and views would stay stale. It travels through the
+/// debouncer as this placeholder path instead, which `affected_dirs` turns into all folders.
+fn for_debouncer(event: notify::Result<notify::Event>) -> Option<notify::Result<notify::Event>> {
+    match event {
+        Ok(mut event) if event.need_rescan() => {
+            event.paths = vec![PathBuf::new()];
+            Some(Ok(event))
+        }
+        Ok(event) if !is_change(&event.kind) => None,
+        other => Some(other),
+    }
+}
+
 /// The system watcher, reduced to events that are changes (see `is_change`).
 pub struct ChangeWatcher(RecommendedWatcher);
 
@@ -63,7 +81,7 @@ impl Watcher for ChangeWatcher {
     fn new<F: EventHandler>(mut event_handler: F, config: notify::Config) -> notify::Result<Self> {
         RecommendedWatcher::new(
             move |event: notify::Result<notify::Event>| {
-                if event.as_ref().map_or(true, |e| is_change(&e.kind)) {
+                if let Some(event) = for_debouncer(event) {
                     event_handler.handle_event(event);
                 }
             },
@@ -164,6 +182,17 @@ mod tests {
 
     fn set(paths: &[&str]) -> BTreeSet<PathBuf> {
         paths.iter().map(PathBuf::from).collect()
+    }
+
+    #[test]
+    fn an_overflow_reloads_every_watched_folder() {
+        use notify::event::Flag;
+        let rescan = notify::Event::new(EventKind::Other).set_flag(Flag::Rescan);
+        let passed = for_debouncer(Ok(rescan)).unwrap().unwrap();
+        let watched = set(&["/a", "/b/c"]);
+        assert_eq!(affected_dirs(&watched, &passed.paths), watched);
+        let open = notify::Event::new(EventKind::Access(AccessKind::Open(AccessMode::Any)));
+        assert!(for_debouncer(Ok(open)).is_none());
     }
 
     #[test]
