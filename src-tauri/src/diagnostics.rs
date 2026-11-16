@@ -405,10 +405,14 @@ pub fn connection_line(
     profile: &dualfile_core::connections::ConnectionProfile,
     failure: Option<&UiError>,
 ) -> String {
-    let target = format!(
-        "{:?} {}:{} als {}",
-        profile.protocol, profile.host, profile.port, profile.user
-    );
+    // URL form, so the anonymizer replaces host and user even after the profile is gone.
+    let scheme = format!("{:?}", profile.protocol).to_ascii_lowercase();
+    let user = if profile.user.is_empty() {
+        String::new()
+    } else {
+        format!("{}@", profile.user)
+    };
+    let target = format!("{scheme}://{user}{}:{}", profile.host, profile.port);
     match failure {
         None => format!("Verbindung {target} aufgebaut"),
         Some(error) => format!(
@@ -629,7 +633,7 @@ mod tests {
         assert!(format!("{raw:?}").contains(password));
         let line = connection_line(&profile, Some(&crate::convert::connect_error(&raw)));
         assert!(!line.contains(password), "{line}");
-        assert!(line.contains("nas.example:445 als otto"), "{line}");
+        assert!(line.contains("ftps://otto@nas.example:445"), "{line}");
         let raw = ConnectError::Transport(TransportError::Connection(format!(
             "host nas.example {password}"
         )));

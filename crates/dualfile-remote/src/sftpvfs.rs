@@ -763,6 +763,7 @@ impl<T: SftpTransport> SftpWrite<T> {
             PartKind::Temporary => None,
         };
         let target_path = self.target.path().to_path_buf();
+        let secret = self.shared.secret.as_ref();
         // everything runs on the connection of this transfer, in one go
         let outcome = self
             .shared
@@ -779,6 +780,7 @@ impl<T: SftpTransport> SftpWrite<T> {
                     mode,
                     meta.as_deref(),
                     &target_path,
+                    secret,
                 ))
             });
         self.handle = None;
@@ -810,9 +812,17 @@ fn commit_steps<T: SftpTransport>(
     mode: WriteMode,
     meta: Option<&str>,
     target_path: &std::path::Path,
+    secret: Option<&crate::secret::Secret>,
 ) -> Result<()> {
     let exists = Error::Exists(target_path.to_path_buf());
-    let map = |e: TransportError| e.into_core(target_path);
+    // A server may echo the password in its reply; the error reaches the UI and the log file.
+    let map = |e: TransportError| {
+        match secret {
+            Some(secret) => e.scrubbed(secret),
+            None => e,
+        }
+        .into_core(target_path)
+    };
     if size != Some(expected) {
         return Err(Error::SizeMismatch(target_path.to_path_buf()));
     }

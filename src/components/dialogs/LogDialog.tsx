@@ -32,6 +32,8 @@ export function LogDialog() {
 
   useEffect(() => {
     let current = true;
+    // Never leave the plain text on screen (and on the clipboard) while the anonymized one loads.
+    setText("");
     api.logRead(anonymize).then(
       value => { if (current) { setText(value); setError(""); } },
       e => { if (current) setError(e instanceof Error ? e.message : String(e)); },
@@ -61,7 +63,7 @@ export function LogDialog() {
   return <Modal title={tr("log.title")} wide onClose={close} footer={<>
     {note && <span className="log-note" role="status">{note}</span>}
     <button className="tb" onClick={() => void save()}>{tr("log.save")}</button>
-    <button className="tb primary" data-autofocus onClick={() => void copy()}>{tr("log.copy")}</button>
+    <button className="tb primary" data-autofocus disabled={!text} onClick={() => void copy()}>{tr("log.copy")}</button>
   </>}>
     <label className="system-row"><input type="checkbox" checked={anonymize} onChange={e => setAnonymize(e.target.checked)} /><span>{tr("log.anonymize")}<small>{tr("log.anonymizeHelp")}</small></span></label>
     <div className="log-viewer" ref={viewer} tabIndex={0} role="region" aria-label={tr("log.content")}>{highlight(text, anonymize)}</div>

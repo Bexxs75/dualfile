@@ -21,7 +21,7 @@ const MIN_NAME_LEN: usize = 3;
 /// Words the replacements themselves are made of; a user of that name would be rewritten twice.
 const PLACEHOLDER_WORDS: [&str; 4] = ["benutzer", "rechner", "email", "server"];
 
-const URL: &str = r#"(?P<scheme>smb|sftp|ftps?|davs?|webdavs?|https?)://(?:(?P<ui>[^\s/@<>"']+)@)?(?P<uh>\[[0-9a-f:.]+\]|[^\s/@:?#<>"'()\[\]]+)"#;
+const URL: &str = r#"(?P<scheme>smb|sftp|ftps?|nfs|system|davs?|webdavs?|https?)://(?:(?P<ui>[^\s/@<>"']+)@)?(?P<uh>\[[0-9a-f:.]+\]|[^\s/@:?#<>"'()\[\]]+)"#;
 const EMAIL: &str = r"(?P<email>[a-z0-9._%+\-]+@[a-z0-9\-]+(?:\.[a-z0-9\-]+)+)";
 // Only forms with `::` or all eight groups: a bare `12:30:45` must stay a time.
 const V6: &str = r"(?P<v6>[0-9a-f:]*::[0-9a-f:.]*|(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4})";
@@ -143,7 +143,10 @@ fn replace_endpoints(text: &str, hosts: &[String]) -> String {
                     scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https");
                 let lower = host.as_str().to_ascii_lowercase();
                 if web && (lower == "github.com" || lower.ends_with(".github.com")) {
-                    return keep();
+                    if caps.name("ui").is_none() {
+                        return keep();
+                    }
+                    return format!("{scheme}://<benutzer>@{}", host.as_str());
                 }
                 let user = if caps.name("ui").is_some() {
                     "<benutzer>@"
@@ -343,6 +346,10 @@ mod tests {
             "https://github.com/Bexxs75/dualfile/releases und https://api.github.com/x"
         );
         assert_eq!(run("smb://github.com/x"), "smb://<server-1>/x");
+        assert_eq!(
+            run("https://otto:geheim@github.com/x"),
+            "https://<benutzer>@github.com/x"
+        );
     }
 
     #[test]
