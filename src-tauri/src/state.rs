@@ -330,10 +330,19 @@ fn spawn_opener_reporting(mut command: Command) -> Result<(), UiError> {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
             Ok(Some(status)) => {
-                let mut detail = String::new();
+                // A handler's child (e.g. a browser) may inherit the pipe and keep it open, so
+                // the read gets a deadline instead of blocking until that child exits.
+                let (tx, rx) = std::sync::mpsc::channel();
                 if let Some(mut err) = child.stderr.take() {
-                    let _ = err.read_to_string(&mut detail);
+                    std::thread::spawn(move || {
+                        let mut text = String::new();
+                        let _ = err.read_to_string(&mut text);
+                        let _ = tx.send(text);
+                    });
                 }
+                let detail = rx
+                    .recv_timeout(std::time::Duration::from_millis(300))
+                    .unwrap_or_default();
                 let detail = detail.trim();
                 let msg = if detail.is_empty() {
                     let code = status
@@ -351,10 +360,13 @@ fn spawn_opener_reporting(mut command: Command) -> Result<(), UiError> {
     }
     // Still running after the grace: a real application opened. Detach, draining stderr so a
     // chatty handler can never fill the pipe and block.
-    std::thread::spawn(move || {
-        if let Some(mut err) = child.stderr.take() {
+    // Reaped on its own thread: a grandchild holding the pipe open must not delay the wait.
+    if let Some(mut err) = child.stderr.take() {
+        std::thread::spawn(move || {
             let _ = std::io::copy(&mut err, &mut std::io::sink());
-        }
+        });
+    }
+    std::thread::spawn(move || {
         let _ = child.wait();
     });
     Ok(())

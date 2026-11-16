@@ -168,7 +168,10 @@ pub async fn open_url(url: String) -> Result<(), UiError> {
     // It waits briefly for an early exit, so it runs off the async runtime.
     tauri::async_runtime::spawn_blocking(move || {
         crate::state::open_with_system(std::path::Path::new(&url)).inspect_err(|e| {
-            log::warn!("Link konnte nicht geöffnet werden: {url}: {}", e.message);
+            // Query and fragment may carry prefilled text: neither goes into the log.
+            let short = url.split(['?', '#']).next().unwrap_or_default();
+            let message = e.message.replace(url.as_str(), short);
+            log::warn!("Link konnte nicht geöffnet werden: {short}: {message}");
         })
     })
     .await
