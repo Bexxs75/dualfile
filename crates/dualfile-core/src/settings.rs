@@ -85,7 +85,7 @@ impl Default for Settings {
             accent_automatic: true,
             show_parent_entry: true,
             terminal_height: 260,
-            terminal_shell: "auto".into(),
+            terminal_shell: "login".into(),
             terminal_colors: "green".into(),
             terminal_bg: "#102030".into(),
             terminal_fg: "#f0e6d2".into(),
@@ -683,17 +683,17 @@ mod tests {
     }
 
     #[test]
-    fn terminal_shell_defaults_to_auto_roundtrips_and_rejects_unknown() {
+    fn terminal_shell_defaults_to_login_roundtrips_and_rejects_unknown() {
         let dir = tempfile::tempdir().unwrap();
         write(dir.path(), r#"{"version":6}"#);
         let (mut settings, _) = load(dir.path());
-        assert_eq!(settings.terminal_shell, "auto");
-        settings.terminal_shell = "login".into();
+        assert_eq!(settings.terminal_shell, "login");
+        settings.terminal_shell = "auto".into();
         save(dir.path(), &settings, false).unwrap();
-        assert_eq!(load(dir.path()).0.terminal_shell, "login");
+        assert_eq!(load(dir.path()).0.terminal_shell, "auto");
         write(dir.path(), r#"{"version":6,"terminal_shell":"zsh"}"#);
         let (bad, outcome) = load(dir.path());
-        assert_eq!(bad.terminal_shell, "auto");
+        assert_eq!(bad.terminal_shell, "login");
         assert!(
             matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_shell".to_string()))
         );

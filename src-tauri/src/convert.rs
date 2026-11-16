@@ -663,7 +663,7 @@ fn default_terminal_height() -> u32 {
 }
 
 fn default_terminal_shell() -> String {
-    "auto".into()
+    "login".into()
 }
 
 fn default_terminal_colors() -> String {
