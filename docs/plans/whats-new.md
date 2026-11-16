@@ -28,4 +28,4 @@ Owner request (2026-11-16): after every update, show once on the first start a w
 - Vitest: selection logic, dialog renders in DE and EN, close stores the version, not shown on fresh install, reopen via palette.
 - VM: install 0.3.4 → update to 0.3.5 pre-release build → window appears once in German; restart → not again; switch to English and reopen via menu.
 
-Mockup (for owner approval): https://claude.ai/artifact/KSr1QFah2GbTNS8qoMuhuP
+Mockup approved by the owner (2026-11-16): https://claude.ai/artifact/KSr1QFah2GbTNS8qoMuhuP
