@@ -328,7 +328,16 @@ fn spawn_opener_reporting(mut command: Command) -> Result<(), UiError> {
         .map_err(|_| UiError::new("unsupported", "xdg-open konnte nicht gestartet werden"))?;
     for _ in 0..8 {
         match child.try_wait() {
-            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) if status.success() => {
+                // The opener may already be gone while the app it started (a browser) still
+                // writes to the inherited pipe: closing it here would kill that app by SIGPIPE.
+                if let Some(mut err) = child.stderr.take() {
+                    std::thread::spawn(move || {
+                        let _ = std::io::copy(&mut err, &mut std::io::sink());
+                    });
+                }
+                return Ok(());
+            }
             Ok(Some(status)) => {
                 // A handler's child (e.g. a browser) may inherit the pipe and keep it open, so
                 // the read gets a deadline instead of blocking until that child exits.
@@ -1388,6 +1397,22 @@ mod tests {
     use crate::convert::ResolutionDto;
     use std::fs;
     use std::sync::mpsc::{channel, Receiver, Sender};
+
+    #[test]
+    fn an_app_started_by_a_quickly_exiting_opener_can_still_write_to_stderr() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir.path().join("alive");
+        // Like xdg-open handing off to a browser: the opener exits at once, the started app
+        // writes to the inherited stderr a moment later and must not die of SIGPIPE.
+        let mut command = std::process::Command::new("sh");
+        command.arg("-c").arg(format!(
+            "(sleep 0.3; echo noise >&2; touch '{}') & exit 0",
+            marker.display()
+        ));
+        super::spawn_opener_reporting(command).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        assert!(marker.exists());
+    }
 
     struct ChannelSink(Mutex<Sender<CoreEventDto>>);
     impl EventSink for ChannelSink {

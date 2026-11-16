@@ -8,6 +8,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 ### Fixed
 
 - **Folder views now catch up after the system dropped change notifications.** When too many changes happen at once, Linux discards the queued notifications and only reports that it did; that notice used to get lost, so a view could stay stale until refreshed by hand. All watched folders now reload.
+- **Links and files opened with the default application could close again at once.** When `xdg-open` handed over quickly, Dualfile closed the error channel it had passed on, and the started browser or program was killed as soon as it wrote a message there; the click seemed to do nothing. It now stays open for the started program.
 - **Opening a link that fails is reported.** *Project on GitHub*, *Report a problem on GitHub* and other links used to fail silently when the system could not open a browser; the reason is now shown and written to the log file.
 
 ## [0.3.1] - 2026-11-16
