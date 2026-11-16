@@ -552,3 +552,14 @@ Codex (gpt-6-astra) checked the plan against `ed51901`. Confirmed: missing setti
 
 ### Mockup approved (2026-11-16)
 The owner approved the clickable mockup (https://claude.ai/artifact/TWagKuzfRQrPvZcSTLybn7, version 2) as the visual and interaction reference. Not yet built; start date open.
+
+### Owner decision: window grows instead of squeezing the panes (2026-11-16)
+Owner wish: opening the sidebar must not shift/squeeze the main window's content; only when maximized/fullscreen do the panes move right.
+- **Floating (not maximized, not fullscreen, not tiled) window:** showing the sidebar or switching icons → full makes the OS window wider by exactly the added sidebar width; hiding/narrowing shrinks it back by the same amount. Pane widths stay unchanged.
+  - **X11:** also move the window left by the same amount (`set_position`), so the panes stay where they are on screen (clamped to the monitor's work area).
+  - **Wayland** (default on Plasma 6/GNOME; Dualfile runs native Wayland): clients cannot position their window (xdg-shell has no position request), so the window grows to the right and the panes keep their size but move right on screen. Verified constraint, not a choice; documented in the wiki.
+  - If the monitor has not enough room, grow only as far as it fits (monitor work area from `current_monitor()`); the remaining width comes out of the panes.
+- **Maximized, fullscreen, or tiled/snapped:** the window size is fixed by the compositor → the sidebar takes its width from the panes (panes move right and get narrower), as in the mockup. Detect via `is_maximized()`/`is_fullscreen()`; tiled state is not exposed by Tauri → after a resize request, check the actual inner size and fall back to squeezing if the compositor refused.
+- Resizing the sidebar by dragging its handle in a floating window also grows/shrinks the window (pane width constant); apply on pointer-up to avoid resize storms on Wayland.
+- The automatic narrowing to the icon rail (§1.1) only applies when the window cannot grow (maximized/fullscreen/tiled or no room).
+- Tests/VM: Plasma 6 Wayland, GNOME Wayland, one X11 session; floating, maximized, fullscreen, half-screen tiled; monitor edge on the right; multi-monitor. Needs window permissions for main only (`core:window:allow-set-size`, `allow-set-position`, `allow-inner-size`, `allow-is-maximized`, `allow-is-fullscreen`, `allow-current-monitor`) or one Rust command `sidebar_resize_window(delta)` (preferred: keeps the capability narrow, and logic is testable).
