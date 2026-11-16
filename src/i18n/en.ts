@@ -81,9 +81,6 @@ const en: Record<keyof typeof de, string> = {
   "header.soon": "coming soon",
   "header.command": "Command, folder or connection …",
   "header.commandKey": "Ctrl K",
-  "header.couple": "Link",
-  "header.on": "on",
-  "header.off": "off",
   "header.clearFilter": "Clear filter",
   "system.import": "Import from system …",
   "system.title": "Network locations from the system",
@@ -375,7 +372,6 @@ const en: Record<keyof typeof de, string> = {
   "menu.view.hidden": "Hidden files",
   "menu.view.refresh": "Refresh",
   "menu.view.swapPanes": "Swap panes",
-  "menu.view.mirror": "Link panes",
   "menu.view.settings": "Settings …",
   "menu.help.shortcuts": "Keyboard shortcuts",
   "menu.help.about": "About Dualfile",
@@ -485,8 +481,6 @@ const en: Record<keyof typeof de, string> = {
   "status.items.other": "{count} items",
   "status.hiddenShown": "Hidden files shown",
   "status.hiddenHidden": "Hidden files not shown",
-  "status.mirrorOn": "Panes linked",
-  "status.mirrorOff": "Panes unlinked",
 
   // Copy/move dialog
   "dialog.copy.title": "Copy",
@@ -588,8 +582,6 @@ const en: Record<keyof typeof de, string> = {
   "toast.pathCopied": "Path copied.",
   "toast.nothingToUndo": "There is nothing to undo.",
   "toast.noUndoForCopyMove": "Copy and move cannot be undone.",
-  "toast.mirrorOn": "Panes linked: both panes change together for bookmarks.",
-  "toast.mirrorOff": "Panes unlinked.",
 
   // Error messages
   "error.notFound": "Not found: {path}",
@@ -696,8 +688,6 @@ const en: Record<keyof typeof de, string> = {
   "settings.language.auto": "System language",
   "settings.language.de": "Deutsch",
   "settings.language.en": "English",
-  "settings.mirror": "Link panes",
-  "settings.mirror.hint": "When a bookmark changes the folder, the other pane follows.",
 
   // Bookmarks
   "bookmarks.title": "Bookmarks",
@@ -715,7 +705,6 @@ const en: Record<keyof typeof de, string> = {
   "tip.reload": "Reload",
   "tip.home": "Home folder",
   "tip.refresh": "Refresh (Ctrl+R)",
-  "tip.mirror": "Both panes follow each other",
   "tip.hidden": "Show/hide hidden files (Ctrl+H)",
   "tip.newTab": "New tab (Ctrl+T)",
   "tip.closeTab": "Close tab (Ctrl+W)",

@@ -69,7 +69,6 @@ export async function setupApp(setup: SetupOptions = {}) {
     fontSize: 13,
     language: setup.language ?? "de",
     bookmarks: [],
-    mirror: false,
     session: { windows: [tab(setup.left ?? HOME), tab(setup.right ?? DOWNLOADS)], activeWindow: 0 },
     ...setup.settings,
   };

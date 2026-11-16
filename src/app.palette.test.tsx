@@ -110,7 +110,7 @@ describe("Befehlspalette R3", () => {
 
   test("five recent commands stay first across reopening; settings receives focus", async () => {
     const app = await setupApp();
-    for (const query of ["Versteckte Dateien", "Panels koppeln", "Neuer Tab", "Design Schiefer", "Design Papier", "Design Werkstatt"]) {
+    for (const query of ["Versteckte Dateien", "Schnellansicht", "Neuer Tab", "Design Schiefer", "Design Papier", "Design Werkstatt"]) {
       open(); expect(screen.queryByRole("combobox"), query).not.toBeNull(); search(query); await app.user.keyboard("{Enter}");
     }
     open();

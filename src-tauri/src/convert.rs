@@ -640,7 +640,6 @@ pub struct SettingsDto {
     pub font_size: u8,
     pub language: String,
     pub bookmarks: Vec<BookmarkDto>,
-    pub mirror: bool,
     #[serde(default)]
     pub extension_column: bool,
     #[serde(default)]
@@ -712,7 +711,6 @@ impl From<&settings::Settings> for SettingsDto {
                     order: b.order,
                 })
                 .collect(),
-            mirror: s.mirror,
             extension_column: s.extension_column,
             pane_color_left: s.pane_color_left.clone(),
             pane_color_right: s.pane_color_right.clone(),
@@ -776,7 +774,6 @@ impl From<&SettingsDto> for settings::Settings {
                     order: b.order,
                 })
                 .collect(),
-            mirror: s.mirror,
             extension_column: s.extension_column,
             pane_color_left: s.pane_color_left.clone(),
             pane_color_right: s.pane_color_right.clone(),
@@ -1378,7 +1375,6 @@ mod tests {
             terminal_height: 420,
             terminal_shell: "login".into(),
             terminal_colors: "amber".into(),
-            mirror: true,
             ..settings::Settings::default()
         };
         core.bookmarks.push(settings::Bookmark {

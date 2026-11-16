@@ -81,9 +81,6 @@ const de = {
   "header.soon": "folgt",
   "header.command": "Befehl, Ordner oder Verbindung …",
   "header.commandKey": "Strg K",
-  "header.couple": "Koppeln",
-  "header.on": "an",
-  "header.off": "aus",
   "header.clearFilter": "Filter löschen",
   "system.import": "Aus System übernehmen …",
   "system.title": "Netzwerkorte aus dem System",
@@ -372,7 +369,6 @@ const de = {
   "menu.view.hidden": "Versteckte Dateien",
   "menu.view.refresh": "Aktualisieren",
   "menu.view.swapPanes": "Fenster tauschen",
-  "menu.view.mirror": "Panels koppeln",
   "menu.view.settings": "Einstellungen …",
   "menu.help.shortcuts": "Tastenkürzel",
   "menu.help.about": "Über Dualfile",
@@ -482,8 +478,6 @@ const de = {
   "status.items.other": "{count} Einträge",
   "status.hiddenShown": "Versteckte Dateien sichtbar",
   "status.hiddenHidden": "Versteckte Dateien ausgeblendet",
-  "status.mirrorOn": "Panels gekoppelt",
-  "status.mirrorOff": "Panels entkoppelt",
 
   // Dialog Kopieren/Verschieben
   "dialog.copy.title": "Kopieren",
@@ -585,8 +579,6 @@ const de = {
   "toast.pathCopied": "Pfad kopiert.",
   "toast.nothingToUndo": "Es gibt nichts zum Rückgängigmachen.",
   "toast.noUndoForCopyMove": "Kopieren und Verschieben lassen sich nicht rückgängig machen.",
-  "toast.mirrorOn": "Panels gekoppelt: beide Fenster wechseln gemeinsam bei Lesezeichen.",
-  "toast.mirrorOff": "Panels entkoppelt.",
 
   // Fehlermeldungen
   "error.notFound": "Nicht gefunden: {path}",
@@ -694,8 +686,6 @@ const de = {
   "settings.language.auto": "Systemsprache",
   "settings.language.de": "Deutsch",
   "settings.language.en": "English",
-  "settings.mirror": "Panels koppeln",
-  "settings.mirror.hint": "Wechselt ein Lesezeichen den Ordner, folgt das andere Fenster.",
 
   // Lesezeichen
   "bookmarks.title": "Lesezeichen",
@@ -713,7 +703,6 @@ const de = {
   "tip.reload": "Neu laden",
   "tip.home": "Persönlicher Ordner",
   "tip.refresh": "Aktualisieren (Strg+R)",
-  "tip.mirror": "Beide Fenster folgen einander",
   "tip.hidden": "Versteckte Dateien ein-/ausblenden (Strg+H)",
   "tip.newTab": "Neuer Tab (Strg+T)",
   "tip.closeTab": "Tab schließen (Strg+W)",

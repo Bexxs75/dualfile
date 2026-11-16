@@ -464,7 +464,6 @@ export interface Settings {
   fontSize: number;
   language: "de" | "en" | "auto";
   bookmarks: Bookmark[];
-  mirror: boolean;
   session: { windows: WindowSession[]; activeWindow: number };
 }
 

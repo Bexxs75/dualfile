@@ -639,7 +639,6 @@ describe("Einstellungen", () => {
     fontSize: 15,
     language: "en",
     bookmarks: [{ name: "Projekte", path: `${HOME}/Projekte`, color: "#7bc08a", order: 0 }],
-    mirror: true,
     session: { windows: [{ tabs: [{ path: HOME, sort: "name", filter: "" }], activeTab: 0 }], activeWindow: 0 },
   };
 

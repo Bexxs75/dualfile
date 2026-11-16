@@ -33,7 +33,6 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   command("toggleHidden", "menu.view.hidden", "hidden", "Ctrl+H");
   command("terminal", "menu.view.terminal", "terminal", "Ctrl+`");
   command("quickView", "menu.view.quickView", "preview", "Ctrl+Q");
-  add("mirror", "menu.view.mirror", "couple", "", () => controller.setMirror(!state.settings.mirror));
   command("newTab", "action.newTab", "plus", "Ctrl+T");
   command("closeTab", "action.closeTab", "close", "Ctrl+W", s => s.windows[s.active].tabs.length > 1);
   command("copy", "action.copy", "copy", "F5", s => selected(s) && !isArchivePath(activeTabOf(s, s.active === 0 ? 1 : 0).path));

@@ -48,7 +48,6 @@ pub struct Settings {
     pub font_size: u8,
     pub language: String,
     pub bookmarks: Vec<Bookmark>,
-    pub mirror: bool,
     pub session: Session,
     /// Server connection profiles. They hold no password; secrets live in the keychain or
     /// the session memory (see `dualfile-remote::secret_store`).
@@ -100,7 +99,6 @@ impl Default for Settings {
             font_size: 14,
             language: "auto".into(),
             bookmarks: vec![],
-            mirror: false,
             session: Session::default(),
             connections: vec![],
             plugins: vec![],
@@ -390,7 +388,6 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         font_size: field(&mut obj, "font_size", d.font_size, &mut fixes),
         language: field(&mut obj, "language", d.language.clone(), &mut fixes),
         bookmarks: field(&mut obj, "bookmarks", d.bookmarks.clone(), &mut fixes),
-        mirror: field(&mut obj, "mirror", d.mirror, &mut fixes),
         session: field(&mut obj, "session", d.session.clone(), &mut fixes),
         connections: Vec::new(),
         plugins: Vec::new(),
@@ -706,7 +703,6 @@ mod tests {
             density: "compact".into(),
             font_size: 16,
             language: "en".into(),
-            mirror: true,
             ..Settings::default()
         };
         s.bookmarks = vec![
@@ -821,6 +817,24 @@ mod tests {
     }
 
     #[test]
+    fn removed_mirror_setting_and_stale_keybinding_load_cleanly_and_are_dropped_on_save() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            dir.path(),
+            r#"{"version":6,"mirror":true,"keybindings":{"mirror":"Ctrl+M","copy":"F9"}}"#,
+        );
+        let (s, o) = load(dir.path());
+        assert_eq!(o, LoadOutcome::Loaded);
+        assert!(leftovers(dir.path()).is_empty());
+        // A binding for the removed command is just an unused map entry.
+        assert_eq!(s.keybindings.get("copy").map(String::as_str), Some("F9"));
+        save(dir.path(), &s, false).unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.path().join("settings.json")).unwrap()).unwrap();
+        assert!(saved.get("mirror").is_none(), "{saved}");
+    }
+
+    #[test]
     fn invalid_accent_is_replaced_and_reported() {
         for bad in [
             "red", "#fff", "#12345", "#1234567", "112233", "#gg0000", "#12345é", "",
@@ -861,21 +875,20 @@ mod tests {
         write(
             dir.path(),
             r#"{"version":4,"font_size":"huge","language":"fr","density":"tiny",
-                "mirror":"yes","session":{"windows":[{"tabs":[],"active_tab":5}],"active_window":3}}"#,
+                "session":{"windows":[{"tabs":[],"active_tab":5}],"active_window":3}}"#,
         );
         let (s, o) = load(dir.path());
         let d = Settings::default();
         assert_eq!(s.font_size, d.font_size);
         assert_eq!(s.language, d.language);
         assert_eq!(s.density, d.density);
-        assert_eq!(s.mirror, d.mirror);
         assert_eq!(s.session.windows[0].tabs.len(), 1);
         assert_eq!(s.session.windows[0].active_tab, 0);
         assert_eq!(s.session.active_window, 0);
         let LoadOutcome::Repaired(fixes) = o else {
             panic!("expected Repaired");
         };
-        for k in ["font_size", "language", "density", "mirror", "session"] {
+        for k in ["font_size", "language", "density", "session"] {
             assert!(fixes.iter().any(|f| f == k), "{k} missing in {fixes:?}");
         }
     }

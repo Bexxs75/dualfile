@@ -2266,12 +2266,12 @@ mod tests {
         assert_eq!(loaded.outcome, crate::convert::LoadOutcomeDto::Fresh);
         let mut changed = loaded.settings.clone();
         changed.theme = "papier".into();
-        changed.mirror = true;
+        changed.show_parent_entry = false;
         f.state.save_settings(&changed).unwrap();
         let again = f.state.load_settings();
         assert_eq!(again.outcome, crate::convert::LoadOutcomeDto::Loaded);
         assert_eq!(again.settings.theme, "papier");
-        assert!(again.settings.mirror);
+        assert!(!again.settings.show_parent_entry);
         changed.accent = "rot".into();
         assert_eq!(
             f.state.save_settings(&changed).unwrap_err().kind,

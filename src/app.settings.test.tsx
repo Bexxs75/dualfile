@@ -33,21 +33,6 @@ describe("Lesezeichen", () => {
     expect(pathOf(app, 1)).toBe(PROJEKTE);
   });
 
-  test("Spiegeln: das andere Fenster folgt dem Lesezeichen", async () => {
-    const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { bookmarks } });
-    const mirror = screen.getByRole("button", { name: /Panels koppeln/ });
-    expect(mirror).toHaveAttribute("aria-pressed", "false");
-    await app.user.click(mirror);
-    expect(mirror).toHaveAttribute("aria-pressed", "true");
-    await app.user.click(screen.getByRole("button", { name: /Projekte/ }));
-    await waitFor(() => expect(pathOf(app, 0)).toBe(PROJEKTE));
-    await waitFor(() => expect(pathOf(app, 1)).toBe(PROJEKTE));
-    // gewöhnliches Navigieren zieht das andere Fenster nicht mit
-    await app.user.keyboard("{ArrowDown}{Enter}");
-    await waitFor(() => expect(pathOf(app, 0)).toMatch(/^\/home\/demo\/Projekte\/./));
-    expect(pathOf(app, 1)).toBe(PROJEKTE);
-  });
-
   test("anheften und lösen; Strg+D schaltet ebenfalls um", async () => {
     const app = await setupApp({ left: DOCS });
     const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
