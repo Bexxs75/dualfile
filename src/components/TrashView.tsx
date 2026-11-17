@@ -90,18 +90,18 @@ export function TrashView({ w }: { w: WinIdx }) {
       {has ? (
         <div ref={gridRef} className="list" role="grid" aria-label={tr("trash.title")} aria-multiselectable="true" aria-rowcount={entries.length + 1}
           aria-activedescendant={`trash-${w}-${cursor}`} tabIndex={0} onKeyDown={onKeyDown} onFocus={() => controller.setActive(w)}>
-          <div role="row" aria-rowindex={1} className="head" style={{ "--df-cols": COLUMNS } as React.CSSProperties}>
+          <div role="row" aria-rowindex={1} className="head tv" style={{ "--df-cols": COLUMNS } as React.CSSProperties}>
             <span role="columnheader">{tr("column.name")}</span><span role="columnheader">{tr("trash.colOriginal")}</span>
             <span role="columnheader">{tr("trash.colDeleted")}</span><span role="columnheader" className="num">{tr("column.size")}</span>
           </div>
           {entries.map((entry, index) => (
             <div key={entry.id} id={`trash-${w}-${index}`} role="row" aria-rowindex={index + 2} aria-selected={selected.has(entry.id)}
-              className={`row${entry.isDir ? " d" : ""}${selected.has(entry.id) ? " sel" : ""}${index === cursor && active ? " cur" : ""}`}
+              className={`row tv${entry.isDir ? " d" : ""}${selected.has(entry.id) ? " sel" : ""}${index === cursor && active ? " cur" : ""}`}
               style={{ "--df-cols": COLUMNS } as React.CSSProperties}
               onClick={event => pick(index, event.shiftKey ? "range" : event.ctrlKey || event.metaKey ? "toggle" : "single")}
               onContextMenu={event => onContextMenu(event, index)}>
               <span role="gridcell" className="n"><Icon name={entry.isDir ? "dir" : "file"} /><span className="nm" title={entry.name}>{entry.name}</span></span>
-              <span role="gridcell" className="dt" title={entry.originalParent}>{entry.originalParent}</span>
+              <span role="gridcell" className="dt orig" title={entry.originalParent}><bdi>{entry.originalParent}</bdi></span>
               <span role="gridcell" className="dt tabular-nums">{formatDate(entry.deletedAt === null ? null : entry.deletedAt * 1000, language)}</span>
               <span role="gridcell" className="num tabular-nums">{entry.size === null ? "" : formatBytes(entry.size, language)}</span>
             </div>

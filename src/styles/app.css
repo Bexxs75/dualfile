@@ -198,6 +198,8 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 
 /* Kontextmenü und Ziehen */
 .trash-path { font-weight: 600; }
+/* Trash grid keeps its own columns (the file-list container rules would hide "deleted"); the original folder is cut at its start so its end stays visible. */
+.row .orig { text-align: left; direction: rtl; }
 .trash-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .trash-bar .tb.danger { color: var(--warn); }
 .trash-info { margin-left: auto; color: var(--muted); font-size: 12px; }
@@ -369,13 +371,13 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 
 /* Keep filename space before optional metadata columns. */
 @container (max-width: 620px) {
-  .head:not(.ext-split), .row:not(.ext-split) { grid-template-columns: minmax(180px, 1fr) 84px 130px; }
-  .head:not(.ext-split) > :nth-child(3), .row:not(.ext-split) > :nth-child(3) { display: none; }
+  .head:not(.ext-split):not(.tv), .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px 130px; }
+  .head:not(.ext-split):not(.tv) > :nth-child(3), .row:not(.ext-split):not(.tv) > :nth-child(3) { display: none; }
 }
 @container (max-width: 500px) {
-  .head:not(.ext-split), .row:not(.ext-split) { grid-template-columns: minmax(180px, 1fr) 84px; }
+  .head:not(.ext-split):not(.tv), .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px; }
   .head.ext-split, .row.ext-split { grid-template-columns: minmax(180px, 1fr) 56px 84px; }
-  .head > :nth-child(4), .row > :nth-child(4) { display: none; }
+  .head:not(.tv) > :nth-child(4), .row:not(.tv) > :nth-child(4) { display: none; }
 }
 .settings .field-help { grid-column: 1 / -1; }
 .warning-slot { height: 1.5em; overflow: auto; }
