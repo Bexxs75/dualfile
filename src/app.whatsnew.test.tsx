@@ -9,6 +9,9 @@ import { defaultSettings } from "./app/state";
 import { createCommands } from "./app/commands";
 import { createTranslator } from "./i18n";
 
+// Exercise the planned update even while release preparation still has 0.3.4 packaged.
+vi.mock("../src-tauri/tauri.conf.json", () => ({ default: { version: "0.3.5" } }));
+
 test.each(["de", "en"] as const)("automatic notes render in %s, focus Got it, and open the release via IPC", async language => {
   const openUrl = vi.fn(async () => {});
   const app = await setupApp({ language, settings: { lastSeenVersion: null }, wrap: api => ({ ...api, openUrl }) });
@@ -43,6 +46,30 @@ test("fresh install saves current version without showing notes; next start stay
   await second.controller.start();
   expect(second.store.getState().dialog).toBeNull();
   second.controller.dispose();
+});
+
+test("an unacknowledged update reappears after restart; acknowledgment survives restart", async () => {
+  const api = createMockApi();
+  await api.saveSettings({ ...defaultSettings, lastSeenVersion: "0.3.4" });
+  const first = createRuntime(api);
+  await first.controller.start();
+  expect(first.store.getState().dialog).toEqual({ kind: "whatsNew", versions: ["0.3.5"] });
+  await first.controller.saveNow();
+  expect((await api.loadSettings()).settings.lastSeenVersion).toBe("0.3.4");
+  first.controller.dispose();
+
+  const second = createRuntime(api);
+  await second.controller.start();
+  expect(second.store.getState().dialog?.kind).toBe("whatsNew");
+  second.controller.closeDialog();
+  await second.controller.saveNow();
+  second.controller.dispose();
+
+  const third = createRuntime(api);
+  await third.controller.start();
+  expect(third.store.getState().dialog).toBeNull();
+  expect(third.store.getState().settings.lastSeenVersion).toBe("0.3.5");
+  third.controller.dispose();
 });
 
 test("palette reopens current notes even after downgrade and does not lower the marker", async () => {
