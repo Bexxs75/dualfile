@@ -1,6 +1,11 @@
 // Only the commands listed here exist for the web view; each one needs an explicit
 // `allow-<command>` permission in capabilities/default.json (no blanket access).
 const COMMANDS: &[&str] = &[
+    "settings_window_open",
+    "settings_window_close",
+    "settings_window_attach",
+    "settings_window_push",
+    "settings_window_send",
     "terminal_open",
     "terminal_write",
     "terminal_resize",

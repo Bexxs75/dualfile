@@ -15,6 +15,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 - **The embedded terminal closes when its shell ends.** Ctrl+D (or `exit`) at the shell prompt now closes the terminal panel, as in Konsole; programs inside the terminal such as `python3` keep their own Ctrl+D. If the shell fails right at the start (non-zero exit within 2 seconds, e.g. a wrong shell path), the panel stays open so the message remains readable.
 
+- Settings open in a separate, resizable OS window. Main remains the only settings writer; appearance, language, shortcuts and system status stay synchronized. Closing waits for pending changes to be applied and saved, and read-only settings and save failures are shown in the window. The browser preview keeps the inline dialog.
+
 ## [0.3.4] - 2026-11-16
 
 ### Changed

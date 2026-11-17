@@ -4,7 +4,7 @@ import type { UpdateProgress } from "./system";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { CoreError, type DualfileApi } from "./api";
-import type { CoreEvent, SshPrompt } from "./types";
+import type { SettingsWindowDelivery, SettingsWindowMessage, CoreEvent, SshPrompt } from "./types";
 
 /** Name des Ereignisses, über das der Kern Aufträge, Konflikte und Ordneränderungen meldet. */
 export const CORE_EVENT = "core-event";
@@ -85,6 +85,21 @@ export function createTauriApi(): DualfileApi {
     terminalClose: id => call("terminal_close", { id }),
     onTerminalOutput: handler => terminalListener("terminal-output", handler),
     onTerminalExit: handler => terminalListener("terminal-exit", handler),
+    settingsWindowOpen: async (tab, title, appearance) => await call<boolean>("settings_window_open", { tab, title, appearance }) ? "opened" : "focused",
+    settingsWindowClose: (session, lastSeq, force = false, cancel = false) => call("settings_window_close", { session, lastSeq, force, cancel }),
+    settingsWindowAttach: handler => {
+      const channel = new Channel<SettingsWindowDelivery>();
+      channel.onmessage = handler;
+      return call("settings_window_attach", { channel });
+    },
+    settingsWindowSend: message => call("settings_window_send", { message }),
+    settingsWindowPush: (snapshot, title, close = false, control = {}) => call("settings_window_push", { snapshot, title, close, control: { cancelClose: control.cancelClose ?? false, error: control.error ?? null } }),
+    onSettingsWindowMessage: handler => terminalListener<SettingsWindowMessage>("settings-window", message => {
+      if (isRecord(message) && typeof message.session === "string" && Number.isSafeInteger(message.seq) && message.seq >= 0 &&
+        (["session", "closed", "closeFailed", "flush", "checkUpdates"].includes(message.kind) ||
+         message.kind === "patch" && isRecord(message.patch) ||
+         ["setTray", "setStartMenu"].includes(message.kind) && typeof (message as { enabled?: unknown }).enabled === "boolean")) handler(message);
+    }),
     systemStatus: () => call("system_status"),
     startMenuSet: enabled => call("start_menu_set", { enabled }),
     traySet: (enabled, language) => call("tray_set", { enabled, language }),

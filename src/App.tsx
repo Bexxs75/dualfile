@@ -78,7 +78,7 @@ function Dialogs({ api }: { api: DualfileApi }) {
 }
 
 function Shell({ api }: { api: DualfileApi }) {
-  const { store, controller, system } = useRuntime();
+  const { store, controller, system, settingsWindow } = useRuntime();
   const tr = useT();
   const language = useLanguage();
   const terminal = useAppState(state => state.terminal);
@@ -92,11 +92,12 @@ function Shell({ api }: { api: DualfileApi }) {
 
   useEffect(() => {
     let mounted = true;
+    let stopBridge: (() => void) | undefined;
     void controller.start().then(() => {
-      if (mounted && store.getState().phase === "ready") void system.start(controller.language());
+      if (mounted && store.getState().phase === "ready") { void system.start(controller.language()); stopBridge = settingsWindow.start(); }
     });
-    return () => { mounted = false; controller.dispose(); };
-  }, [controller, store, system]);
+    return () => { mounted = false; stopBridge?.(); controller.dispose(); };
+  }, [controller, store, system, settingsWindow]);
   useGlobalKeys(store, controller);
   useEffect(() => applyTheme(document.documentElement, { theme, accent, accentAutomatic, density, fontSize }), [theme, accent, accentAutomatic, density, fontSize]);
   useEffect(() => {

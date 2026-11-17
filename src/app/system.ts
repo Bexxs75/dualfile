@@ -41,7 +41,7 @@ export function isNewerVersion(version: string, previous: string): boolean {
 /** One controller per runtime, so remounting a dialog cannot repeat startup work. */
 export function createSystemController(api: SystemApi, getSettings: () => Settings,
   patch: (value: Partial<Settings>) => void, jobsActive: () => boolean,
-  save: () => Promise<void>, now = () => new Date().toISOString()) {
+  save: () => Promise<void>, now = () => new Date().toISOString(), beforeInstall: () => Promise<void> = async () => {}) {
   let state: SystemState = { status: null, update: null, check: "idle", error: "", progress: null,
     installing: false, installed: false, prompt: false, trayUnavailable: false };
   const listeners = new Set<() => void>();
@@ -124,6 +124,8 @@ export function createSystemController(api: SystemApi, getSettings: () => Settin
       set({ installing: true, error: "", progress: { downloaded: 0, total: null, phase: "download" } });
       try {
         await save();
+        if (jobsActive() || cancelRequested) { set({ installing: false, progress: null }); return; }
+        await beforeInstall();
         if (jobsActive() || cancelRequested) { set({ installing: false, progress: null }); return; }
         nativeInstall = true;
         await api.updateInstall(state.update.version, progress => set({ progress }));

@@ -39,7 +39,7 @@ fn invalid(message: &str) -> UiError {
     UiError::new("invalidInput", message)
 }
 
-fn only_label(label: &str, wanted: &str) -> Result<(), UiError> {
+pub(crate) fn only_label(label: &str, wanted: &str) -> Result<(), UiError> {
     if label == wanted {
         Ok(())
     } else {
@@ -51,7 +51,7 @@ fn only_label(label: &str, wanted: &str) -> Result<(), UiError> {
 }
 
 /// Window title: control characters dropped, length capped.
-fn sanitize_title(title: &str) -> String {
+pub(crate) fn sanitize_title(title: &str) -> String {
     let clean: String = title
         .chars()
         .filter(|c| !c.is_control())
@@ -80,6 +80,19 @@ pub(crate) fn editor_query(
             return Err(invalid("Ungültige Profilkennung"));
         }
     }
+    let mut url = Url::parse("http://localhost/").map_err(|_| UiError::internal())?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("view", EDITOR_LABEL);
+        if let Some(id) = profile_id {
+            query.append_pair("profile", id);
+        }
+    }
+    append_appearance(&mut url, appearance)?;
+    Ok(format!("index.html?{}", url.query().unwrap_or_default()))
+}
+
+pub(crate) fn append_appearance(url: &mut Url, appearance: &Appearance) -> Result<(), UiError> {
     if !THEMES.contains(&appearance.theme.as_str())
         || !DENSITIES.contains(&appearance.density.as_str())
         || !["de", "en"].contains(&appearance.lang.as_str())
@@ -89,33 +102,26 @@ pub(crate) fn editor_query(
     {
         return Err(invalid("Ungültige Darstellung"));
     }
-    let mut url = Url::parse("http://localhost/").map_err(|_| UiError::internal())?;
-    {
-        let mut query = url.query_pairs_mut();
-        query.append_pair("view", EDITOR_LABEL);
-        if let Some(id) = profile_id {
-            query.append_pair("profile", id);
-        }
-        query
-            .append_pair("theme", &appearance.theme)
-            .append_pair("accent", &appearance.accent)
-            .append_pair(
-                "accentAutomatic",
-                if appearance.accent_automatic {
-                    "1"
-                } else {
-                    "0"
-                },
-            )
-            .append_pair("density", &appearance.density)
-            .append_pair("fontSize", &appearance.font_size.to_string())
-            .append_pair("lang", &appearance.lang);
-    }
-    Ok(format!("index.html?{}", url.query().unwrap_or_default()))
+    let mut query = url.query_pairs_mut();
+    query
+        .append_pair("theme", &appearance.theme)
+        .append_pair("accent", &appearance.accent)
+        .append_pair(
+            "accentAutomatic",
+            if appearance.accent_automatic {
+                "1"
+            } else {
+                "0"
+            },
+        )
+        .append_pair("density", &appearance.density)
+        .append_pair("fontSize", &appearance.font_size.to_string())
+        .append_pair("lang", &appearance.lang);
+    Ok(())
 }
 
-fn focus_existing(app: &tauri::AppHandle) -> bool {
-    match app.get_webview_window(EDITOR_LABEL) {
+pub(crate) fn focus_existing(app: &tauri::AppHandle, label: &str) -> bool {
+    match app.get_webview_window(label) {
         Some(existing) => {
             crate::system::bring_to_front(&existing);
             true
@@ -136,24 +142,44 @@ pub async fn connection_editor_open(
 ) -> Result<bool, UiError> {
     only_label(window.label(), "main")?;
     let page = editor_query(profile_id.as_deref(), &appearance)?;
+    open_child(
+        &app,
+        &window,
+        EDITOR_LABEL,
+        page,
+        title,
+        (520.0, 640.0),
+        (400.0, 320.0),
+    )
+}
+
+pub(crate) fn open_child(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    label: &str,
+    page: String,
+    title: String,
+    size: (f64, f64),
+    min: (f64, f64),
+) -> Result<bool, UiError> {
     let _open = OPEN_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     if MAIN_SHUTTING_DOWN.load(Ordering::SeqCst) {
         return Ok(false);
     }
-    if focus_existing(&app) {
+    if focus_existing(app, label) {
         return Ok(false);
     }
-    let builder = WebviewWindowBuilder::new(&app, EDITOR_LABEL, WebviewUrl::App(page.into()))
+    let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App(page.into()))
         .title(sanitize_title(&title))
-        .inner_size(520.0, 640.0)
-        .min_inner_size(400.0, 320.0)
+        .inner_size(size.0, size.1)
+        .min_inner_size(min.0, min.1)
         .resizable(true)
         .focused(true);
     // Transient for the main window: stays above it and follows it when minimized, without
     // being modal. No position is set (Wayland compositors place windows themselves).
     #[cfg(target_os = "linux")]
     let builder = builder
-        .transient_for(&window)
+        .transient_for(window)
         .map_err(|_| UiError::new("io", "Fenster konnte nicht geöffnet werden"))?;
     match builder.build() {
         Ok(created) => {
@@ -167,7 +193,7 @@ pub async fn connection_editor_open(
         Err(
             tauri::Error::WebviewLabelAlreadyExists(_) | tauri::Error::WindowLabelAlreadyExists(_),
         ) => {
-            focus_existing(&app);
+            focus_existing(app, label);
             Ok(false)
         }
         Err(_) => Err(UiError::new("io", "Fenster konnte nicht geöffnet werden")),
@@ -184,9 +210,11 @@ pub async fn connection_editor_close(window: tauri::WebviewWindow) -> Result<(),
 }
 
 /// Destroys the editor together with the main window (it would keep the process alive).
-pub(crate) fn destroy_editor(app: &tauri::AppHandle) {
-    if let Some(editor) = app.get_webview_window(EDITOR_LABEL) {
-        let _ = editor.destroy();
+pub(crate) fn destroy_children(app: &tauri::AppHandle) {
+    for label in [EDITOR_LABEL, crate::settings_window::SETTINGS_LABEL] {
+        if let Some(child) = app.get_webview_window(label) {
+            let _ = child.destroy();
+        }
     }
 }
 

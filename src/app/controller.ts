@@ -1044,6 +1044,14 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   }
 
   /** Opens the profile editor in its own window; `profile` undefined = new connection. */
+  async function openSettings(tab?: import("../ipc/types").SettingsTab): Promise<void> {
+    const { theme, accent, accentAutomatic, density, fontSize } = get().settings;
+    try {
+      const result = await api.settingsWindowOpen(tab ?? null, tr("settings.title"), { theme, accent, accentAutomatic: accentAutomatic ?? false, density, fontSize, lang: language() });
+      if (result === "inline") dispatch({ type: "dialog", dialog: { kind: "settings", ...(tab === "info" ? { tab } : {}) } });
+    } catch (error) { fail(error); }
+  }
+
   async function openConnectionEditor(profile?: import("../ipc/types").ConnectionProfile): Promise<void> {
     const { theme, accent, accentAutomatic, density, fontSize } = get().settings;
     try {
@@ -1119,12 +1127,14 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       try {
         await api.saveSettings(settings);
         lastSaved = text;
+        dispatch({ type: "saveError", error: "" });
         // A change made while this write ran was compared against the old lastSaved and may have
         // been skipped (e.g. switching back to it): catch up instead of keeping the stale file.
         const now = currentSnapshot();
         if (!disposed && saveTimer === null && now !== text) scheduleSave(now);
       } catch (error) {
         lastSaved = "";
+        dispatch({ type: "saveError", error: error instanceof Error ? error.message : String(error) });
         if (!disposed) fail(error);
         if (strict) throw error;
       }
@@ -1220,6 +1230,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     api,
     refreshConnections,
     openConnectionEditor,
+    openSettings,
     disconnectConnection: async (profileId: string): Promise<void> => {
       try {
         await api.connectionDisconnect(profileId);

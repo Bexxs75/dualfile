@@ -1,0 +1,18 @@
+{
+  "identifier": "settings-window",
+  "description": "Settings mirror and diagnostics only",
+  "windows": [
+    "settings"
+  ],
+  "permissions": [
+    "allow-settings-window-attach",
+    "allow-settings-window-send",
+    "allow-settings-window-close",
+    "allow-open-url",
+    "allow-log-info",
+    "allow-log-read",
+    "allow-log-save",
+    "allow-log-open-folder",
+    "allow-report-issue-url"
+  ]
+}

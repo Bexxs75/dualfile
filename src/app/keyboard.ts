@@ -50,7 +50,7 @@ export function useGlobalKeys(store: AppStore, controller: Controller): void {
       }
       if (mod && event.key === ",") {
         event.preventDefault();
-        controller.openDialog({ kind: "settings" });
+        controller.openSettings();
         return;
       }
       if (mod && event.key.toLowerCase() === "d" && !typing) {

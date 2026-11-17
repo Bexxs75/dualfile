@@ -2237,6 +2237,12 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       if (profile.protocol !== "system" || !profile.systemUrl) throw new CoreError("Invalid profile", "invalidInput");
       unmountedSystemPlaces.add(profile.systemUrl);
     },
+    async settingsWindowOpen() { return "inline"; },
+    async settingsWindowClose() {},
+    async settingsWindowAttach() {},
+    async settingsWindowSend() {},
+    async settingsWindowPush() { return false; },
+    onSettingsWindowMessage() { return () => {}; },
     async connectionEditorOpen() { return true; },
     async connectionEditorClose() { /* no second window in the browser design */ },
     async sshHostsList() { return ["backup-box", "fileserver", "nas", "web-vps"]; },

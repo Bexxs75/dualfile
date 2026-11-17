@@ -315,6 +315,16 @@ async fn install_update(
 /// hands them on to every program Dualfile opens. Start it as the desktop would instead.
 #[tauri::command]
 pub fn app_restart(app: tauri::AppHandle) -> Result<(), String> {
+    if app
+        .get_webview_window(crate::settings_window::SETTINGS_LABEL)
+        .is_some()
+    {
+        crate::settings_window::request_close(&app, crate::settings_window::AfterClose::Restart);
+        return Ok(());
+    }
+    restart_now(app)
+}
+pub(crate) fn restart_now(app: tauri::AppHandle) -> Result<(), String> {
     let env = app.env();
     let path = tauri::process::current_binary(&env).map_err(|e| e.to_string())?;
     let mut command = std::process::Command::new(path);
@@ -377,7 +387,21 @@ pub fn watch_minimize(app: &tauri::AppHandle) -> tauri::Result<()> {
                 .contains(gtk::gdk::WindowState::ICONIFIED)
                 && handle.tray_by_id("dualfile").is_some()
             {
-                native.hide();
+                if handle
+                    .get_webview_window(crate::settings_window::SETTINGS_LABEL)
+                    .is_some()
+                {
+                    if crate::settings_window::request_close(
+                        &handle,
+                        crate::settings_window::AfterClose::Hide,
+                    ) {
+                        if let Some(main) = handle.get_webview_window("main") {
+                            bring_to_front(&main);
+                        }
+                    }
+                } else {
+                    native.hide();
+                }
             }
             gtk::glib::Propagation::Proceed
         });

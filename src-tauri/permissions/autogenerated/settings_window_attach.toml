@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-settings-window-attach"
+description = "Enables the settings_window_attach command without any pre-configured scope."
+commands.allow = ["settings_window_attach"]
+
+[[permission]]
+identifier = "deny-settings-window-attach"
+description = "Denies the settings_window_attach command without any pre-configured scope."
+commands.deny = ["settings_window_attach"]

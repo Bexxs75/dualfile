@@ -19,3 +19,33 @@ test("system commands use the typed native bridge and a progress channel", async
   await api.restart(); expect(invoke).toHaveBeenLastCalledWith("app_restart", undefined);
   await api.releaseOpen(); expect(invoke).toHaveBeenLastCalledWith("release_open", undefined);
 });
+test("settings commands carry session, ack and a channel without event permissions", async () => {
+  const api = createTauriApi();
+  const appearance = { theme: "papier", accent: "#123456", accentAutomatic: false, density: "normal", fontSize: 13, lang: "en" } as const;
+  vi.mocked(invoke).mockResolvedValueOnce(true);
+  expect(await api.settingsWindowOpen("info", "Settings", appearance)).toBe("opened");
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_open", { tab: "info", title: "Settings", appearance });
+  vi.mocked(invoke).mockResolvedValueOnce(false);
+  expect(await api.settingsWindowOpen(null, "Settings", appearance)).toBe("focused");
+  const receive = vi.fn(); await api.settingsWindowAttach(receive);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_attach", { channel: expect.any(Channel) });
+  const args = vi.mocked(invoke).mock.lastCall![1] as { channel: Channel<unknown> };
+  args.channel.onmessage({ kind: "session", session: "s1" });
+  expect(receive).toHaveBeenCalledWith({ kind: "session", session: "s1" });
+  const message = { session: "s1", seq: 1, kind: "patch", patch: { fontSize: 15 } } as const;
+  await api.settingsWindowSend(message);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_send", { message });
+  await api.settingsWindowClose("s1", 1);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_close", { session: "s1", lastSeq: 1, force: false, cancel: false });
+  const { testSnapshot } = await import("../app/settingsWindow.fixture");
+  const snapshot = testSnapshot(); await api.settingsWindowPush(snapshot, "Settings");
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_push", { snapshot, title: "Settings", close: false, control: { cancelClose: false, error: null } });
+});
+
+test("settings emergency close and close cancellation have explicit IPC arguments", async () => {
+  const api = createTauriApi();
+  await api.settingsWindowClose("", 0, true);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_close", { session: "", lastSeq: 0, force: true, cancel: false });
+  await api.settingsWindowClose("s1", 4, false, true);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_close", { session: "s1", lastSeq: 4, force: false, cancel: true });
+});

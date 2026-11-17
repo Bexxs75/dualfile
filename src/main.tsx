@@ -15,6 +15,8 @@ const root = createRoot(document.getElementById("root")!);
 if (new URLSearchParams(location.search).get("view") === "connection-editor") {
   // Second OS window: same bundle, only the editor is loaded and the main app never starts.
   void import("./ConnectionEditorWindow").then(({ ConnectionEditorWindow }) => root.render(<ConnectionEditorWindow api={api} search={location.search} />));
+} else if (new URLSearchParams(location.search).get("view") === "settings") {
+  void import("./SettingsWindow").then(({ SettingsWindow }) => root.render(<SettingsWindow api={api} search={location.search} />));
 } else {
   // Nur für die Sichtprüfung (VITE_DEMO=1 beim Bauen); im normalen Bau entfällt dieser Zweig vollständig.
   const runtime = import.meta.env.VITE_DEMO ? createRuntime(api) : undefined;
