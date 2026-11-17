@@ -205,11 +205,18 @@ describe("F5 / F6 Kopieren und Verschieben", () => {
 });
 
 describe("Papierkorb, Löschen, Rückgängig", () => {
-  test("F8 legt ohne Dialog in den Papierkorb, Strg+Z holt es zurück", async () => {
+  test("F8 fragt immer nach (Enter bestätigt, Esc bricht ab), Strg+Z holt es zurück", async () => {
     const app = await setupApp({ left: DOCS });
     await app.user.click(app.row(0, "notizen.txt"));
     await app.user.keyboard("{F8}");
-    expect(screen.queryByRole("dialog")).toBeNull();
+    const ask = await screen.findByRole("alertdialog");
+    expect(within(ask).getByRole("button", { name: "Ja, Papierkorb" })).toHaveFocus();
+    await app.user.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(app.names(0)).toContain("notizen.txt");
+    await app.user.keyboard("{F8}");
+    await screen.findByRole("alertdialog");
+    await app.user.keyboard("{Enter}");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     await waitFor(() => expect(app.names(0)).not.toContain("notizen.txt"));
     expect(await screen.findByText("„notizen.txt“ liegt im Papierkorb. Rückgängig mit Strg+Z.")).toBeInTheDocument();
@@ -222,6 +229,8 @@ describe("Papierkorb, Löschen, Rückgängig", () => {
   test("Entf wirkt auf die ganze Markierung", async () => {
     const app = await setupApp({ left: DOCS });
     await app.user.keyboard("{Control>}a{/Control}{Delete}");
+    await screen.findByRole("alertdialog");
+    await app.user.keyboard("{Enter}");
     await waitFor(() => expect(app.names(0)).toEqual([".."]));
     expect(await screen.findByText("7 Elemente liegen im Papierkorb. Rückgängig mit Strg+Z.")).toBeInTheDocument();
     await app.user.keyboard("{Control>}z{/Control}");
@@ -236,9 +245,10 @@ describe("Papierkorb, Löschen, Rückgängig", () => {
     });
     await app.user.click(app.row(0, "notizen.txt"));
     await app.user.keyboard("{F8}");
-    const dlg = await screen.findByRole("alertdialog");
-    expect(within(dlg).getByText(/Papierkorb ist hier nicht verfügbar/)).toBeInTheDocument();
-    expect(within(dlg).getByRole("button", { name: "Abbrechen" })).toHaveFocus();
+    await screen.findByRole("alertdialog");
+    await app.user.keyboard("{Enter}");
+    await screen.findByText(/Papierkorb ist hier nicht verfügbar/);
+    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Abbrechen" })).toHaveFocus();
     await app.user.keyboard("{Enter}");
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(await namesIn(app.api, DOCS)).toContain("notizen.txt");
@@ -408,6 +418,7 @@ describe("Kontextmenü", () => {
     const app = await setupApp({ left: DOCS });
     await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, "notizen.txt") });
     await app.user.click(await screen.findByRole("menuitem", { name: "In den Papierkorb" }));
+    await app.user.click(await screen.findByRole("button", { name: "Ja, Papierkorb" }));
     await waitFor(() => expect(app.names(0)).not.toContain("notizen.txt"));
   });
 });

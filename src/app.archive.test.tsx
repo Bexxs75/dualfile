@@ -189,6 +189,7 @@ describe("Archive sind schreibgeschützt", () => {
     });
     await app.user.click(app.row(0, "notizen.txt"));
     await app.user.keyboard("{F8}");
+    await app.user.keyboard("{Enter}");
     await waitFor(() => expect(alerts().some((t) => t.includes("Archive sind schreibgeschützt"))).toBe(true));
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(plan).not.toHaveBeenCalled();

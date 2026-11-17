@@ -671,7 +671,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (refuseInArchive(w)) return;
     const paths = targetPaths(w);
     if (paths.length === 0) return;
-    await trashPaths(paths);
+    // Immer nachfragen (nicht abschaltbar); trashPaths läuft erst nach confirmTrash.
+    dispatch({ type: "dialog", dialog: { kind: "trashConfirm", paths } });
   }
 
   async function trashPaths(paths: string[]): Promise<void> {

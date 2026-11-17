@@ -52,7 +52,7 @@ function Dialogs({ api }: { api: DualfileApi }) {
   const diff = useAppState((state) => state.diff);
   return (
     <>
-      {dialog?.kind === "trashConfirm" ? <Confirmation count={dialog.paths.length} size={0} names={dialog.paths} confirm={() => void controller.confirmTrash()} cancel={() => controller.closeDialog()} /> : null}
+      {dialog?.kind === "trashConfirm" ? <Confirmation count={dialog.paths.length} size={0} names={dialog.paths} confirmDefault confirm={() => void controller.confirmTrash()} cancel={() => controller.closeDialog()} /> : null}
       {dialog?.kind === "placeConfirm" ? <PlaceConfirmDialog dialog={dialog} /> : null}
       {dialog?.kind === "placeProperties" ? <PlacePropertiesDialog placeKey={dialog.key} /> : null}
       {dialog?.kind === "transfer" ? <ConfirmTransferDialog plan={dialog.plan} /> : null}

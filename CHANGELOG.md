@@ -7,6 +7,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Fixed
 
+- Delete and F8 (and the context menu entry) always ask before moving files to the Trash; the confirmation is focused on "Yes, move to Trash" so Enter confirms and Esc cancels. This cannot be switched off. Requested by a tester.
 - Sidebar: an Ubuntu installer stick (hybrid ISO) no longer shows up a second time as "not mounted"; opening that entry failed with "mounting is not allowed". A whole disk with partitions no longer counts as a drive itself.
 
 ## [0.3.5] - 2026-11-17

@@ -106,6 +106,7 @@ export function Confirmation({
   name,
   similar = false,
   names,
+  confirmDefault = false,
   confirm,
   cancel
 }: {
@@ -114,12 +115,14 @@ export function Confirmation({
   name?: string;
   similar?: boolean;
   names?: string[];
+  /** Enter bestätigt (Fokus auf der Bestätigen-Schaltfläche) statt abzubrechen. */
+  confirmDefault?: boolean;
   confirm: () => void;
   cancel: () => void;
 }) {
   const tr = useT(),
     language = useLanguage();
-  return <Modal role="alertdialog" title={tr("dialog.trash.title")} onClose={cancel} footer={<><button className="tb" data-autofocus onClick={cancel}>{tr("action.cancel")}</button><button className="tb danger" onClick={confirm}>{tr("dialog.trash.confirm")}</button></>}><p>{name || names ? tr("dialog.trash.body", {
+  return <Modal role="alertdialog" title={tr("dialog.trash.title")} onClose={cancel} footer={<><button className="tb" data-autofocus={confirmDefault ? undefined : true} onClick={cancel}>{tr("action.cancel")}</button><button className="tb danger" data-autofocus={confirmDefault ? true : undefined} onClick={confirm}>{tr("dialog.trash.confirm")}</button></>}><p>{name || names ? tr("dialog.trash.body", {
         name: name ?? names?.[0] ?? "",
         count: names ? count : 1
       }) : tr(similar ? "similar.selectionSummary" : "space.excess", {
