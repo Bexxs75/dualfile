@@ -73,6 +73,12 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
     ),
   };
   const order = extCol ? (["type", "size", "modified"] as const) : (["size", "type", "modified"] as const);
+  const overFolder = (event: DragEvent) => {
+    if (!controller.dragOverFolder(w, index, event.shiftKey, event.clientX, event.clientY)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = event.shiftKey ? "move" : "copy";
+  };
   return (
     <div
       id={rowId(w, index)}
@@ -100,12 +106,9 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
       {...(isDir && entry.name !== ".."
         ? {
             // Ordnerzeilen sind Ablageziele, auch im eigenen Fenster; sonst übernimmt das Fenster (aktueller Ordner).
-            onDragOver: (event: DragEvent) => {
-              if (!controller.dragOverFolder(w, index, event.shiftKey, event.clientX, event.clientY)) return;
-              event.preventDefault();
-              event.stopPropagation();
-              if (event.dataTransfer) event.dataTransfer.dropEffect = event.shiftKey ? "move" : "copy";
-            },
+            // WebKit (Tauri unter Linux) macht die Zeile nur zum Ablageziel, wenn auch dragenter abgebrochen wird.
+            onDragEnter: overFolder,
+            onDragOver: overFolder,
             onDrop: (event: DragEvent) => {
               if (!controller.dropOnFolder(w, index, event.shiftKey)) return;
               event.preventDefault();

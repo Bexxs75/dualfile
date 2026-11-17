@@ -185,6 +185,8 @@ describe("F5 / F6 Kopieren und Verschieben", () => {
     fireEvent.drop(app.row(0, "Bilder"), { dataTransfer });
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.dragStart(app.row(0, "Bilder"), { dataTransfer });
+    // WebKit braucht ein abgebrochenes dragenter, sonst kommt kein drop an (fireEvent liefert false = abgebrochen).
+    expect(fireEvent.dragEnter(app.row(0, "Dokumente"), { dataTransfer, clientX: 50, clientY: 80 })).toBe(false);
     fireEvent.dragOver(app.row(0, "Dokumente"), { dataTransfer, clientX: 50, clientY: 80 });
     expect(await screen.findByText(`Kopieren nach ${DOCS}`)).toBeInTheDocument();
     expect(app.row(0, "Dokumente")).toHaveClass("drop-into");
