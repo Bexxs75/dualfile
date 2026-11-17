@@ -1261,8 +1261,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const mode = shift ? "move" : "copy";
     const rx = Math.round(x / 6) * 6;
     const ry = Math.round(y / 6) * 6;
-    if (drag.over === over && drag.mode === mode && drag.x === rx && drag.y === ry) return;
-    dispatch({ type: "drag", drag: { ...drag, over, mode, x: rx, y: ry } });
+    if (drag.over === over && !drag.folder && drag.mode === mode && drag.x === rx && drag.y === ry) return;
+    dispatch({ type: "drag", drag: { ...drag, over, folder: null, mode, x: rx, y: ry } });
   }
   const dragEnd = (): void => dispatch({ type: "drag", drag: null });
   function drop(w: WinIdx, shift: boolean): void {
@@ -1270,6 +1270,36 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     dispatch({ type: "drag", drag: null });
     if (!drag || w === drag.from) return;
     openTransfer(shift ? "move" : "copy", drag.from);
+  }
+  /** Zielordner für das Ablegen auf einer Ordnerzeile; null, wenn die Zeile kein gültiges Ziel ist. */
+  function folderTarget(w: WinIdx, index: number): { w: WinIdx; name: string; path: string } | null {
+    const drag = get().drag;
+    const entry = entriesOf(w)[index];
+    if (!drag || !entry || entry.kind !== "dir" || entry.name === "..") return null;
+    // Ein gezogener Ordner kann nicht in sich selbst abgelegt werden.
+    if (w === drag.from && selectionOf(w).selected.has(entry.name)) return null;
+    return { w, name: entry.name, path: joinPath(activeTabOf(get(), w).path, entry.name) };
+  }
+  /** Ziehen über einer Ordnerzeile; true, wenn dort abgelegt werden darf. */
+  function dragOverFolder(w: WinIdx, index: number, shift: boolean, x: number, y: number): boolean {
+    const drag = get().drag;
+    const folder = folderTarget(w, index);
+    if (!drag || !folder) return false;
+    const mode = shift ? "move" : "copy";
+    const rx = Math.round(x / 6) * 6;
+    const ry = Math.round(y / 6) * 6;
+    if (drag.folder?.w === folder.w && drag.folder.name === folder.name && drag.mode === mode && drag.x === rx && drag.y === ry) return true;
+    dispatch({ type: "drag", drag: { ...drag, over: null, folder, mode, x: rx, y: ry } });
+    return true;
+  }
+  /** Ablegen auf einer Ordnerzeile (auch im selben Fenster); true, wenn der Auftrag geöffnet wurde. */
+  function dropOnFolder(w: WinIdx, index: number, shift: boolean): boolean {
+    const folder = folderTarget(w, index);
+    const drag = get().drag;
+    if (!drag || !folder) return false;
+    dispatch({ type: "drag", drag: null });
+    openTransfer(shift ? "move" : "copy", drag.from, folder.path);
+    return true;
   }
 
   // ---------------------------------------------------------------- Aufträge und Ereignisse
@@ -1606,6 +1636,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     dragOver,
     dragEnd,
     drop,
+    dragOverFolder,
+    dropOnFolder,
     cancelJob, pauseJob, pauseAllJobs, answerItemError, appConfirmClose,
     dismissCloseRequest: () => dispatch({ type: "closeRequested", count: null }),
     setJobsExpanded: (expanded: boolean) => dispatch({ type: "jobsExpanded", expanded }),

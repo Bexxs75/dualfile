@@ -173,6 +173,33 @@ describe("F5 / F6 Kopieren und Verschieben", () => {
     expect(screen.queryByText(/Verschieben nach \//)).toBeNull();
     expect(await sizeOf(app.api, DOCS, "notizen.txt")).toBe(1200); // noch nichts passiert
   });
+
+  test("Ziehen auf eine Ordnerzeile im selben Fenster: Hinweis und Hervorhebung, Ablegen nimmt diesen Ordner als Ziel; nicht auf sich selbst", async () => {
+    const app = await setupApp({ left: HOME, right: DOWNLOADS });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: "", dropEffect: "" };
+    fireEvent.dragStart(app.row(0, "Bilder"), { dataTransfer });
+    // Auf sich selbst: kein Ordnerziel, kein Hinweis, Loslassen öffnet nichts.
+    fireEvent.dragOver(app.row(0, "Bilder"), { dataTransfer, clientX: 50, clientY: 50 });
+    expect(app.row(0, "Bilder")).not.toHaveClass("drop-into");
+    expect(screen.queryByText(/Kopieren nach/)).toBeNull();
+    fireEvent.drop(app.row(0, "Bilder"), { dataTransfer });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.dragStart(app.row(0, "Bilder"), { dataTransfer });
+    fireEvent.dragOver(app.row(0, "Dokumente"), { dataTransfer, clientX: 50, clientY: 80 });
+    expect(await screen.findByText(`Kopieren nach ${DOCS}`)).toBeInTheDocument();
+    expect(app.row(0, "Dokumente")).toHaveClass("drop-into");
+    expect(app.pane(0)).not.toHaveClass("drop");
+    // Weiter auf die freie Fläche des anderen Fensters: Ordnerziel fällt weg, dort gilt wieder der aktuelle Ordner.
+    fireEvent.dragOver(app.pane(1), { dataTransfer, clientX: 300, clientY: 200 });
+    expect(await screen.findByText(`Kopieren nach ${DOWNLOADS}`)).toBeInTheDocument();
+    expect(app.row(0, "Dokumente")).not.toHaveClass("drop-into");
+    fireEvent.dragOver(app.row(0, "Dokumente"), { dataTransfer, clientX: 50, clientY: 80 });
+    fireEvent.drop(app.row(0, "Dokumente"), { dataTransfer });
+    expect(app.dialog()).toHaveAccessibleName("Kopieren");
+    await app.user.keyboard("{Enter}");
+    await app.runJobs();
+    expect(await namesIn(app.api, DOCS)).toContain("Bilder");
+  });
 });
 
 describe("Papierkorb, Löschen, Rückgängig", () => {

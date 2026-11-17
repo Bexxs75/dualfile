@@ -58,6 +58,8 @@ export interface DragState {
   mode: "copy" | "move";
   x: number;
   y: number;
+  /** Ordnerzeile unter dem Mauszeiger (in einem der beiden Fenster); Ablegen geht dann in diesen Ordner. */
+  folder?: { w: WinIdx; name: string; path: string } | null;
 }
 
 export interface ContextMenuState {

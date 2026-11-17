@@ -42,12 +42,13 @@ interface RowProps {
   current: boolean;
   language: Language;
   extCol: boolean;
+  dropInto: boolean;
 }
 
-const Row = memo(function Row({ w, index, entry, selected, current, language, extCol }: RowProps) {
+const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, dropInto }: RowProps) {
   const controller = useController();
   const isDir = entry.kind === "dir";
-  const classes = ["row", entry.name === ".." ? "parent-entry" : "", isDir ? "d" : "", entry.kind === "symlink" ? "l" : "", entry.brokenLink ? "broken" : "", entry.hidden ? "hid" : "", entry.error ? "err" : "", selected ? "sel" : "", current ? "cur" : "", extCol ? "ext-split" : ""]
+  const classes = ["row", entry.name === ".." ? "parent-entry" : "", isDir ? "d" : "", entry.kind === "symlink" ? "l" : "", entry.brokenLink ? "broken" : "", entry.hidden ? "hid" : "", entry.error ? "err" : "", selected ? "sel" : "", current ? "cur" : "", extCol ? "ext-split" : "", dropInto ? "drop-into" : ""]
     .filter(Boolean)
     .join(" ");
   const draggable = entry.name !== "..";
@@ -96,6 +97,22 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
         controller.dragStart(w, index);
       }}
       onDragEnd={() => controller.dragEnd()}
+      {...(isDir && entry.name !== ".."
+        ? {
+            // Ordnerzeilen sind Ablageziele, auch im eigenen Fenster; sonst übernimmt das Fenster (aktueller Ordner).
+            onDragOver: (event: DragEvent) => {
+              if (!controller.dragOverFolder(w, index, event.shiftKey, event.clientX, event.clientY)) return;
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.dataTransfer) event.dataTransfer.dropEffect = event.shiftKey ? "move" : "copy";
+            },
+            onDrop: (event: DragEvent) => {
+              if (!controller.dropOnFolder(w, index, event.shiftKey)) return;
+              event.preventDefault();
+              event.stopPropagation();
+            },
+          }
+        : {})}
     >
       <span role="gridcell" className="n">
         <EntryIcon entry={entry} />
@@ -119,6 +136,7 @@ export function FileList({ w }: { w: WinIdx }) {
   const filter = useAppState((state) => activeTabOf(state, w).filter);
   const active = useAppState((state) => state.active === w);
   const extCol = useAppState((state) => state.settings.extensionColumn === true);
+  const dropFolder = useAppState((state) => (state.drag?.folder?.w === w ? state.drag.folder.name : null));
   const storedWidths = useAppState((state) => state.settings.columnWidths);
   const mode = extCol ? "ext" : "normal";
   const savedWidths = columnWidthsFor({ columnWidths: storedWidths }, mode);
@@ -294,6 +312,7 @@ export function FileList({ w }: { w: WinIdx }) {
           current={index === focusIndex}
           language={language}
           extCol={extCol}
+          dropInto={dropFolder === entry.name}
         />
       ))}
       {listing.error ? (
