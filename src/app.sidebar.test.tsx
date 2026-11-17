@@ -516,3 +516,113 @@ test.each(["de", "en"] as const)("trash confirmation caps displayed paths withou
   await app.user.click(within(dialog).getByRole("button", { name: language === "de" ? "Ja, Papierkorb" : "Yes, move to Trash" }));
   expect(trash).toHaveBeenCalledWith(paths);
 });
+
+test("unmounted devices mount before navigating to the returned path", async () => {
+  const app = await setupApp();
+  const mount = vi.spyOn(app.api, "deviceMount").mockResolvedValue(DOCS);
+  act(() => app.base.devPlug({ name: "Unmounted USB", path: "", kind: "removable", source: "device", mounted: false,
+    deviceActions: { key: "usb:1", removable: true, encrypted: false, optical: false } }));
+  const row = await screen.findByRole("treeitem", { name: /^Unmounted USB/ });
+  expect(row).not.toHaveAttribute("aria-disabled", "true");
+  expect(sidebar().querySelector('[aria-live="polite"]')).toHaveTextContent("Unmounted USB angeschlossen");
+  fireEvent.click(row, { ctrlKey: true });
+  await waitFor(() => expect(mount).toHaveBeenCalledWith("usb:1"));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toBe(DOCS));
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+});
+
+test("whole-drive removal confirms tabs on another partition and moves them only after success", async () => {
+  const app = await setupApp();
+  const info = { removable: true, encrypted: false, optical: false };
+  act(() => {
+    app.base.devPlug({ name: "Partition one", path: DOCS, kind: "removable", mounted: true, deviceActions: { ...info, key: "usb:1" } });
+    app.base.devPlug({ name: "Partition two", path: DOWNLOADS, kind: "removable", mounted: true, deviceActions: { ...info, key: "usb:2" } });
+  });
+  await screen.findByRole("treeitem", { name: /^Partition two/ });
+  await app.user.click(item(/^Partition two/));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOWNLOADS));
+  let finish!: () => void;
+  const eject = vi.spyOn(app.api, "deviceEject").mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  const affected = vi.spyOn(app.api, "placesMountAffected");
+  await app.user.click(screen.getByRole("button", { name: "Auswerfen · Partition one" }));
+  expect(affected).toHaveBeenCalledWith("whole-device:usb:1", expect.arrayContaining([DOWNLOADS]));
+  expect(app.runtime.store.getState().dialog).toMatchObject({ kind: "placeConfirm", action: "eject" });
+  expect(eject).not.toHaveBeenCalled();
+  await app.user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Bestätigen" }));
+  expect(eject).toHaveBeenCalledWith("usb:1");
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOWNLOADS);
+  await act(async () => finish());
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME));
+});
+
+test.each(["busy", "notPermitted", "notFound", "helperMissing", "timeout", "polkitDismissed"])("failed removal (%s) preserves tabs and never exposes helper diagnostics", async kind => {
+  const app = await setupApp();
+  act(() => app.base.devPlug({ name: "Test device", path: DOCS, kind: "removable", mounted: true,
+    deviceActions: { key: "usb:1", removable: true, encrypted: false, optical: false } }));
+  await screen.findByRole("treeitem", { name: /^Test device/ });
+  await app.user.click(item(/^Test device/));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS));
+  vi.spyOn(app.api, "devicePowerOff").mockRejectedValue(new CoreError("serial=SECRET credentials=/secret", kind));
+  await act(() => app.runtime.controller.unmountPlace("drive:device-usb:1", false, "powerOff"));
+  await act(() => app.runtime.controller.confirmPlaceAction());
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS);
+  expect(document.body).not.toHaveTextContent("SECRET");
+  expect(app.runtime.store.getState().dialog).toBeNull();
+});
+
+test("cancelled eject leaves the device and tabs untouched; encrypted media do not mount", async () => {
+  const app = await setupApp();
+  act(() => app.base.devPlug({ name: "Test device", path: DOCS, kind: "removable", mounted: true,
+    deviceActions: { key: "usb:1", removable: true, encrypted: false, optical: false } }));
+  await screen.findByRole("treeitem", { name: /^Test device/ });
+  await app.user.click(item(/^Test device/));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS));
+  const eject = vi.spyOn(app.api, "deviceEject"), mount = vi.spyOn(app.api, "deviceMount");
+  await app.user.click(screen.getByRole("button", { name: "Auswerfen · Test device" }));
+  await app.user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Abbrechen" }));
+  expect(eject).not.toHaveBeenCalled();
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS);
+  act(() => app.base.devPlug({ name: "Locked USB", path: "", kind: "removable", mounted: false,
+    deviceActions: { key: "locked:1", removable: true, encrypted: true, optical: false } }));
+  const locked = await screen.findByRole("treeitem", { name: /^Locked USB/ });
+  expect(locked).toHaveAttribute("aria-disabled", "true");
+  expect(locked).toHaveAccessibleName(/Verschlüsselt/);
+  await app.user.click(locked);
+  expect(mount).not.toHaveBeenCalled();
+});
+
+test("partial removal failure refreshes mount state without moving tabs", async () => {
+  const app = await setupApp();
+  act(() => app.base.devPlug({ name: "Partial", path: DOCS, kind: "removable", mounted: true,
+    deviceActions: { key: "partial:1", removable: true, encrypted: false, optical: false } }));
+  await screen.findByRole("treeitem", { name: /^Partial/ });
+  await app.user.click(item(/^Partial/));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS));
+  vi.spyOn(app.api, "devicePowerOff").mockImplementation(async () => {
+    await app.api.deviceUnmount("partial:1");
+    throw new CoreError("not permitted", "notPermitted");
+  });
+  await act(() => app.runtime.controller.unmountPlace("drive:device-partial:1", false, "powerOff"));
+  await act(() => app.runtime.controller.confirmPlaceAction());
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS);
+  expect(app.runtime.store.getState().places?.drives.find(d => d.name === "Partial")?.mounted).toBe(false);
+});
+
+
+test("optical eject uses the eject endpoint without powering off the drive", async () => {
+  const app = await setupApp();
+  act(() => app.base.devPlug({ name: "Optical disc", path: DOCS, kind: "removable", source: "device", mounted: true,
+    deviceActions: { key: "optical:1", removable: true, encrypted: false, optical: true } }));
+  await screen.findByRole("treeitem", { name: /^Optical disc/ });
+  await app.user.click(item(/^Optical disc/));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS));
+  const eject = vi.spyOn(app.api, "deviceEject");
+  const powerOff = vi.spyOn(app.api, "devicePowerOff");
+  await app.user.click(screen.getByRole("button", { name: "Auswerfen · Optical disc" }));
+  expect(eject).not.toHaveBeenCalled();
+  await app.user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Bestätigen" }));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME));
+  expect(eject).toHaveBeenCalledWith("optical:1");
+  expect(powerOff).not.toHaveBeenCalled();
+  expect(screen.queryByRole("treeitem", { name: /^Optical disc/ })).not.toBeInTheDocument();
+});

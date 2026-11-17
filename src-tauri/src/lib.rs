@@ -11,6 +11,7 @@ mod connection_editor;
 mod connections;
 mod convert;
 mod desktop_entry;
+mod devices;
 mod diagnostics;
 mod item_error;
 mod keychain;
@@ -186,6 +187,11 @@ pub fn run() {
             places::places_snapshot,
             places::places_mount_affected,
             commands::places_save_connection,
+            devices::device_list,
+            devices::device_mount,
+            devices::device_unmount,
+            devices::device_eject,
+            devices::device_power_off,
             places::fstab_mount,
             places::fstab_unmount,
             places::places_mount_unmount,

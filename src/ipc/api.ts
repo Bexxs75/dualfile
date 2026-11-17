@@ -101,6 +101,11 @@ export interface DualfileApi extends SystemApi {
   placesMountAffected(mountKey: string, paths: string[]): Promise<number[]>;
   placesSaveConnection(key: string): Promise<void>;
   trashEmpty(): Promise<number>;
+  deviceList(): Promise<import("./types").Drive[]>;
+  deviceMount(deviceKey: string): Promise<string>;
+  deviceUnmount(deviceKey: string): Promise<void>;
+  deviceEject(deviceKey: string): Promise<void>;
+  devicePowerOff(deviceKey: string): Promise<void>;
   fstabMount(mountPoint: string): Promise<void>;
   fstabUnmount(mountPoint: string): Promise<void>;
   placesMountUnmount(mountKey: string): Promise<void>;

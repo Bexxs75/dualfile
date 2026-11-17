@@ -6,8 +6,8 @@ import { Modal } from "../Modal";
 
 export function PlaceConfirmDialog({ dialog }: { dialog: Extract<Dialog, { kind: "placeConfirm" }> }) {
   const controller = useController(), tr = useT();
-  const title = dialog.action === "mount" ? "sidebar.mount" : dialog.action === "unmount" ? "sidebar.unmount" : "sidebar.emptyTrash";
-  const warning = dialog.action === "unmount" ? "sidebar.unmountWarning" : "sidebar.emptyTrashWarning";
+  const title = dialog.action === "mount" ? "sidebar.mount" : dialog.action === "unmount" ? "sidebar.unmount" : dialog.action === "eject" ? "sidebar.eject" : dialog.action === "powerOff" ? "sidebar.powerOff" : "sidebar.emptyTrash";
+  const warning = dialog.action === "unmount" ? "sidebar.unmountWarning" : dialog.action === "eject" || dialog.action === "powerOff" ? "sidebar.removeWarning" : "sidebar.emptyTrashWarning";
   return <Modal role="alertdialog" title={tr(title)} onClose={() => controller.closeDialog()} closeDisabled={dialog.busy} footer={<>
     <button disabled={dialog.busy} className="tb primary" data-autofocus onClick={() => controller.closeDialog()}>{tr("action.cancel")}</button>
     <button disabled={dialog.busy} className="tb warn" onClick={() => void controller.confirmPlaceAction()}>{tr("sidebar.confirm")}</button>

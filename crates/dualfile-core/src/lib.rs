@@ -38,3 +38,5 @@ pub mod user_dirs;
 
 #[cfg(target_os = "linux")]
 pub mod trash_empty;
+
+pub mod devices;

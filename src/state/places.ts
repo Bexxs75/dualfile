@@ -2,6 +2,7 @@ import type { ConnectionEntry, PlacesSnapshot, Settings } from "../ipc/types";
 import type { IconName } from "../components/Icon";
 import type { TranslationKey } from "../i18n";
 export interface Place {
+  deviceKey?: string; canRemove?: boolean;
   canSave?: boolean;
   readOnly?: boolean; canMount?: boolean; canUnmount?: boolean; mountKey?: string;
   key: string; name: string; path?: string; icon: IconName; label?: TranslationKey;
@@ -10,7 +11,7 @@ export interface Place {
   space?: { available: number; total: number } | null; badge?: string;
 }
 export interface PlaceSection { id: "places" | "remote" | "devices"; label: TranslationKey; entries: Place[] }
-export const inside = (path: string, root: string) => path === root || path.startsWith(root === "/" ? "/" : `${root.replace(/\/$/, "")}/`);
+export const inside = (path: string, root: string) => !!root && (path === root || path.startsWith(root === "/" ? "/" : `${root.replace(/\/$/, "")}/`));
 export function activePlace(entries: Place[], path: string): string | null {
   return entries.filter(e => e.path && inside(path, e.path)).sort((a, b) => b.path!.length - a.path!.length)[0]?.key ?? null;
 }
@@ -36,8 +37,11 @@ export function buildPlaces(snapshot: PlacesSnapshot | null, connections: readon
   const devices: Place[] = [];
   for (const d of snapshot?.drives ?? []) {
     const automount = !d.mounted && d.fstab?.automount;
-    const e: Place = { key: `${d.fstab || d.source === "fstab" ? "fstab" : "drive"}:${d.path}`, name: d.name, path: d.path, icon: d.kind === "removable" ? "usb" : d.kind === "network" ? "network" : "disk", canSave: ["cifs", "smb3", "nfs", "nfs4", "fuse.sshfs", "davfs", "davfs2"].includes(d.fstype ?? ""), readOnly: d.readOnly, canMount: !!d.fstab?.userMountable && d.mounted === false, canUnmount: !!d.fstab?.userMountable && d.mounted !== false, state: automount ? "automount" : d.mounted === false ? "unmounted" : "mounted", space: d.space,
-      reason: d.mounted === false ? automount ? "sidebar.automountHelp" : d.fstab?.userMountable ? "sidebar.unmountedHelp" : "sidebar.adminHelp" : undefined };
+    const device = d.deviceActions;
+    const mayMount = !!d.fstab?.userMountable || !!device && (!d.fstab || !d.fstab.permission) && !device.encrypted;
+    const e: Place = { deviceKey: device?.key, canRemove: device?.removable, disabled: device?.encrypted,
+      key: d.fstab || d.source === "fstab" ? `fstab:${d.path}` : device ? `drive:device-${device.key}` : `drive:${d.path}`, name: d.name, path: d.path || undefined, icon: device?.optical ? "optical" : d.kind === "removable" ? "usb" : d.kind === "network" ? "network" : "disk", canSave: ["cifs", "smb3", "nfs", "nfs4", "fuse.sshfs", "davfs", "davfs2"].includes(d.fstype ?? ""), readOnly: d.readOnly, canMount: mayMount && !automount && d.mounted === false, canUnmount: mayMount && d.mounted !== false, state: automount ? "automount" : d.mounted === false ? "unmounted" : "mounted", space: d.space,
+      reason: device?.encrypted ? "sidebar.encryptedHelp" : d.mounted === false ? automount ? "sidebar.automountHelp" : mayMount ? "sidebar.unmountedHelp" : "sidebar.adminHelp" : undefined };
     (d.kind === "network" ? remote : devices).push(e);
   }
   for (const m of snapshot?.networkMounts ?? []) {

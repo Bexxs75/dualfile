@@ -7,18 +7,18 @@ use dualfile_core::{
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
-    time::Duration,
+    sync::{Arc, Condvar, Mutex, OnceLock},
+    time::{Duration, Instant},
 };
 
 #[derive(Default)]
-pub struct Registry(Mutex<Claims>);
+pub struct Registry(Mutex<Claims>, Condvar);
 #[derive(Default)]
 struct Claims {
     next: u64,
     generation: u64,
     jobs: HashMap<u64, Vec<PathBuf>>,
-    unmounts: HashMap<u64, PathBuf>,
+    unmounts: HashMap<u64, Vec<PathBuf>>,
     changed: HashMap<PathBuf, u64>,
 }
 pub struct Lease {
@@ -31,14 +31,18 @@ impl Drop for Lease {
     fn drop(&mut self) {
         let mut claims = self.registry.0.lock().unwrap();
         if self.unmount {
-            if let Some(point) = claims.unmounts.remove(&self.id) {
+            if let Some(points) = claims.unmounts.remove(&self.id) {
                 claims.generation += 1;
                 let generation = claims.generation;
-                claims.changed.insert(point, generation);
+                for point in points {
+                    claims.changed.insert(point, generation);
+                }
             }
         } else {
             claims.jobs.remove(&self.id);
         }
+        drop(claims);
+        self.registry.1.notify_all();
     }
 }
 impl Lease {
@@ -52,6 +56,7 @@ impl Lease {
             }) || c
                 .unmounts
                 .values()
+                .flatten()
                 .any(|m| paths.iter().any(|p| overlaps(p, m)))
             {
                 return Err(busy());
@@ -72,6 +77,7 @@ impl Registry {
         let mut c = self.0.lock().unwrap();
         if c.unmounts
             .values()
+            .flatten()
             .any(|m| paths.iter().any(|p| overlaps(p, m)))
         {
             return Err(busy());
@@ -87,23 +93,55 @@ impl Registry {
         })
     }
     pub fn unmount(self: &Arc<Self>, point: PathBuf) -> Result<Lease, UiError> {
+        self.unmount_many(vec![point])
+    }
+    /// Reserve every partition/alias atomically; a partial reservation must never escape.
+    pub fn unmount_many(self: &Arc<Self>, points: Vec<PathBuf>) -> Result<Lease, UiError> {
+        self.unmount_many_wait(points, Duration::ZERO)
+    }
+    /// Wait for another device operation, but never wait for a job to finish.
+    pub fn unmount_many_wait(
+        self: &Arc<Self>,
+        points: Vec<PathBuf>,
+        timeout: Duration,
+    ) -> Result<Lease, UiError> {
+        let deadline = Instant::now() + timeout;
         let mut c = self.0.lock().unwrap();
-        if c.jobs.values().flatten().any(|p| overlaps(p, &point))
-            || c.unmounts.values().any(|p| overlaps(p, &point))
-        {
-            return Err(busy());
+        loop {
+            if c.jobs
+                .values()
+                .flatten()
+                .any(|p| points.iter().any(|point| overlaps(p, point)))
+            {
+                return Err(busy());
+            }
+            if !c
+                .unmounts
+                .values()
+                .flatten()
+                .any(|p| points.iter().any(|point| overlaps(p, point)))
+            {
+                break;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(busy());
+            }
+            c = self.1.wait_timeout(c, remaining).unwrap().0;
         }
         c.next += 1;
         let id = c.next;
-        c.unmounts.insert(id, point.clone());
+        c.unmounts.insert(id, points.clone());
         c.generation += 1;
         let generation = c.generation;
-        c.changed.insert(point, generation);
+        for point in points {
+            c.changed.insert(point, generation);
+        }
         Ok(Lease {
             registry: self.clone(),
             id,
             unmount: true,
-            generation: c.generation,
+            generation,
         })
     }
 }
@@ -347,6 +385,40 @@ pub fn affected_paths(point: &Path, paths: &[String]) -> Result<Vec<usize>, UiEr
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn device_operations_wait_but_jobs_still_refuse_immediately() {
+        use std::sync::mpsc;
+        let registry = Arc::new(Registry::default());
+        let first = registry
+            .unmount_many(vec!["/dev/sdb".into(), "/dev/sdb1".into()])
+            .unwrap();
+        let (tx, rx) = mpsc::channel();
+        let other = registry.clone();
+        let waiting = std::thread::spawn(move || {
+            let lease = other
+                .unmount_many_wait(
+                    vec!["/dev/sdb".into(), "/dev/sdb2".into()],
+                    Duration::from_secs(2),
+                )
+                .unwrap();
+            tx.send(()).unwrap();
+            lease
+        });
+        assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
+        assert!(registry.job(vec!["/unrelated".into()]).is_ok());
+        assert!(registry
+            .unmount_many_wait(vec!["/dev/sdb".into()], Duration::from_millis(20))
+            .is_err());
+        drop(first);
+        rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        drop(waiting.join().unwrap());
+        let _job = registry.job(vec!["/dev/sdb2".into()]).unwrap();
+        let start = Instant::now();
+        assert!(registry
+            .unmount_many_wait(vec!["/dev/sdb2".into()], Duration::from_secs(10))
+            .is_err());
+        assert!(start.elapsed() < Duration::from_secs(1));
+    }
     use super::*;
     #[test]
     fn concurrent_leaf_admissions_on_the_same_healthy_mount_both_succeed() {
