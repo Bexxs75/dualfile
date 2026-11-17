@@ -161,7 +161,7 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
       <button type="button" role="treeitem" aria-level={2} data-place-key={entry.key} tabIndex={entry.key === focusKey ? 0 : -1}
         aria-current={(state.active === 0 ? left : right) === entry.key ? "location" : undefined}
         aria-disabled={(entry.state === "unmounted" && !entry.canMount) || entry.disabled} aria-label={description(entry)} aria-describedby={tooltip?.key === entry.key ? tipId : undefined}
-        className={`sidebar-entry ${state.drag ? "drop-target" : ""} ${dropKey === entry.key ? "drop-over" : ""} ${entry.hidden ? "place-hidden" : ""} ${entry.state === "unmounted" || entry.disabled ? "unmounted" : ""}`}
+        className={`sidebar-entry ${state.drag && !state.drag.external ? "drop-target" : ""} ${dropKey === entry.key ? "drop-over" : ""} ${entry.hidden ? "place-hidden" : ""} ${entry.state === "unmounted" || entry.disabled ? "unmounted" : ""}`}
         onFocus={() => { controller.setSidebarFocus(entry.key); showTooltip(entry); }} onBlur={hideTooltip} onMouseEnter={() => showTooltip(entry)} onMouseLeave={hideTooltip}
         onClick={event => void controller.openPlace(entry.key, event.ctrlKey ? "other" : "active")}
         onAuxClick={event => { if (event.button === 1) { event.preventDefault(); void controller.openPlace(entry.key, "tab"); } }}

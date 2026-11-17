@@ -59,6 +59,25 @@ export function planOperation(kind: OperationKind, sourcePane: PaneSnapshot, tar
   };
 }
 
+/** Plan for absolute source paths that do not come from a pane (files dropped in from outside); sizes are unknown. */
+export function planPaths(kind: OperationKind, sources: readonly string[], destination: string): OperationPlan | null {
+  if (sources.length === 0) return null;
+  const dest = normalizePath(destination);
+  return {
+    kind,
+    sources: [...sources],
+    sourceNames: sources.map((path) => path.slice(path.lastIndexOf("/") + 1)),
+    destination: dest,
+    count: sources.length,
+    fileCount: sources.length,
+    folderCount: 0,
+    bytes: 0,
+    bytesIncomplete: true,
+    sameFolder: sources.every((path) => normalizePath(path.slice(0, path.lastIndexOf("/")) || "/") === dest),
+    extract: false,
+  };
+}
+
 export const planCopy = (source: PaneSnapshot, target: PaneSnapshot): OperationPlan | null =>
   planOperation("copy", source, target);
 export const planMove = (source: PaneSnapshot, target: PaneSnapshot): OperationPlan | null =>

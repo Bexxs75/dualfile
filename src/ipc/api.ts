@@ -67,6 +67,8 @@ export class CoreError extends Error {
 export interface TerminalOutput { id: number; data: string }
 export interface TerminalExit { id: number; code: number | null }
 
+export interface NativeDropEvent { type: "over" | "drop" | "leave"; paths: string[]; x: number; y: number }
+
 export interface DualfileApi extends SystemApi {
   terminalOpen(cwd: string | undefined, rows: number, cols: number): Promise<number>;
   terminalWrite(id: number, data: string): Promise<void>;
@@ -94,6 +96,8 @@ export interface DualfileApi extends SystemApi {
   /** Runs a cancellable job; its ID arrives through onEvent before this resolves. */
   undoRun(id: number): Promise<UndoResult>;
   onUndoChanged(handler: () => void): () => void;
+  /** Files dragged in from outside (file manager, desktop); positions are CSS pixels relative to the window. */
+  onNativeDrop(handler: (event: NativeDropEvent) => void): () => void;
   discoverySnapshot(): Promise<import("./types").DiscoveredService[]>;
   placesSnapshot(): Promise<import("./types").PlacesSnapshot>;
   placesSpace(path: string): Promise<{ available: number; total: number } | null>;

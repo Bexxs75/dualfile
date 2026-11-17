@@ -3,6 +3,7 @@ import type { UpdateProgress } from "./system";
 // Ereignis `core-event`. Keine Logik, nur Befehlsnamen, Argumentform und Fehlerabbildung.
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { CoreError, type DualfileApi } from "./api";
 import type { SettingsWindowDelivery, SettingsWindowMessage, CoreEvent, SshPrompt } from "./types";
 
@@ -138,6 +139,21 @@ export function createTauriApi(): DualfileApi {
       void listen("undo-changed", () => { if (active) handler(); }).then((unlisten) => {
         if (active) stop = unlisten; else unlisten();
       }).catch(() => console.error("undo events unavailable"));
+      return () => { active = false; stop?.(); };
+    },
+    onNativeDrop(handler) {
+      let active = true;
+      let stop: (() => void) | undefined;
+      void getCurrentWebview().onDragDropEvent((event) => {
+        if (!active) return;
+        const p = event.payload;
+        // Native positions are physical pixels.
+        const scale = window.devicePixelRatio || 1;
+        if (p.type === "leave") return handler({ type: "leave", paths: [], x: 0, y: 0 });
+        handler({ type: p.type === "drop" ? "drop" : "over", paths: "paths" in p ? p.paths : [], x: p.position.x / scale, y: p.position.y / scale });
+      }).then((unlisten) => {
+        if (active) stop = unlisten; else unlisten();
+      }).catch(() => console.error("native drop events unavailable"));
       return () => { active = false; stop?.(); };
     },
     list: (path) => call("list", { path }),

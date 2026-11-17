@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- Drop files from outside (Dolphin, the desktop) onto a Dualfile pane or onto a folder row: the target is highlighted and the copy dialog opens with the dropped paths. Dropping always copies (the native drop carries no Shift modifier); read-only, archive and unmounted destinations are refused as usual. Requested by a tester.
+
 ### Fixed
 
 - The cursor row is now clearly marked: an accent outline and tint in the active pane (muted outline in the inactive pane), while the mouse-hover highlight is much fainter, so a hovered row is no longer mistaken for the row Delete acts on. Reported by a tester.

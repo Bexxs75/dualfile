@@ -2370,6 +2370,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
 
     async undoList() { return history.map((r) => ({ ...r.entry })); },
     undoRun: runUndo,
+    onNativeDrop() { return () => {}; },
     onUndoChanged(handler) { undoHandlers.add(handler); return () => { undoHandlers.delete(handler); }; },
     async copy(sources, destination): Promise<number> {
       return startTransfer(sources, destination, false);

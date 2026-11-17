@@ -4,7 +4,7 @@ import { selectReleaseVersions, seenVersionOnClose } from "../state/releaseNotes
 import { formatJobPresentation } from "../state/jobPresentation";
 // Verbindet Zustand, Zustandsmodule und die API: alle Abläufe, die etwas anstoßen (Laden, Kopieren,
 // Löschen …). Komponenten rufen nur diese Methoden und lesen den Zustand.
-import { CoreError, type DualfileApi } from "../ipc/api";
+import { CoreError, type DualfileApi, type NativeDropEvent } from "../ipc/api";
 import type { ConflictInfo, CoreEvent, Entry, JobStatus, PackFormat, RenameItem, Resolution, Settings } from "../ipc/types";
 import { createTranslator, errorKey, resolveLanguage, type Language, type TranslationKey, type TranslationParams } from "../i18n";
 import type { Command } from "../state/keymap";
@@ -17,6 +17,7 @@ import {
   deleteDialogModel,
   isFinished,
   planOperation,
+  planPaths,
   withDestination,
   type OperationKind,
   type OperationPlan,
@@ -641,6 +642,39 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (plan) dispatch({ type: "dialog", dialog: { kind: "transfer", plan, from } });
   }
 
+  /** Opens the copy dialog for absolute paths dropped from outside onto `destination`: copy only, the native drop event carries no modifier keys. shortcut: Shift+drop = move is not available here. */
+  function dropPaths(sources: string[], destination: string): void {
+    if (isArchivePath(destination) || readOnlyPlace(destination)) { toast(tr("error.readOnly"), "error"); return; }
+    if (unmountedPlace(destination)) { toast(tr("sidebar.dropMount"), "error"); return; }
+    const plan = planPaths("copy", sources, destination);
+    if (plan) dispatch({ type: "dialog", dialog: { kind: "transfer", plan, from: get().active } });
+  }
+
+  /** Pane and (directory) row under a window position, or null outside both panes. */
+  function nativeTarget(x: number, y: number): { w: WinIdx; folder: { name: string; path: string } | null } | null {
+    const el = document.elementFromPoint(x, y);
+    const pane = el?.closest<HTMLElement>("[data-pane]");
+    if (!el || !pane) return null;
+    const w: WinIdx = pane.dataset.pane === "1" ? 1 : 0;
+    const match = /^pane[01]-row-(\d+)$/.exec(el.closest<HTMLElement>('[role="row"]')?.id ?? "");
+    const entry = match ? entriesOf(w)[Number(match[1])] : undefined;
+    const folder = entry && entry.kind === "dir" && entry.name !== ".." ? { name: entry.name, path: joinPath(activeTabOf(get(), w).path, entry.name) } : null;
+    return { w, folder };
+  }
+  function nativeDropEvent(event: NativeDropEvent): void {
+    const drag = get().drag;
+    if (drag && !drag.external) return; // internal drags use the HTML5 path
+    if (event.type === "leave") { if (drag) dispatch({ type: "drag", drag: null }); return; }
+    const target = nativeTarget(event.x, event.y);
+    if (event.type === "over") {
+      if (!target) { if (drag) dispatch({ type: "drag", drag: null }); return; }
+      const rx = Math.round(event.x / 6) * 6, ry = Math.round(event.y / 6) * 6;
+      dispatch({ type: "drag", drag: { from: target.w, over: target.folder ? null : target.w, folder: target.folder ? { w: target.w, ...target.folder } : null, mode: "copy", x: rx, y: ry, external: true } });
+      return;
+    }
+    dispatch({ type: "drag", drag: null });
+    if (target) dropPaths(event.paths, target.folder?.path ?? activeTabOf(get(), target.w).path);
+  }
   async function confirmTransfer(plan: OperationPlan, destination: string): Promise<void> {
     const final = withDestination(plan, destination, parentPath(plan.sources[0] ?? "/"));
     if (!final || final.sameFolder) return;
@@ -716,6 +750,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   let historyQueue = Promise.resolve();
   let historyInitialized = false;
   let unsubscribeUndo: (() => void) | null = null;
+  let unsubscribeNativeDrop: (() => void) | null = null;
   function refreshHistory(): Promise<void> {
     historyQueue = historyQueue.then(async () => {
       const entries = await api.undoList();
@@ -1488,6 +1523,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   async function start(): Promise<void> {
     unsubscribeEvents = api.onEvent(handleEvent);
     unsubscribeUndo = api.onUndoChanged(() => void refreshHistory());
+    unsubscribeNativeDrop = api.onNativeDrop(nativeDropEvent);
     await refreshHistory();
     await refreshConnections();
     try {
@@ -1528,6 +1564,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     [...jobWaiters].forEach((cancel) => cancel());
     unsubscribeEvents?.();
     unsubscribeUndo?.();
+    unsubscribeNativeDrop?.();
     unsubscribeStore?.();
     if (watchedKey !== "") api.watch([]).catch(() => undefined);
     timerHandles.forEach((handle) => timers.clear(handle));
@@ -1617,6 +1654,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     deletePresetNamed,
     setRenamePresets,
     trashSelection,
+    dropPaths,
+    nativeDropEvent,
     confirmTrash: async () => {
       const dialog = get().dialog;
       if (dialog?.kind !== "trashConfirm") return;

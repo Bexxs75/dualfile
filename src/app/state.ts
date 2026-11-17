@@ -60,6 +60,8 @@ export interface DragState {
   y: number;
   /** Ordnerzeile unter dem Mauszeiger (in einem der beiden Fenster); Ablegen geht dann in diesen Ordner. */
   folder?: { w: WinIdx; name: string; path: string } | null;
+  /** Files dragged in from outside Dualfile (native event); never an internal drag. */
+  external?: boolean;
 }
 
 export interface ContextMenuState {

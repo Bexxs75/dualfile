@@ -1,6 +1,7 @@
 import { act, createEvent, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
-import { CoreError, type DualfileApi } from "./ipc/api";
+import { CoreError, type DualfileApi, type NativeDropEvent } from "./ipc/api";
+import { archiveRootOf } from "./state/paths";
 import { DOCS, DOWNLOADS, HOME, setupApp } from "./test-utils";
 
 const sizeOf = async (api: DualfileApi, dir: string, name: string) =>
@@ -201,6 +202,43 @@ describe("F5 / F6 Kopieren und Verschieben", () => {
     await app.user.keyboard("{Enter}");
     await app.runJobs();
     expect(await namesIn(app.api, DOCS)).toContain("Bilder");
+  });
+});
+
+describe("Dateien von außen ablegen", () => {
+  test("Pfade aus dem Dateimanager öffnen den Kopierdialog; Ziel ist der Ordner unter dem Zeiger, sonst das Fenster", async () => {
+    let fire: (e: NativeDropEvent) => void = () => {};
+    const app = await setupApp({ left: HOME, right: DOWNLOADS, wrap: (api) => ({ ...api, onNativeDrop: (h) => { fire = h; return () => {}; } }) });
+    const dirName = "Bilder";
+    // jsdom has no elementFromPoint
+    const spy = vi.fn<(x: number, y: number) => Element | null>();
+    (document as unknown as { elementFromPoint: typeof spy }).elementFromPoint = spy;
+    // over a folder row of the left pane
+    spy.mockReturnValue(app.row(0, dirName));
+    act(() => fire({ type: "over", paths: ["/tmp/ext/a.txt"], x: 10, y: 10 }));
+    expect(app.runtime.store.getState().drag).toMatchObject({ external: true, folder: { name: dirName } });
+    act(() => fire({ type: "drop", paths: ["/tmp/ext/a.txt", "/tmp/ext/b.txt"], x: 10, y: 10 }));
+    expect(app.runtime.store.getState().drag).toBeNull();
+    let dlg = app.runtime.store.getState().dialog;
+    expect(dlg).toMatchObject({ kind: "transfer", plan: { kind: "copy", sources: ["/tmp/ext/a.txt", "/tmp/ext/b.txt"], destination: `${HOME}/${dirName}`, count: 2 } });
+    act(() => app.runtime.controller.closeDialog());
+    // over the pane background: the pane's own folder
+    spy.mockReturnValue(app.pane(1));
+    act(() => fire({ type: "drop", paths: ["/tmp/ext/a.txt"], x: 10, y: 10 }));
+    dlg = app.runtime.store.getState().dialog;
+    expect(dlg).toMatchObject({ kind: "transfer", plan: { destination: DOWNLOADS } });
+    act(() => app.runtime.controller.closeDialog());
+    // an internal drag is left to the HTML5 path
+    act(() => app.runtime.store.dispatch({ type: "drag", drag: { from: 0, over: null, mode: "copy", x: 0, y: 0 } }));
+    act(() => fire({ type: "drop", paths: ["/tmp/ext/a.txt"], x: 10, y: 10 }));
+    expect(app.runtime.store.getState().dialog).toBeNull();
+    delete (document as unknown as { elementFromPoint?: unknown }).elementFromPoint;
+  });
+
+  test("Ablegen in einem Archiv wird abgelehnt", async () => {
+    const app = await setupApp({ left: DOCS });
+    act(() => app.runtime.controller.dropPaths(["/tmp/ext/a.txt"], archiveRootOf(`${DOWNLOADS}/rezept-paket.tar.gz`)));
+    expect(app.runtime.store.getState().dialog).toBeNull();
   });
 });
 
