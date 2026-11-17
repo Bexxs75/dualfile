@@ -14,19 +14,20 @@ export interface EditorParams {
 
 /** Reads the query the main window built (`connection_editor_open`); anything odd falls back to defaults. */
 export function parseEditorParams(search: string): EditorParams {
+  return { profileId: new URLSearchParams(search).get("profile") || null, appearance: parseAppearance(search) };
+}
+
+export function parseAppearance(search: string): EditorAppearance {
   const q = new URLSearchParams(search);
   const pick = <T extends string>(value: string | null, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback;
   const size = Number(q.get("fontSize"));
   return {
-    profileId: q.get("profile") || null,
-    appearance: {
-      theme: pick(q.get("theme"), ["schiefer", "papier", "werkstatt"], "schiefer"),
-      accent: q.get("accent") ?? "",
-      accentAutomatic: q.get("accentAutomatic") === "1",
-      density: pick(q.get("density"), ["compact", "normal", "comfortable"], "normal"),
-      fontSize: Number.isFinite(size) && size > 0 ? size : 13,
-      lang: pick(q.get("lang"), ["de", "en"], "de"),
-    },
+    theme: pick(q.get("theme"), ["schiefer", "papier", "werkstatt"], "schiefer"),
+    accent: q.get("accent") ?? "",
+    accentAutomatic: q.get("accentAutomatic") === "1",
+    density: pick(q.get("density"), ["compact", "normal", "comfortable"], "normal"),
+    fontSize: Number.isFinite(size) && size > 0 ? size : 13,
+    lang: pick(q.get("lang"), ["de", "en"], "de"),
   };
 }
 

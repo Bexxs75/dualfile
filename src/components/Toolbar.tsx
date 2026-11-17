@@ -74,7 +74,7 @@ export function Toolbar() {
       <HeaderMenu className="connections-menu" label={`${connectionLabel}${connectionState ? ` · ${connectionState}` : ""}`} title={`${connectionLabel}${connectionState ? ` · ${connectionState}` : ""} (Ctrl+N)`} items={connectionItems}>
         {connection && <span className={`connection-dot ${connection.connected ? "connected" : "disconnected"}`} />}<Icon name="connect" /><span className="connection-name">{connectionLabel}</span>
       </HeaderMenu>
-      {iconButton("settings", tr("menu.view.settings"), `${tr("tip.settings")} (Ctrl+,)`, () => controller.openDialog({ kind: "settings" }))}
+      {iconButton("settings", tr("menu.view.settings"), `${tr("tip.settings")} (Ctrl+,)`, () => controller.openSettings())}
     </div>
     {palette && <CommandPalette commands={commands} recent={recent} onRun={id => setRecent(previous => [id, ...previous.filter(item => item !== id)].slice(0, 5))} onClose={() => setPalette(false)} />}
     {space?.kind === "usage" && <UsageDialog root={space.root} onClose={() => setSpace(null)} />}

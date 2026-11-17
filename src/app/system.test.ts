@@ -114,3 +114,31 @@ describe("UPD1 policy", () => {
     ["1.0.0-alpha", "1.0.0", false], ["1.0.0-alpha.1", "1.0.0-alpha", true],
   ])("SemVer %s > %s = %s", (a, b, expected) => expect(isNewerVersion(a, b)).toBe(expected));
 });
+test("installation waits for the settings-window persistence barrier", async () => {
+  const f = fixture();
+  let release!: () => void;
+  const barrier = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
+  const controller = createSystemController(f.api, () => ({ ...defaultSettings, startMenuPrompted: true }), () => {}, () => false, f.save, undefined, barrier);
+  await controller.start("en"); await controller.check(true);
+  const install = controller.install();
+  await vi.waitFor(() => expect(barrier).toHaveBeenCalledOnce());
+  expect(f.api.updateInstall).not.toHaveBeenCalled();
+  release(); await install;
+  expect(f.api.updateInstall).toHaveBeenCalledOnce();
+  expect(f.api.restart).toHaveBeenCalledOnce();
+});
+test.each(["jobs", "cancel"])("install skips the settings drain when %s occurs during save", async reason => {
+  const f = fixture(); let busy = false;
+  const barrier = vi.fn(async () => {});
+  const save = vi.fn(async () => { if (reason === "jobs") busy = true; else await controller.cancel(); });
+  const controller = createSystemController(f.api, () => ({ ...defaultSettings, startMenuPrompted: true }), () => {}, () => busy, save, undefined, barrier);
+  await controller.start("en"); await controller.check(true); await controller.install();
+  expect(barrier).not.toHaveBeenCalled(); expect(f.api.updateInstall).not.toHaveBeenCalled();
+});
+test("a failed settings drain cancels installation with a visible system error", async () => {
+  const f = fixture();
+  const controller = createSystemController(f.api, () => ({ ...defaultSettings, startMenuPrompted: true }), () => {}, () => false, f.save, undefined, async () => { throw new Error("Settings could not close"); });
+  await controller.start("en"); await controller.check(true); await controller.install();
+  expect(f.api.updateInstall).not.toHaveBeenCalled();
+  expect(controller.getSnapshot()).toMatchObject({ installing: false, error: "Settings could not close" });
+});

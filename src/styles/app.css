@@ -549,3 +549,18 @@ html.editor-window-root body { padding: 0; }
 .editor-scroll { flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 12px 14px 0; }
 .editor-scroll .ssh-actions { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); margin: 0 -14px; padding: 10px 14px; }
 .editor-scroll .ssh-profile { overflow-wrap: anywhere; }
+
+.settings-window { display: flex; flex-direction: column; height: 100vh; }
+.settings-window .editor-scroll { flex: 1; min-height: 0; overflow: auto; }
+.settings-window fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.settings-window-foot { flex-shrink: 0; padding: 12px 20px; border-top: 1px solid var(--line); text-align: right; }
+.settings-window-foot p { text-align: left; overflow-wrap: anywhere; }
+
+.settings-window .settings-tabs, .settings-window .seg, .settings-window .cpick { flex-wrap: wrap; }
+.settings-window .range input { min-width: 0; }
+.settings-window .settings { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .settings-window .fld { grid-template-columns: minmax(0, 1fr); }
+  .settings-window .keys-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .settings-window .keys-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}

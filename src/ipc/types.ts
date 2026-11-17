@@ -697,3 +697,22 @@ export interface SystemPlace {
   url: string;
   mountedAt: string | null;
 }
+
+export type SettingsTab = "appearance" | "system" | "info" | "keyboard";
+export type SettingsWindowSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
+export type SettingsWindowMessage = { session: string; seq: number } & (
+  { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |
+  { kind: "setTray"; enabled: boolean } | { kind: "setStartMenu"; enabled: boolean } |
+  { kind: "session" } | { kind: "closed" } | { kind: "closeFailed" } | { kind: "flush" });
+export interface SettingsWindowSnapshot {
+  session: string;
+  ack: number;
+  errors: { seq: number; message: string }[];
+  settings: SettingsWindowSettings;
+  system: Pick<import("../app/system").SystemState, "status" | "check" | "error" | "installing" | "trayUnavailable">;
+  logDir: string;
+  persistence: { outcome: LoadOutcome; error: string };
+}
+export type SettingsWindowDelivery = { kind: "session"; session: string } |
+  { kind: "close"; session: string } | { kind: "timeout"; session: string } | { kind: "error"; session: string; message: string } | { kind: "snapshot"; snapshot: SettingsWindowSnapshot };

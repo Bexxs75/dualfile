@@ -3,6 +3,12 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Changed
+
+- Settings open in a separate, resizable OS window. Main remains the only settings writer; appearance, language, shortcuts and system status stay synchronized. Closing waits for pending changes to be applied and saved, and read-only settings and save failures are shown in the window. The browser preview keeps the inline dialog.
+
 ## [0.3.4] - 2026-11-16
 
 ### Changed

@@ -1,0 +1,20 @@
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vitest";
+import { setupApp } from "./test-utils";
+import { createCommands } from "./app/commands";
+afterEach(cleanup);
+test("gear, Ctrl+, and palette open the native window; inline remains the fallback", async () => {
+  const app = await setupApp();
+  const open = vi.spyOn(app.api, "settingsWindowOpen").mockResolvedValue("opened");
+  await app.user.click(screen.getByRole("button", { name: /^Einstellungen/ }));
+  await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+  expect(app.runtime.store.getState().dialog).toBeNull();
+  fireEvent.keyDown(document, { key: ",", ctrlKey: true });
+  await waitFor(() => expect(open).toHaveBeenCalledTimes(2));
+  createCommands(app.runtime.store.getState(), app.runtime.controller, key => key, () => {}).find(c => c.id === "settings")!.execute();
+  await waitFor(() => expect(open).toHaveBeenCalledTimes(3));
+  open.mockResolvedValue("inline");
+  await app.runtime.controller.openSettings("info");
+  expect(app.runtime.store.getState().dialog).toEqual({ kind: "settings", tab: "info" });
+  app.runtime.controller.dispose();
+});

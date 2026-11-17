@@ -19,6 +19,7 @@ mod plans;
 mod plugins;
 mod regex_tools;
 mod search;
+mod settings_window;
 mod similar_space;
 mod space;
 #[cfg(unix)]
@@ -82,6 +83,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             diagnostics::log_start();
+            app.manage(Arc::new(settings_window::SettingsRelay::default()));
             // Title bar / task bar icon (X11 and XWayland; Wayland desktops take
             // it from the start-menu entry that matches the application id).
             if let (Some(window), Some(icon)) =
@@ -113,11 +115,33 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == settings_window::SETTINGS_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    settings_window::request_close(
+                        window.app_handle(),
+                        settings_window::AfterClose::None,
+                    );
+                }
+                return;
+            }
             if window.label() != "main" {
                 return;
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if *system::INSTALLING.read().unwrap_or_else(|e| e.into_inner()) {
+                    api.prevent_close();
+                    return;
+                }
+                if window
+                    .app_handle()
+                    .get_webview_window(settings_window::SETTINGS_LABEL)
+                    .is_some()
+                {
+                    settings_window::request_close(
+                        window.app_handle(),
+                        settings_window::AfterClose::Main,
+                    );
                     api.prevent_close();
                     return;
                 }
@@ -151,6 +175,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            settings_window::settings_window_open,
+            settings_window::settings_window_close,
+            settings_window::settings_window_attach,
+            settings_window::settings_window_push,
+            settings_window::settings_window_send,
             terminal::terminal_open,
             terminal::terminal_write,
             terminal::terminal_resize,
@@ -258,10 +287,13 @@ pub fn run() {
         .expect("Dualfile konnte nicht gestartet werden");
 
     app.run(|handle, event| {
+        if matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == settings_window::SETTINGS_LABEL) {
+            handle.state::<Arc<settings_window::SettingsRelay>>().destroyed(handle);
+        }
         // An editor window alone would keep the process alive after the main window is gone.
         if matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
             connection_editor::mark_main_closing();
-            connection_editor::destroy_editor(handle);
+            connection_editor::destroy_children(handle);
         }
         if matches!(&event, RunEvent::Exit) || matches!(&event, RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } if label == "main") {
             if let Some(manager) = handle.try_state::<Arc<terminal::TerminalManager>>() { manager.shutdown(); }

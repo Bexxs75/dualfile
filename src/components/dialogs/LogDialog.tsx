@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { activeTabOf } from "../../app/state";
+import { logSaveDir } from "../../app/settingsWindow";
 import { useAppState, useController, useRuntime, useT } from "../../app/context";
-import { isArchivePath, parseRemotePath } from "../../state/paths";
 import { Modal } from "../Modal";
 
 /** Platzhalter der Anonymisierung (`<server-1>` …) und das gekürzte Home (`~/`) werden grün markiert. */
@@ -12,7 +11,7 @@ function highlight(text: string, on: boolean) {
   return text.split(REPLACED).map((part, i) => (i % 2 === 1 ? <mark key={i}>{part}</mark> : <Fragment key={i}>{part}</Fragment>));
 }
 
-export function LogDialog() {
+export function LogDialog({ saveDir }: { saveDir?: string } = {}) {
   const { api } = useRuntime();
   const controller = useController();
   const tr = useT();
@@ -25,10 +24,8 @@ export function LogDialog() {
   const [error, setError] = useState("");
   const viewer = useRef<HTMLDivElement>(null);
   // Nur lokale Ordner kommen als Speicherziel in Frage; Server, Archive und Ähnliches fallen auf das Home zurück.
-  const dir = useAppState(state => {
-    const path = activeTabOf(state, state.active).path;
-    return parseRemotePath(path) || isArchivePath(path) || !path.startsWith("/") ? state.home : path;
-  });
+  const localDir = useAppState(logSaveDir);
+  const dir = saveDir ?? localDir;
 
   useEffect(() => {
     let current = true;

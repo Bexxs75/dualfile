@@ -659,6 +659,11 @@ const de = {
 
   // Einstellungen
   "settings.title": "Einstellungen",
+  "settings.closeAnyway": "Trotzdem schließen",
+  "settings.unsavedLost": "Nicht gespeicherte Änderungen gehen verloren",
+  "settings.ackTimeout": "Die Änderungen konnten nicht rechtzeitig bestätigt werden.",
+  "settings.drainFailed": "Die Installation wurde abgebrochen: Das Einstellungsfenster konnte nicht sicher geschlossen werden.",
+  "settings.applying": "Änderungen werden noch übernommen …",
   "settings.tabs": "Einstellungsbereiche",
   "settings.tab.appearance": "Darstellung",
   "settings.tab.system": "System",

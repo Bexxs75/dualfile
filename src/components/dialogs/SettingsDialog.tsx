@@ -134,7 +134,7 @@ function TerminalColorSettings({ set }: { set: (patch: Partial<Settings>) => voi
 }
 
 /** Aussehen und Sprache. Änderungen gelten sofort (ohne Neustart) und werden entprellt gespeichert. */
-export function SettingsDialog() {
+export function SettingsPanel({ startTab }: { startTab?: import("../../ipc/types").SettingsTab }) {
   const controller = useController();
   const tr = useT();
   const settings = useAppState((state) => state.settings);
@@ -143,7 +143,7 @@ export function SettingsDialog() {
   const currentAccent = settings.accentAutomatic ? defaultAccent(settings.theme) : settings.accent;
   const warnings = accentWarning(hex, settings.theme);
   const tabs = ["appearance", "system", "info", "keyboard"] as const;
-  const startTab = useAppState((state) => (state.dialog?.kind === "settings" ? state.dialog.tab : undefined));
+  useEffect(() => setHex(currentAccent), [currentAccent, settings.theme, settings.accentAutomatic]);
   const [tab, setTab] = useState<(typeof tabs)[number]>(startTab ?? "appearance");
 
   function onHex(value: string): void {
@@ -152,16 +152,7 @@ export function SettingsDialog() {
   }
 
   return (
-    <Modal
-      wide
-      title={tr("settings.title")}
-      onClose={() => controller.closeDialog()}
-      footer={
-        <button type="button" className="tb primary" data-autofocus onClick={() => controller.closeDialog()}>
-          {tr("updates.done")}
-        </button>
-      }
-    >
+    <>
       <div className="settings-tabs" role="tablist" aria-label={tr("settings.tabs")}>
         {tabs.map((id) => (
           <button
@@ -304,6 +295,15 @@ export function SettingsDialog() {
         {tab === "info" && <><AboutSettings /><UpdateSettings /><TroubleshootSettings /></>}
         {tab === "keyboard" && <KeybindingsSettings />}
       </div>
-    </Modal>
+    </>
   );
+}
+
+export function SettingsDialog() {
+  const controller = useController();
+  const tr = useT();
+  const startTab = useAppState(state => state.dialog?.kind === "settings" ? state.dialog.tab : undefined);
+  return <Modal wide title={tr("settings.title")} onClose={() => controller.closeDialog()} footer={
+    <button type="button" className="tb primary" data-autofocus onClick={() => controller.closeDialog()}>{tr("updates.done")}</button>
+  }><SettingsPanel startTab={startTab} /></Modal>;
 }

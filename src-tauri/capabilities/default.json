@@ -107,6 +107,8 @@
     "allow-update-install",
     "allow-update-cancel",
     "allow-app-restart",
-    "allow-release-open"
+    "allow-release-open",
+    "allow-settings-window-open",
+    "allow-settings-window-push"
   ]
 }

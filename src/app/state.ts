@@ -77,6 +77,7 @@ export interface AppState {
   home: string;
   settings: Settings;
   outcome: LoadOutcome;
+  saveError: string;
   noticeVisible: boolean;
   windows: readonly [WindowState, WindowState];
   listings: readonly [PaneListing, PaneListing];
@@ -152,6 +153,7 @@ export function initialState(): AppState {
     home: "/",
     settings: defaultSettings,
     outcome: { kind: "fresh" },
+    saveError: "",
     noticeVisible: false,
     windows: [createWindow("/"), createWindow("/")],
     listings: [emptyListing, emptyListing],
@@ -228,6 +230,7 @@ export type Action =
   | { type: "itemErrorAdd"; error: import("../ipc/types").ItemErrorInfo }
   | { type: "itemErrorDone"; jobId: number }
   | { type: "undoState"; patch: Partial<Pick<AppState, "history" | "undoBusy" | "undoJob" | "undoResults" | "undoToast">> }
+  | { type: "saveError"; error: string }
   | { type: "init"; settings: Settings; outcome: LoadOutcome; home: string }
   | {
       type: "window";
@@ -368,6 +371,7 @@ export function reducer(state: AppState, action: Action): AppState {
         pendingFocus: [state.pendingFocus[1], state.pendingFocus[0]],
       };
     }
+    case "saveError": return { ...state, saveError: action.error };
     case "settings": {
       const next = { ...state, settings: action.update(state.settings) };
       return (next.settings.showParentEntry !== false) === (state.settings.showParentEntry !== false)
