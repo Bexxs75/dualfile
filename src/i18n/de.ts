@@ -476,6 +476,8 @@ const de = {
   "context.copyPath": "Pfad kopieren",
   "context.rename": "Umbenennen",
   "context.trash": "In den Papierkorb",
+  "context.pinPlace": "Zu Orten hinzufügen",
+  "context.unpinPlace": "Aus Orten entfernen",
   "context.properties": "Eigenschaften",
 
   // Allgemeine Aktionen und Knöpfe

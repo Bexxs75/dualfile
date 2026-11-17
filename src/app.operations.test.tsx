@@ -459,4 +459,15 @@ describe("Kontextmenü", () => {
     await app.user.click(await screen.findByRole("button", { name: "Ja, Papierkorb" }));
     await waitFor(() => expect(app.names(0)).not.toContain("notizen.txt"));
   });
+
+  test("Ordner per Menü zu Orten hinzufügen und wieder entfernen; Dateien bieten es nicht an", async () => {
+    const app = await setupApp({ left: HOME });
+    const dir = "Dokumente";
+    await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, dir) });
+    await app.user.click(await screen.findByRole("menuitem", { name: "Zu Orten hinzufügen" }));
+    await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, dir) });
+    await app.user.click(await screen.findByRole("menuitem", { name: "Aus Orten entfernen" }));
+    await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, dir) });
+    expect(await screen.findByRole("menuitem", { name: "Zu Orten hinzufügen" })).toBeInTheDocument();
+  });
 });

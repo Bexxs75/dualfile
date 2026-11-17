@@ -17,6 +17,7 @@ export function ContextMenu() {
     const w = state.menu.w;
     return visibleEntries(state, w).filter(entry => activeTabOf(state, w).selection.selected.has(entry.name)).length > 1;
   });
+  const bookmarks = useAppState(state => state.settings.bookmarks);
   const tabCount = useAppState(state => (state.menu ? state.windows[state.menu.w].tabs.length : 0));
   const tabLocked = useAppState(state => (state.menu?.tab !== undefined ? Boolean(state.windows[state.menu.w].tabs[state.menu.tab]?.lockRoot) : false));
 
@@ -34,6 +35,7 @@ export function ContextMenu() {
     controller.closeMenu();
     action();
   };
+  const pinTarget = menu.tab === undefined && !menu.background ? controller.bookmarkTarget(menu.w) : null;
   const items: { text: TranslationKey; action: () => void; disabled?: boolean }[] = menu.tab !== undefined ? [
     { text: tabLocked ? "action.unlockTab" : "action.lockTab", action: () => controller.toggleTabLock(menu.w, menu.tab!) },
     { text: "action.newTab", action: () => controller.newTab(menu.w) },
@@ -51,6 +53,9 @@ export function ContextMenu() {
     ...(packable ? [{ text: "context.pack" as const, action: () => controller.openPack(menu.w) }] : []),
     ...(controller.canMultiRename(menu.w) ? [{ text: "context.multiRename" as const, action: () => controller.openMultiRename(menu.w) }] : []),
     ...(controller.diffTargets() ? [{ text: "context.compareFiles" as const, action: () => controller.openDiffFromPanes() }] : []),
+    ...(pinTarget ? [pinTarget && bookmarks.some(b => b.path === pinTarget)
+      ? { text: "context.unpinPlace" as const, action: () => controller.unpinBookmark(pinTarget) }
+      : { text: "context.pinPlace" as const, action: () => controller.pinBookmarkPath(pinTarget) }] : []),
     { text: "context.trash", action: () => void controller.trashSelection(), disabled: readOnly },
     { text: "context.properties", action: () => controller.openProperties(menu.w), disabled: multiple },
   ];

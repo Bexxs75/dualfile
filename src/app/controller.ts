@@ -248,18 +248,33 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (remote && !get().connections.some(e => e.connected && (e.profile.id === remote.id || e.connectionId === remote.id))) { toast(tr("sidebar.dropConnect"), "error"); return; }
     openTransfer(shift ? "move" : "copy", drag.from, place.path);
   }
+  /** Merkt einen Ordner als Lesezeichen (Ort); false, wenn das Limit erreicht ist oder er nicht gemerkt werden kann. */
+  function pinBookmarkPath(path: string): boolean {
+    const current = get().settings.bookmarks;
+    if (current.length >= 200 && !current.some(b => b.path === path)) return false;
+    const pinned = bookmarkOps.pin(current, path);
+    if (!pinned.ok) return false;
+    updateSettings(s => ({ ...s, bookmarks: pinned.bookmarks }));
+    return true;
+  }
+  /** Pfad des einen markierten (sonst fokussierten) lokalen Ordners; sonst null. */
+  function bookmarkTarget(w: WinIdx): string | null {
+    const dir = activeTabOf(get(), w).path;
+    if (parseRemotePath(dir) || isArchivePath(dir)) return null;
+    const names = targetNames(w);
+    if (names.length !== 1) return null;
+    return entriesOf(w).find(e => e.name === names[0])?.kind === "dir" ? joinPath(dir, names[0]!) : null;
+  }
   function pinDraggedBookmark(index: number) {
     const drag = get().drag; dragEnd();
     if (!drag) return;
     const plan = planOperation("copy", snapshot(drag.from), snapshot(otherWindow(drag.from)));
     if (!plan || plan.count !== 1 || plan.folderCount !== 1) { toast(tr("sidebar.pinFolder"), "error"); return; }
     const path = plan.sources[0]!;
-    const current = get().settings.bookmarks;
-    if (current.length >= 200 && !current.some(b => b.path === path)) return;
-    const pinned = bookmarkOps.pin(current, path);
-    if (!pinned.ok) return;
-    const from = pinned.bookmarks.findIndex(b => b.path === path);
-    const moved = bookmarkOps.move(pinned.bookmarks, from, Math.min(index, pinned.bookmarks.length - 1));
+    if (!pinBookmarkPath(path)) return;
+    const bookmarks = get().settings.bookmarks;
+    const from = bookmarks.findIndex(b => b.path === path);
+    const moved = bookmarkOps.move(bookmarks, from, Math.min(index, bookmarks.length - 1));
     if (moved.ok) updateSettings(s => ({ ...s, bookmarks: moved.bookmarks }));
   }
   const pathInPlace = (path: string, root: string) => inside(isArchivePath(path) ? archiveHostFolder(path) ?? path : path, root);
@@ -1575,7 +1590,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     ...compareFeature,
     api,
     refreshConnections,
-    refreshPlaces, openPlace, dropOnPlace, pinDraggedBookmark, unmountPlace, confirmPlaceAction, savePlaceConnection, toggleSidebar, toggleSidebarIcons, setSidebarWidth, collapseSidebarSection, hidePlace, focusSidebar, focusFileList,
+    refreshPlaces, openPlace, dropOnPlace, pinDraggedBookmark, pinBookmarkPath, bookmarkTarget, unmountPlace, confirmPlaceAction, savePlaceConnection, toggleSidebar, toggleSidebarIcons, setSidebarWidth, collapseSidebarSection, hidePlace, focusSidebar, focusFileList,
     setSidebarFocus: (key: string | null) => dispatch({ type: "sidebarFocus", key }),
     openConnectionEditor,
     openSettings,

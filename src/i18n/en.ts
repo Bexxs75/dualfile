@@ -479,6 +479,8 @@ const en: Record<keyof typeof de, string> = {
   "context.copyPath": "Copy path",
   "context.rename": "Rename",
   "context.trash": "Move to Trash",
+  "context.pinPlace": "Add to Places",
+  "context.unpinPlace": "Remove from Places",
   "context.properties": "Properties",
 
   // Actions and buttons
