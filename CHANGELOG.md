@@ -5,9 +5,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
-### Fixed
-
-- LAN discovery updates its cached sidebar section without triggering filesystem or device refreshes. Invalid individual TXT records no longer hide services, advertised paths are trimmed, and non-DNS host names fall back to validated resolved addresses.
+## [0.3.5] - 2026-11-17
 
 ### Added
 
