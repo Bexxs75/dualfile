@@ -1,3 +1,5 @@
+import { currentVersion, releaseNotes } from "../release-notes";
+import { selectReleaseVersions, seenVersionOnClose } from "../state/releaseNotes";
 import { formatJobPresentation } from "../state/jobPresentation";
 // Verbindet Zustand, Zustandsmodule und die API: alle Abläufe, die etwas anstoßen (Laden, Kopieren,
 // Löschen …). Komponenten rufen nur diese Methoden und lesen den Zustand.
@@ -1188,6 +1190,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       lastActive = get().active;
       syncWatch();
       unsubscribeStore = store.subscribe(onStoreChange);
+      if (outcome.kind === "fresh") {
+        dispatch({ type: "settings", update: s => ({ ...s, lastSeenVersion: currentVersion }) });
+      } else {
+        const versions = selectReleaseVersions(Object.keys(releaseNotes), currentVersion, settings.lastSeenVersion, outcome);
+        if (versions.length) dispatch({ type: "dialog", dialog: { kind: "whatsNew", versions } });
+      }
       await Promise.all([reload(0), reload(1)]);
       for (const status of await api.jobs()) handleEvent({ type: "job", status });
     } catch (error) {
@@ -1245,7 +1253,16 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     activateRow,
     openContextMenu,
     closeMenu: (): void => dispatch({ type: "menu", menu: null }),
-    closeDialog: (): void => dispatch({ type: "dialog", dialog: null }),
+    openWhatsNew: (): void => {
+      if (get().outcome.kind !== "newerVersion") dispatch({ type: "dialog", dialog: { kind: "whatsNew", versions: [currentVersion] } });
+    },
+    closeDialog: (): void => {
+      if (get().dialog?.kind === "whatsNew" && get().outcome.kind !== "newerVersion") {
+        dispatch({ type: "settings", update: s => ({ ...s, lastSeenVersion: seenVersionOnClose(currentVersion, s.lastSeenVersion) }) });
+        void saveNow();
+      }
+      dispatch({ type: "dialog", dialog: null });
+    },
     openDialog: (dialog: NonNullable<AppState["dialog"]>): void => dispatch({ type: "dialog", dialog }),
     sortBy,
     setFilter,

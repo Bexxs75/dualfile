@@ -635,6 +635,8 @@ pub struct SettingsDto {
     pub dismissed_update_version: String,
     #[serde(default)]
     pub last_update_check: Option<String>,
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
 
     pub density: String,
     pub font_size: u8,
@@ -697,6 +699,7 @@ impl From<&settings::Settings> for SettingsDto {
             start_menu_prompt_count: s.start_menu_prompt_count,
             dismissed_update_version: s.dismissed_update_version.clone(),
             last_update_check: s.last_update_check.clone(),
+            last_seen_version: s.last_seen_version.clone(),
 
             density: s.density.clone(),
             font_size: s.font_size,
@@ -760,6 +763,7 @@ impl From<&SettingsDto> for settings::Settings {
             start_menu_prompt_count: s.start_menu_prompt_count,
             dismissed_update_version: s.dismissed_update_version.clone(),
             last_update_check: s.last_update_check.clone(),
+            last_seen_version: s.last_seen_version.clone(),
 
             density: s.density.clone(),
             font_size: s.font_size,

@@ -2633,6 +2633,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     async loadSettings() {
       if (!settings) {
         const fresh: Settings = {
+          lastSeenVersion: null,
           version: 6,
           verifyPolicy: "auto",
           theme: "schiefer",

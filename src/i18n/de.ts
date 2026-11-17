@@ -2,6 +2,14 @@
 // ein Test prüft es zusätzlich zur Laufzeit). Mehrzahl: `schlüssel.one` / `schlüssel.other`,
 // abgerufen über `t("schlüssel", { count })`. Platzhalter stehen in `{geschweiften Klammern}`.
 const de = {
+  "whatsNew.title": "Neuigkeiten",
+  "whatsNew.heading": "Neu in Dualfile {version}",
+  "whatsNew.new": "Neu",
+  "whatsNew.improved": "Verbessert",
+  "whatsNew.fixed": "Behoben",
+  "whatsNew.close": "Alles klar",
+  "whatsNew.changelog": "Vollständiger Changelog auf GitHub",
+  "whatsNew.skipped": "Du hast mehrere Versionen übersprungen. Hier sind die Änderungen.",
   "system.settingsTitle": "System",
   "system.tray": "Symbol im Infobereich (Tray) anzeigen",
   "system.trayHelp": "Minimieren und Schließen verstecken das Fenster im Tray; Beenden über das Tray-Menü. Standard: aus.",

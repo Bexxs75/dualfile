@@ -43,6 +43,7 @@ pub struct Settings {
     pub start_menu_prompt_count: u8,
     pub dismissed_update_version: String,
     pub last_update_check: Option<String>,
+    pub last_seen_version: Option<String>,
 
     pub density: String,
     pub font_size: u8,
@@ -94,6 +95,7 @@ impl Default for Settings {
             start_menu_prompt_count: 0,
             dismissed_update_version: String::new(),
             last_update_check: None,
+            last_seen_version: None,
 
             density: "normal".into(),
             font_size: 14,
@@ -383,6 +385,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
             &mut fixes,
         ),
         last_update_check: field(&mut obj, "last_update_check", None, &mut fixes),
+        last_seen_version: field(&mut obj, "last_seen_version", None, &mut fixes),
 
         density: field(&mut obj, "density", d.density.clone(), &mut fixes),
         font_size: field(&mut obj, "font_size", d.font_size, &mut fixes),
@@ -412,6 +415,13 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
             &mut fixes,
         ),
     };
+    if s.last_seen_version
+        .as_deref()
+        .is_some_and(|v| !valid_seen_version(v))
+    {
+        s.last_seen_version = None;
+        fixes.push("last_seen_version".into());
+    }
     s.connections = load_connections(&mut obj, &mut fixes);
     s.plugins = load_plugins(&mut obj, &mut fixes);
     let bad = |ok: bool, name: &str, fixes: &mut Vec<String>| {
@@ -501,6 +511,14 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
     } else {
         (s, LoadOutcome::Loaded)
     }
+}
+
+/// SemVer 2.0 syntax, bounded to the size allowed for the settings marker.
+pub fn valid_seen_version(s: &str) -> bool {
+    static PATTERN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    s.len() <= 32 && PATTERN.get_or_init(|| regex::Regex::new(
+        r"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?\z"
+    ).expect("valid semver regex")).is_match(s)
 }
 
 fn valid_theme(s: &str) -> bool {
@@ -1335,5 +1353,51 @@ mod updater_migration_tests {
         s.last_update_check = Some("2026-01-01T00:00:00Z".into());
         save(dir.path(), &s, false).unwrap();
         assert_eq!(load(dir.path()).0, s);
+    }
+}
+
+#[cfg(test)]
+mod release_notes_tests {
+    use super::*;
+
+    #[test]
+    fn missing_marker_loads_without_repair_and_marker_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut value = serde_json::to_value(Settings::default()).unwrap();
+        value.as_object_mut().unwrap().remove("last_seen_version");
+        fs::write(dir.path().join("settings.json"), value.to_string()).unwrap();
+        let (mut settings, outcome) = load(dir.path());
+        assert_eq!(outcome, LoadOutcome::Loaded);
+        assert_eq!(settings.last_seen_version, None);
+        settings.last_seen_version = Some("0.3.5-rc.1+build.2".into());
+        save(dir.path(), &settings, false).unwrap();
+        assert_eq!(load(dir.path()), (settings, LoadOutcome::Loaded));
+    }
+
+    #[test]
+    fn invalid_marker_is_repaired_and_semver_is_bounded() {
+        for invalid in [
+            "01.2.3",
+            "1.2",
+            "1.2.3-01",
+            "1.2.3\n",
+            "",
+            "1.2.3+abcdefghijklmnopqrstuvwxyz123",
+        ] {
+            assert!(!valid_seen_version(invalid), "{invalid}");
+            let dir = tempfile::tempdir().unwrap();
+            let mut value = serde_json::to_value(Settings::default()).unwrap();
+            value["last_seen_version"] = serde_json::json!(invalid);
+            fs::write(dir.path().join("settings.json"), value.to_string()).unwrap();
+            let (settings, outcome) = load(dir.path());
+            assert_eq!(settings.last_seen_version, None);
+            assert_eq!(
+                outcome,
+                LoadOutcome::Repaired(vec!["last_seen_version".into()])
+            );
+        }
+        for valid in ["0.3.10", "0.3.5-rc.1", "1.2.3+build.01", "1.2.3-0.a-1"] {
+            assert!(valid_seen_version(valid), "{valid}");
+        }
     }
 }

@@ -2,6 +2,7 @@
 // gebauter Speicher samt Controller und Zugriffe auf Fenster und Zeilen.
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { currentVersion } from "./release-notes";
 import { App } from "./App";
 import { createRuntime, type AppRuntime } from "./app/runtime";
 import type { ControllerOptions } from "./app/controller";
@@ -62,6 +63,7 @@ const tab = (path: string) => ({ tabs: [{ path, sort: "name", filter: "" }], act
 export async function setupApp(setup: SetupOptions = {}) {
   const scheduler = new ManualScheduler();
   const initialSettings: Settings = {
+    lastSeenVersion: currentVersion,
     version: 1, verifyPolicy: "auto",
     theme: "schiefer",
     accent: "#e0a45c",

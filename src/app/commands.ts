@@ -46,6 +46,7 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   add("dupes", "dupes.title", "copy", "", () => openTool("dupes"));
   add("similar", "similar.title", "images", "", () => openTool("similar"));
   add("history", "undo.history", "history", "Ctrl+Shift+Z", () => controller.openDialog({ kind: "history" }));
+  add("whatsNew", "whatsNew.title", "history", "", () => controller.openWhatsNew(), s => s.outcome.kind !== "newerVersion");
   add("settings", "menu.view.settings", "settings", "Ctrl+,", () => controller.openDialog({ kind: "settings" }));
   add("search", "search.title", "search", "", () => controller.openDialog({ kind: "search", w: state.active }));
   add("connections", "header.manageConnections", "connect", "Ctrl+N", () => controller.openDialog({ kind: "connections" }));
