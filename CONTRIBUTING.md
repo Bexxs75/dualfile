@@ -15,3 +15,5 @@ Dualfile is a Linux file manager in active development. Open an issue describing
 Test file operations with disposable fixtures. Include regression coverage for destructive operations, archive path handling, cancellation and remote failures when changing those behaviors. Never include credentials or private filenames in examples, logs or screenshots. Security vulnerabilities belong in the private channel described in [SECURITY.md](SECURITY.md).
 
 Contributions are provided under the repository's MIT license; third-party components keep their own licenses. Do not assume the generated inventory is a distribution clearance.
+
+Release preparation follows [the release checklist](docs/release-checklist.md), including release notes DE+EN.

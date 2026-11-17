@@ -7,6 +7,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Added
 
+- **What’s new after an update:** a German or English dialog shows bundled release notes once, with skipped versions grouped newest first. Close it to acknowledge, or reopen the current notes through Tools or the command palette. Fresh installations stay quiet; downgrades preserve the last acknowledged version.
+
 - **Dualfile remembers the size and position of its main window.** The next start opens the window as you left it, including the maximized state. On Wayland desktops only the size and the maximized state are restored: applications cannot read or set their window position there, so the compositor places the window (KDE can remember it with a window rule). On X11 the position is restored too. Other windows (such as the connection editor) are not remembered.
 
 ### Changed

@@ -30,6 +30,7 @@ export interface Toast {
 export type JobKind = "copy" | "move" | "trash" | "delete" | "rename" | "extract" | "pack" | "compare" | "sync" | "undo";
 
 export type Dialog =
+  | { kind: "whatsNew"; versions: readonly string[] }
   | { kind: "history" }
   | { kind: "connections"; entry?: { action: "import" | "system" | "connect" | "disconnect"; profile?: import("../ipc/types").ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }
   | { kind: "transfer"; plan: OperationPlan; from: WinIdx }
@@ -136,6 +137,7 @@ export const defaultSettings: Settings = {
   startMenuPromptCount: 0,
   dismissedUpdateVersion: "",
   lastUpdateCheck: null,
+  lastSeenVersion: null,
   density: "normal",
   fontSize: 13,
   language: "auto",

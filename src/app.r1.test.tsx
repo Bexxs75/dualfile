@@ -1,3 +1,4 @@
+import { currentVersion } from "./release-notes";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { DOCS, DOWNLOADS, setupApp } from "./test-utils";
@@ -9,19 +10,19 @@ test.each(["de", "en"] as const)("tools menu keyboard, wrap, activation and focu
   act(() => trigger.focus());
   await app.user.keyboard("{ArrowDown}");
   const items = screen.getAllByRole("menuitem");
-  expect(items).toHaveLength(6);
+  expect(items).toHaveLength(7);
   expect(items[0]).toHaveFocus();
   expect(trigger).toHaveAttribute("aria-expanded", "true");
   await app.user.keyboard("{ArrowUp}");
-  expect(items[5]).toHaveFocus();
+  expect(items[6]).toHaveFocus();
   await app.user.keyboard("{Home}{ArrowDown}");
   expect(items[1]).toHaveFocus();
   await app.user.keyboard("{End}{Enter}");
-  expect(screen.getByRole("dialog", { name: language === "de" ? "Verlauf" : "History" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: language === "de" ? `Neu in Dualfile ${currentVersion}` : `What’s new in Dualfile ${currentVersion}` })).toBeVisible();
   await app.user.keyboard("{Escape}");
   expect(trigger).toHaveFocus();
   await app.user.keyboard("{ArrowUp}");
-  expect(screen.getAllByRole("menuitem")[5]).toHaveFocus();
+  expect(screen.getAllByRole("menuitem")[6]).toHaveFocus();
   await app.user.keyboard("{Escape}");
   expect(trigger).toHaveFocus();
   expect(trigger).toHaveAttribute("aria-expanded", "false");

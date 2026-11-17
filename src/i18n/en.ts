@@ -2,6 +2,14 @@ import type de from "./de";
 
 // Englische Texte. Der Typ erzwingt dieselben Schlüssel wie in `de.ts`.
 const en: Record<keyof typeof de, string> = {
+  "whatsNew.title": "What’s new",
+  "whatsNew.heading": "What’s new in Dualfile {version}",
+  "whatsNew.new": "New",
+  "whatsNew.improved": "Improved",
+  "whatsNew.fixed": "Fixed",
+  "whatsNew.close": "Got it",
+  "whatsNew.changelog": "Full changelog on GitHub",
+  "whatsNew.skipped": "You skipped several versions. Here are the changes.",
   "system.settingsTitle": "System",
   "system.tray": "Show icon in the notification area (tray)",
   "system.trayHelp": "Minimize and close hide the window in the tray; quit from the tray menu. Default: off.",

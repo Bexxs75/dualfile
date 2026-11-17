@@ -48,7 +48,7 @@ export function Toolbar() {
     { label: tr("header.manageConnections"), icon: "list", action: () => controller.openDialog({ kind: "connections" }) },
   );
   const commands = createCommands(state, controller, tr, kind => setSpace({ kind, root: path }));
-  const tools: HeaderMenuItem[] = ["multiRename", "compareDirs", "usage", "dupes", "similar", "history"].map(id => {
+  const tools: HeaderMenuItem[] = ["multiRename", "compareDirs", "usage", "dupes", "similar", "history", "whatsNew"].map(id => {
     const command = commands.find(c => c.id === id)!;
     return { label: command.title, icon: command.icon, action: () => { if (command.enabled(state)) command.execute(); } };
   });

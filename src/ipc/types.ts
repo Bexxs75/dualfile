@@ -459,6 +459,7 @@ export interface Settings {
   startMenuPromptCount?: number;
   dismissedUpdateVersion?: string;
   lastUpdateCheck?: string | null;
+  lastSeenVersion?: string | null;
 
   density: "compact" | "normal" | "comfortable";
   fontSize: number;

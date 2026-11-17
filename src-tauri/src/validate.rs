@@ -211,6 +211,12 @@ fn settings_path(text: &str) -> bool {
 
 /// Checks settings coming from the UI before they are written (the core only repairs on load).
 pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
+    if s.last_seen_version
+        .as_deref()
+        .is_some_and(|v| !dualfile_core::settings::valid_seen_version(v))
+    {
+        return Err(bad_settings("last_seen_version"));
+    }
     if !["schiefer", "papier", "werkstatt"].contains(&s.theme.as_str()) {
         return Err(bad_settings("Theme"));
     }
@@ -524,6 +530,7 @@ mod tests {
             start_menu_prompt_count: 0,
             dismissed_update_version: String::new(),
             last_update_check: None,
+            last_seen_version: None,
             density: "normal".into(),
             font_size: 13,
             language: "auto".into(),
@@ -550,6 +557,31 @@ mod tests {
                 active_window: 0,
             },
         }
+    }
+
+    #[test]
+    fn release_note_marker_validates_and_survives_dto_roundtrip() {
+        let mut dto = settings();
+        dto.last_seen_version = Some("0.3.5-rc.1+build.2".into());
+        assert!(validate_settings(&dto).is_ok());
+        let core = dualfile_core::settings::Settings::from(&dto);
+        assert_eq!(
+            SettingsDto::from(&core).last_seen_version,
+            dto.last_seen_version
+        );
+        for invalid in [
+            "01.2.3",
+            "0.3.5-01",
+            "0.3.5\n",
+            "1.2.3+abcdefghijklmnopqrstuvwxyz123",
+        ] {
+            dto.last_seen_version = Some(invalid.into());
+            assert!(validate_settings(&dto).is_err());
+        }
+        let mut json = serde_json::to_value(settings()).unwrap();
+        json.as_object_mut().unwrap().remove("lastSeenVersion");
+        let legacy: SettingsDto = serde_json::from_value(json).unwrap();
+        assert_eq!(legacy.last_seen_version, None);
     }
 
     #[test]
