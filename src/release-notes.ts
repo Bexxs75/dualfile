@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.3.6": {
+    date: "2026-11-17",
+    de: {
+      new: ["Der Papierkorb öffnet sich in Dualfile als eigener Tab: Wiederherstellen, endgültig löschen und leeren, jeweils mit Rückfrage beim Löschen.", "Dateien aus Dolphin oder vom Desktop lassen sich in ein Fenster oder auf einen Ordner ziehen; es öffnet sich der Kopierdialog.", "Rechtsklick auf einen Ordner: „Zu Orten hinzufügen“ legt ihn in die Seitenleiste."],
+      improved: ["Entf und F8 fragen immer nach, bevor etwas in den Papierkorb wandert.", "Die Zeile, auf die Entf wirkt, ist deutlich markiert; die Hervorhebung unter der Maus ist dezenter."],
+      fixed: ["Ein Ubuntu-Installationsstick erscheint nicht mehr doppelt in der Seitenleiste und lässt sich öffnen."],
+    },
+    en: {
+      new: ["The Trash opens inside Dualfile as its own tab: restore, delete permanently and empty, always confirmed before deleting.", "Drag files from Dolphin or the desktop onto a pane or a folder; the copy dialog opens.", "Right-click a folder and choose \"Add to Places\" to put it in the sidebar."],
+      improved: ["Delete and F8 always ask before moving anything to the Trash.", "The row Delete acts on is clearly marked; the mouse-hover highlight is subtler."],
+      fixed: ["An Ubuntu installer stick no longer appears twice in the sidebar and can be opened."],
+    },
+  },
   "0.3.5": {
     date: "2026-11-17",
     de: {

@@ -5,6 +5,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-11-17
+
 ### Added
 
 - The Trash opens inside Dualfile (as a tab in the active pane) instead of the system file manager: list with original location, deletion date and size; restore, delete permanently (always confirmed) and empty. A context-menu entry on the sidebar Trash still opens the system file manager. Writing into the Trash view (copy, move, rename, new folder) is refused.
