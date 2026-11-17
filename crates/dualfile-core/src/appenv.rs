@@ -388,6 +388,33 @@ fn run_bounded_guarded(
     timeout: std::time::Duration,
     guard: Option<Box<dyn Send>>,
 ) -> Result<(), HelperError> {
+    run_process(command, timeout, guard, None).map(|_| ())
+}
+
+/// Capture bounded stdout using dedicated discovery workers, isolated from mount helpers.
+pub fn capture_isolated(
+    command: std::process::Command,
+    timeout: std::time::Duration,
+    cap: usize,
+) -> Result<Vec<u8>, HelperError> {
+    static POOL: std::sync::OnceLock<crate::places_pool::Pool> = std::sync::OnceLock::new();
+    POOL.get_or_init(|| crate::places_pool::Pool::new(1))
+        .run_keyed_wait(
+            "device-discovery".into(),
+            timeout.saturating_mul(2) + std::time::Duration::from_millis(200),
+            move || {
+                let mut command = command;
+                run_process(&mut command, timeout, None, Some(cap))
+            },
+        )
+        .unwrap_or(Err(HelperError::Timeout))
+}
+fn run_process(
+    command: &mut std::process::Command,
+    timeout: std::time::Duration,
+    guard: Option<Box<dyn Send>>,
+    capture: Option<usize>,
+) -> Result<Vec<u8>, HelperError> {
     use std::{
         io::Read,
         process::{Child, Stdio},
@@ -450,7 +477,11 @@ fn run_bounded_guarded(
     let mut slot = Slot(true);
     command
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(if capture.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stderr(Stdio::piped());
     apply_clean_env(command);
     apply_helper_locale(command);
@@ -467,6 +498,37 @@ fn run_bounded_guarded(
             HelperError::Failed(String::new())
         }
     })?;
+    let mut stdout = child.stdout.take();
+    let stdout_nonblocking = stdout.as_ref().is_none_or(|stdout| {
+        rustix::fs::fcntl_getfl(stdout)
+            .and_then(|flags| rustix::fs::fcntl_setfl(stdout, flags | rustix::fs::OFlags::NONBLOCK))
+            .is_ok()
+    });
+    let mut captured = Vec::new();
+    fn capture_stdout(
+        stdout: &mut Option<std::process::ChildStdout>,
+        output: &mut Vec<u8>,
+        cap: usize,
+    ) -> bool {
+        let Some(stdout) = stdout else {
+            return true;
+        };
+        let mut buffer = [0; 4096];
+        for _ in 0..256 {
+            match stdout.read(&mut buffer) {
+                Ok(0) => break,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(_) => return false,
+                Ok(n) => {
+                    if output.len() + n > cap {
+                        return false;
+                    }
+                    output.extend_from_slice(&buffer[..n]);
+                }
+            }
+        }
+        true
+    }
     let mut stderr = child.stderr.take();
     let nonblocking = stderr.as_ref().is_none_or(|stderr| {
         rustix::fs::fcntl_getfl(stderr)
@@ -488,7 +550,10 @@ fn run_bounded_guarded(
     let start = Instant::now();
     let mut output = Vec::new();
     let result = loop {
-        if !nonblocking {
+        if !nonblocking
+            || !stdout_nonblocking
+            || !capture_stdout(&mut stdout, &mut captured, capture.unwrap_or(0))
+        {
             break Err(HelperError::Failed(String::new()));
         }
         drain(&mut stderr, &mut output);
@@ -496,8 +561,11 @@ fn run_bounded_guarded(
             Ok(Some(status)) => {
                 // The process can write and exit between the preceding read and try_wait.
                 drain(&mut stderr, &mut output);
+                if !capture_stdout(&mut stdout, &mut captured, capture.unwrap_or(0)) {
+                    break Err(HelperError::Failed(String::new()));
+                }
                 break if status.success() {
-                    Ok(())
+                    Ok(captured)
                 } else {
                     Err(HelperError::Failed(safe_helper_error(&output)))
                 };
@@ -538,7 +606,7 @@ fn apply_helper_locale(command: &mut Command) {
     if std::path::Path::new(command.get_program())
         .file_name()
         .is_some_and(|name| {
-            ["mount", "umount", "gio"]
+            ["mount", "umount", "gio", "lsblk", "udisksctl", "eject"]
                 .iter()
                 .any(|helper| name == *helper)
         })
@@ -549,7 +617,14 @@ fn apply_helper_locale(command: &mut Command) {
 #[cfg(test)]
 #[test]
 fn helpers_use_predictable_diagnostics() {
-    for helper in ["mount", "umount", "/usr/bin/gio"] {
+    for helper in [
+        "mount",
+        "umount",
+        "/usr/bin/gio",
+        "lsblk",
+        "udisksctl",
+        "eject",
+    ] {
         let mut command = Command::new(helper);
         command.env("LC_ALL", "de_DE.UTF-8").env("LANGUAGE", "de");
         apply_clean_env(&mut command);
@@ -573,7 +648,10 @@ fn safe_helper_error(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes).to_lowercase();
     // Only fixed diagnostic codes/text survive; never interpolate sources, usernames or paths.
     for (needle, message) in [
+        ("notauthorizeddismissed", "polkit dismissed"),
+        ("authentication dialog was dismissed", "polkit dismissed"),
         ("busy", "busy"),
+        ("notauthorized", "not permitted"),
         ("permission denied", "not permitted"),
         ("not permitted", "not permitted"),
         ("not found", "not found"),
@@ -698,6 +776,54 @@ mod bounded_helper_tests {
                 Err(HelperError::Failed("not permitted".into()))
             );
         }
+    }
+    #[test]
+    fn captured_output_is_bounded_and_time_limited() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut command = Command::new("printf");
+        command.arg("device-json");
+        assert_eq!(
+            capture_isolated(command, std::time::Duration::from_secs(1), 20).unwrap(),
+            b"device-json"
+        );
+        let mut command = Command::new("printf");
+        command.arg("too-much-output");
+        assert!(capture_isolated(command, std::time::Duration::from_secs(1), 4).is_err());
+        let mut command = Command::new("sleep");
+        command.arg("10");
+        let start = std::time::Instant::now();
+        assert_eq!(
+            capture_isolated(command, std::time::Duration::from_millis(30), 20),
+            Err(HelperError::Timeout)
+        );
+        assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    }
+    #[test]
+    fn concurrent_discovery_waits_for_the_worker() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // Three callers also exercise the old one-worker/one-queue saturation case.
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let threads: Vec<_> = (0..3)
+            .map(|_| {
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    let mut command = Command::new("sh");
+                    command.args(["-c", "sleep 0.1; printf '{\"blockdevices\":[]}'"]);
+                    barrier.wait();
+                    let bytes =
+                        capture_isolated(command, std::time::Duration::from_secs(1), 128).unwrap();
+                    assert!(crate::devices::parse_lsblk(&bytes).unwrap().is_empty());
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().unwrap();
+        }
+    }
+    #[test]
+    fn polkit_dismissal_never_exposes_identifiers() {
+        assert_eq!(safe_helper_error(b"GDBus.Error:org.freedesktop.UDisks2.Error.NotAuthorizedDismissed serial=private label=private"), "polkit dismissed");
+        assert_eq!(safe_helper_error(b"GDBus.Error:org.freedesktop.UDisks2.Error.NotAuthorizedCanObtain credentials=/secret"), "not permitted");
     }
     #[test]
     fn credentials_never_survive_errors() {

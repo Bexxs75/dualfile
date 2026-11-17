@@ -15,6 +15,36 @@ use std::{
 };
 use tauri::{Emitter, Manager};
 
+const DEVICE_WATCH: &str = "/dev/disk/by-id";
+fn watch_event(
+    event: &notify_debouncer_mini::notify::Result<notify_debouncer_mini::notify::Event>,
+) -> (bool, bool) {
+    use notify_debouncer_mini::notify::{event::ModifyKind, EventKind};
+    let Ok(event) = event else {
+        return (true, true);
+    };
+    let relevant = event
+        .paths
+        .iter()
+        .any(|p| p.starts_with(DEVICE_WATCH) || p == std::path::Path::new("/etc/fstab"));
+    let lost = event.need_rescan()
+        || (event
+            .paths
+            .iter()
+            .any(|p| p == std::path::Path::new(DEVICE_WATCH))
+            && matches!(
+                event.kind,
+                EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_)) | EventKind::Any
+            ));
+    (relevant || lost, lost)
+}
+fn rearm_device_watch(lost: &AtomicBool, rearm: impl FnOnce() -> bool) {
+    // Clear before rearming so a concurrent loss notification cannot be overwritten.
+    if lost.swap(false, Ordering::AcqRel) && !rearm() {
+        lost.store(true, Ordering::Release);
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
@@ -117,10 +147,22 @@ fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
     } else {
         drives::parse_mountinfo(&table, appdir.as_deref())
     };
-    let mut drives = fstab::merge(
-        mounts,
-        fstab::parse_fstab(&bounded_read("/etc/fstab".into(), 256 * 1024).unwrap_or_default()),
-    );
+    let entries =
+        fstab::parse_fstab(&bounded_read("/etc/fstab".into(), 256 * 1024).unwrap_or_default());
+    let mut drives = fstab::merge(mounts, entries.clone());
+    if let Ok(devices) = crate::devices::list() {
+        dualfile_core::devices::merge(&mut drives, &devices, &table, &entries, crate::devices::key);
+    } else if let Some(previous) = previous {
+        // A busy/missing helper is not evidence that an unmounted device was unplugged.
+        for old in &previous.drives {
+            if old.source == "device"
+                && !old.mounted
+                && !drives.iter().any(|d| d.device == old.device)
+            {
+                drives.push(old.clone());
+            }
+        }
+    }
     let user_mounts = current_user_mounts();
     for drive in &mut drives {
         if let Some(info) = &mut drive.fstab {
@@ -338,7 +380,7 @@ pub async fn trash_open_system(window: tauri::WebviewWindow) -> Result<(), UiErr
     .await
     .map_err(|_| UiError::internal())?
 }
-fn main_only(label: &str) -> Result<(), UiError> {
+pub(crate) fn main_only(label: &str) -> Result<(), UiError> {
     if label == "main" {
         Ok(())
     } else {
@@ -426,16 +468,61 @@ pub fn start(app: tauri::AppHandle, state: Arc<Places>) {
         }
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         use notify_debouncer_mini::notify::{RecursiveMode, Watcher};
-        let _watcher = places_pool::metadata().run(Duration::from_millis(300), move || {
-            let mut watcher = notify_debouncer_mini::notify::recommended_watcher(move |_| {
-                let _ = tx.try_send(());
+        let watch_tx = tx.clone();
+        let device_watch_lost = Arc::new(AtomicBool::new(true));
+        let watch_lost = device_watch_lost.clone();
+        let watcher = places_pool::metadata()
+            .run(Duration::from_millis(300), move || {
+                let event_lost = watch_lost.clone();
+                let mut watcher =
+                    notify_debouncer_mini::notify::recommended_watcher(move |event| {
+                        let (changed, lost) = watch_event(&event);
+                        if lost {
+                            event_lost.store(true, Ordering::Release);
+                        }
+                        if changed {
+                            let _ = watch_tx.try_send(());
+                        }
+                    })
+                    .ok()?;
+                let _ = watcher.watch(std::path::Path::new("/etc"), RecursiveMode::NonRecursive);
+                rearm_device_watch(&watch_lost, || {
+                    watcher
+                        .watch(
+                            std::path::Path::new(DEVICE_WATCH),
+                            RecursiveMode::NonRecursive,
+                        )
+                        .is_ok()
+                });
+                Some(watcher)
             })
-            .ok()?;
-            let _ = watcher.watch(std::path::Path::new("/etc"), RecursiveMode::NonRecursive);
-            Some(watcher)
-        });
+            .flatten()
+            .map(|w| Arc::new(Mutex::new(w)));
+        let mut last_device_watch = Instant::now();
         while !state.stop.load(Ordering::Relaxed) {
             let mut changed = rx.try_recv().is_ok();
+            if device_watch_lost.load(Ordering::Acquire)
+                && last_device_watch.elapsed() >= Duration::from_secs(5)
+            {
+                last_device_watch = Instant::now();
+                if let Some(watcher) = watcher.clone() {
+                    let watch_lost = device_watch_lost.clone();
+                    let _ = places_pool::metadata().run_keyed(
+                        "device-watch".into(),
+                        Duration::from_millis(100),
+                        move || {
+                            let Ok(mut watcher) = watcher.try_lock() else {
+                                return;
+                            };
+                            rearm_device_watch(&watch_lost, || {
+                                let path = std::path::Path::new(DEVICE_WATCH);
+                                let _ = watcher.unwatch(path);
+                                watcher.watch(path, RecursiveMode::NonRecursive).is_ok()
+                            });
+                        },
+                    );
+                }
+            }
             if let Some(mounts) = &file {
                 let mut fd = libc::pollfd {
                     fd: mounts.as_raw_fd(),
@@ -653,10 +740,10 @@ async fn resize_geometry(
         credit,
     ))
 }
-fn mount_error(code: &str) -> UiError {
+pub(crate) fn mount_error(code: &str) -> UiError {
     UiError::new(code, code)
 }
-fn helper_error(error: dualfile_core::appenv::HelperError) -> UiError {
+pub(crate) fn helper_error(error: dualfile_core::appenv::HelperError) -> UiError {
     use dualfile_core::appenv::HelperError;
     match error {
         HelperError::Unavailable => mount_error("helperMissing"),
@@ -664,6 +751,7 @@ fn helper_error(error: dualfile_core::appenv::HelperError) -> UiError {
         HelperError::Failed(code) => mount_error(match code.as_str() {
             "busy" => "busy",
             "not found" => "notFound",
+            "polkit dismissed" => "polkitDismissed",
             _ => "notPermitted",
         }),
     }
@@ -683,12 +771,12 @@ fn reconcile_mount_result(
     }
     result.map_err(helper_error)
 }
-fn fresh_table() -> Result<String, UiError> {
+pub(crate) fn fresh_table() -> Result<String, UiError> {
     bounded_read("/proc/self/mountinfo".into(), 4 * 1024 * 1024)
         .filter(|s| !s.is_empty() && s.len() < 4 * 1024 * 1024)
         .ok_or_else(|| mount_error("timeout"))
 }
-fn mounted(table: &str, point: &str) -> bool {
+pub(crate) fn mounted(table: &str, point: &str) -> bool {
     table.lines().any(|line| {
         let fields: Vec<_> = line.split_whitespace().collect();
         fields.get(4).is_some_and(|v| drives::unescape(v) == point)
@@ -704,7 +792,7 @@ fn authorize_fstab(text: &str, table: &str, point: &str, unmount: bool) -> Resul
     ]
     .iter()
     .any(|root| Path::new(point).starts_with(root))
-        || ["/", "/run", "/var"].contains(&point);
+        || ["/", "/home", "/run", "/var"].contains(&point);
     if protected
         || !Path::new(point).is_absolute()
         || Path::new(point)
@@ -803,11 +891,18 @@ fn current_user_mounts_inner() -> Vec<String> {
     )
 }
 fn authorize_current_user(text: &str, point: &str, unmount: bool) -> Result<(), UiError> {
-    let drive = fstab::parse_fstab(text)
+    let entry = fstab::parse_fstab(text)
         .into_iter()
         .find(|e| e.drive.path == point)
-        .ok_or_else(|| mount_error("notFound"))?
-        .drive;
+        .ok_or_else(|| mount_error("notFound"))?;
+    authorize_current_user_entry(&entry, unmount)
+}
+pub(crate) fn authorize_current_user_entry(
+    entry: &fstab::FstabEntry,
+    unmount: bool,
+) -> Result<(), UiError> {
+    let drive = &entry.drive;
+    let point = &drive.path;
     let allowed = fstab::permitted(
         drive.fstab.as_ref().and_then(|f| f.permission.as_deref()),
         unmount,
@@ -825,6 +920,15 @@ fn fstab_action(point: &str, unmount: bool) -> Result<(), UiError> {
     let table = fresh_table()?;
     let fstab =
         bounded_read("/etc/fstab".into(), 256 * 1024).ok_or_else(|| mount_error("timeout"))?;
+    if fstab::parse_fstab(&fstab).iter().any(|e| {
+        e.drive.path == point
+            && e.drive
+                .fstab
+                .as_ref()
+                .is_some_and(|f| f.permission.is_none())
+    }) {
+        return crate::devices::fstab_action(point, unmount);
+    }
     let point = authorize_fstab(&fstab, &table, point, unmount)?;
     authorize_current_user(&fstab, &point, unmount)?;
     // Hold admission across validation, the helper, and timeout reconciliation.
@@ -1007,6 +1111,12 @@ pub async fn places_mount_affected(
         return Err(mount_error("notPermitted"));
     }
     tauri::async_runtime::spawn_blocking(move || {
+        if let Some(key) = mount_key.strip_prefix("device:") {
+            return crate::devices::affected(key, false, &paths);
+        }
+        if let Some(key) = mount_key.strip_prefix("whole-device:") {
+            return crate::devices::affected(key, true, &paths);
+        }
         let point = if let Some(point) = mount_key.strip_prefix("path:") {
             if mounted(&fresh_table()?, point) {
                 std::path::PathBuf::from(point)
@@ -1033,6 +1143,41 @@ pub async fn places_mount_affected(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn device_watch_filters_noise_and_rearms_only_after_loss() {
+        use notify_debouncer_mini::notify::{
+            event::{CreateKind, RemoveKind},
+            Event, EventKind,
+        };
+        let event =
+            |path: &str| Ok(Event::new(EventKind::Create(CreateKind::Any)).add_path(path.into()));
+        assert_eq!(watch_event(&event("/dev/tty99")), (false, false));
+        assert_eq!(
+            watch_event(&event("/dev/disk/by-uuid/alias")),
+            (false, false)
+        );
+        assert_eq!(watch_event(&event("/etc/unrelated")), (false, false));
+        assert_eq!(watch_event(&event("/etc/fstab")), (true, false));
+        assert_eq!(
+            watch_event(&event("/dev/disk/by-id/usb-example")),
+            (true, false)
+        );
+        let removed =
+            Ok(Event::new(EventKind::Remove(RemoveKind::Folder)).add_path(DEVICE_WATCH.into()));
+        assert_eq!(watch_event(&removed), (true, true));
+        let lost = AtomicBool::new(true);
+        rearm_device_watch(&lost, || false);
+        assert!(lost.load(Ordering::Acquire));
+        rearm_device_watch(&lost, || true);
+        assert!(!lost.load(Ordering::Acquire));
+        rearm_device_watch(&lost, || panic!("healthy watch must not be rearmed"));
+        lost.store(true, Ordering::Release);
+        rearm_device_watch(&lost, || {
+            lost.store(true, Ordering::Release);
+            true
+        });
+        assert!(lost.load(Ordering::Acquire));
+    }
     use super::*;
     #[test]
     fn user_resize_during_settle_does_not_earn_sidebar_growth_credit() {
@@ -1245,6 +1390,21 @@ mod watcher_tests {
             drives: drives::parse_mountinfo(table, None),
             network_mounts: vec![],
         }
+    }
+    #[test]
+    fn unmounted_device_changes_are_debounced_and_diffed() {
+        let mut diff = WatchDiff::default();
+        let mut s = snapshot("");
+        assert!(diff.publish(s.clone()));
+        let devices = dualfile_core::devices::parse_lsblk(br#"{"blockdevices":[{"path":"/dev/sdb","maj:min":"8:16","type":"disk","fstype":"vfat","rm":true}]}"#).unwrap();
+        dualfile_core::devices::merge(&mut s.drives, &devices, "", &[], crate::devices::key);
+        diff.dirty(Duration::ZERO);
+        diff.dirty(Duration::from_millis(50));
+        assert!(!diff.due(Duration::from_millis(300)));
+        assert!(diff.due(Duration::from_millis(350)));
+        assert!(diff.publish(s.clone()));
+        assert!(!diff.publish(s));
+        assert!(diff.publish(snapshot("")));
     }
     #[test]
     fn first_snapshot_waits_for_inflight_refresh_and_first_publish_notifies() {

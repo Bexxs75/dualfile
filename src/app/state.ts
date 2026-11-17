@@ -30,7 +30,7 @@ export interface Toast {
 export type JobKind = "copy" | "move" | "trash" | "delete" | "rename" | "extract" | "pack" | "compare" | "sync" | "undo";
 
 export type Dialog =
-  | { kind: "placeConfirm"; action: "mount" | "unmount" | "emptyTrash"; busy?: boolean; key?: string }
+  | { kind: "placeConfirm"; action: "mount" | "unmount" | "eject" | "powerOff" | "emptyTrash"; busy?: boolean; key?: string }
   | { kind: "trashConfirm"; paths: string[] }
   | { kind: "placeProperties"; key: string }
   | { kind: "whatsNew"; versions: readonly string[] }

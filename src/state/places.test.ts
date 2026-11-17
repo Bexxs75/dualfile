@@ -55,3 +55,18 @@ test("disconnected saved connections do not hide redacted mounts through null ro
   expect(entries.find(e => e.key === "mount:sftp://host/share")).toMatchObject({ disabled: true, reason: "sidebar.redactedMount" });
   expect(entries.some(e => e.state === "disconnected")).toBe(true);
 });
+
+test("device rows keep stable keys, support polkit fstab and exclude encrypted mounts", async () => {
+  const snapshot = await createMockApi().placesSnapshot();
+  const info = { key: "opaque", removable: true, encrypted: false, optical: false };
+  snapshot.drives.push({ name: "USB", path: "", device: "/dev/sdb1", mounted: false, kind: "removable", source: "device", deviceActions: info });
+  snapshot.drives.push({ name: "Local fstab", path: "/data", mounted: false, fstab: { userMountable: false, noauto: true, automount: false }, deviceActions: { ...info, key: "fixed", removable: false } });
+  snapshot.drives.push({ name: "Locked", path: "", mounted: false, deviceActions: { ...info, key: "luks", encrypted: true } });
+  const rows = buildPlaces(snapshot, [], defaultSettings, snapshot.home).flatMap(s => s.entries);
+  expect(rows.find(r => r.name === "USB")).toMatchObject({ key: "drive:device-opaque", canMount: true, canRemove: true, path: undefined });
+  expect(rows.find(r => r.name === "Local fstab")).toMatchObject({ key: "fstab:/data", canMount: true, canRemove: false });
+  expect(rows.find(r => r.name === "Locked")).toMatchObject({ disabled: true, canMount: false, reason: "sidebar.encryptedHelp" });
+  const usb = snapshot.drives.find(d => d.device === "/dev/sdb1")!;
+  usb.path = "/media/USB"; usb.mounted = true;
+  expect(buildPlaces(snapshot, [], defaultSettings, snapshot.home)[2]!.entries.find(r => r.name === "USB")).toMatchObject({ key: "drive:device-opaque", canUnmount: true });
+});

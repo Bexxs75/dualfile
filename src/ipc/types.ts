@@ -694,8 +694,9 @@ export interface Drive {
   fstype?: string;
   kind?: "root" | "partition" | "removable" | "network" | "fuse" | "automount";
   readOnly?: boolean;
-  source?: "mount" | "fstab";
+  source?: "mount" | "fstab" | "device";
   mounted?: boolean;
+  deviceActions?: { key: string; removable: boolean; encrypted: boolean; optical: boolean } | null;
   fstab?: { permission?: "user" | "users" | "owner" | null; userMountable: boolean; automount: boolean; noauto: boolean } | null;
   space?: { available: number; total: number } | null;
 }

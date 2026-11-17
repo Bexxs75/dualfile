@@ -55,6 +55,7 @@ pub struct Drive {
     pub mounted: bool,
     pub fstab: Option<crate::fstab::FstabInfo>,
     pub space: Option<crate::vfs::SpaceFree>,
+    pub device_actions: Option<crate::devices::Actions>,
 }
 
 /// `/proc/mounts` escapes space, tab, newline and backslash as octal; undo that for the path.
@@ -144,6 +145,7 @@ impl Drive {
             mounted: true,
             fstab: None,
             space: None,
+            device_actions: None,
         }
     }
 }

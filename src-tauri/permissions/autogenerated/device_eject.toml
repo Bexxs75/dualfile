@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-device-eject"
+description = "Enables the device_eject command without any pre-configured scope."
+commands.allow = ["device_eject"]
+
+[[permission]]
+identifier = "deny-device-eject"
+description = "Denies the device_eject command without any pre-configured scope."
+commands.deny = ["device_eject"]

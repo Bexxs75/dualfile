@@ -179,6 +179,8 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
         {(mode === "full" || inPopover) && <><span className="place-name">{label(entry)}</span>{entry.hint && <kbd>Alt+{entry.hint}</kbd>}<span className="place-markers">{left === entry.key ? "L" : ""}{right === entry.key ? "R" : ""}</span></>}
         {used !== null && <span className={`place-space ${used > .9 ? "warning" : ""}`} aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, used * 100))}%` }} /></span>}
       </button>
+      {entry.canRemove && <button type="button" className="sidebar-eject" aria-label={`${tr("sidebar.eject")} · ${label(entry)}`} title={tr("sidebar.eject")}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }} onClick={() => void controller.unmountPlace(entry.key, false, "eject")}><Icon name="eject" size={14} /></button>}
       {bookmarkIndex === orderedBookmarks.length - 1 && bookmarkIndex >= 0 && gap(orderedBookmarks.length)}
     </div>;
   }
@@ -242,6 +244,8 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
           <button role="menuitem" onClick={() => { void controller.openConnectionEditor(state.connections.find(e => e.profile.id === menuEntry.profileId)?.profile); setMenu(null); }}>{tr("sidebar.edit")}</button>
         </>}
         {menuEntry.canMount && <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key); setMenu(null); }}>{tr("sidebar.mount")}</button>}
+        {menuEntry.canRemove && <><button role="menuitem" onClick={() => { void controller.unmountPlace(menuEntry.key, false, "eject"); setMenu(null); }}>{tr("sidebar.eject")}</button>
+          <button role="menuitem" onClick={() => { void controller.unmountPlace(menuEntry.key, false, "powerOff"); setMenu(null); }}>{tr("sidebar.powerOff")}</button></>}
         {menuEntry.canUnmount && <button role="menuitem" onClick={() => { void controller.unmountPlace(menuEntry.key); setMenu(null); }}>{tr("sidebar.unmount")}</button>}
         {menuEntry.canSave && <button role="menuitem" onClick={() => { void controller.savePlaceConnection(menuEntry.key); setMenu(null); }}>{tr("sidebar.saveConnection")}</button>}
         {menuEntry.key.startsWith("trash:") && <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" }); setMenu(null); }}>{tr("sidebar.emptyTrash")}</button>}

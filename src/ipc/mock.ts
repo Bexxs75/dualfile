@@ -2230,7 +2230,39 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       job.timer = scheduler.setTimeout(() => { if (job.cancelled) return; trashed.clear(); places.trash.empty = true; publish(job.id, { state: "done" }); emit({ type: "placesChanged" }); }, 0);
       return job.id;
     },
+    async deviceList() { return structuredClone(places.drives.filter(d => d.deviceActions)); },
+    async deviceMount(deviceKey) {
+      const drive = places.drives.find(d => d.deviceActions?.key === deviceKey);
+      if (!drive || drive.deviceActions?.encrypted || drive.mounted !== false) throw new CoreError("not permitted", "notPermitted");
+      drive.path ||= `/run/media/demo/${drive.name}`;
+      drive.mounted = true; emit({ type: "placesChanged" }); return drive.path;
+    },
+    async deviceUnmount(deviceKey) {
+      const drive = places.drives.find(d => d.deviceActions?.key === deviceKey);
+      if (!drive || !drive.mounted) throw new CoreError("not found", "notFound");
+      drive.mounted = false; emit({ type: "placesChanged" });
+    },
+    async deviceEject(deviceKey) {
+      const drive = places.drives.find(d => d.deviceActions?.key === deviceKey);
+      if (!drive?.deviceActions?.removable) throw new CoreError("not permitted", "notPermitted");
+      if (!drive.deviceActions.optical) { await api.devicePowerOff(deviceKey); return; }
+      // Ejected optical media disappear from discovery; the drive itself stays powered.
+      places.drives = places.drives.filter(d => d !== drive);
+      emit({ type: "placesChanged" });
+    },
+    async devicePowerOff(deviceKey) {
+      const drive = places.drives.find(d => d.deviceActions?.key === deviceKey);
+      if (!drive?.deviceActions?.removable) throw new CoreError("not permitted", "notPermitted");
+      const group = deviceKey.split(":")[0];
+      places.drives = places.drives.filter(d => d.deviceActions?.key.split(":")[0] !== group);
+      emit({ type: "placesChanged" });
+    },
     async placesMountAffected(mountKey, paths) {
+      if (mountKey.startsWith("device:") || mountKey.startsWith("whole-device:")) {
+        const key = mountKey.slice(mountKey.indexOf(":") + 1);
+        const roots = places.drives.filter(d => d.mounted && (mountKey.startsWith("whole-device:") ? d.deviceActions?.key.split(":")[0] === key.split(":")[0] : d.deviceActions?.key === key)).map(d => d.path).filter(Boolean);
+        return paths.flatMap((path, i) => roots.some(root => path === root || path.startsWith(`${root}/`)) ? [i] : []);
+      }
       if (mountKey.startsWith("path:")) { const root = mountKey.slice(5); return paths.flatMap((path, i) => (path === root || path.startsWith(`${root}/`)) ? [i] : []); }
       const root = places.networkMounts.find(m => m.mountKey === mountKey)?.mountedAt;
       if (!root) throw new CoreError("not found", "notFound");
@@ -2242,12 +2274,12 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       await api.connectionSave(systemPlaceProfile(mount));
     },
     async fstabMount(mountPoint) {
-      const drive = places.drives.find(d => d.path === mountPoint && d.fstab?.userMountable);
+      const drive = places.drives.find(d => d.path === mountPoint && (d.fstab?.userMountable || d.deviceActions && !d.fstab?.permission));
       if (!drive || drive.mounted !== false) throw new CoreError("not permitted", "notPermitted");
       drive.mounted = true; emit({ type: "placesChanged" });
     },
     async fstabUnmount(mountPoint) {
-      const drive = places.drives.find(d => d.path === mountPoint && d.fstab?.userMountable);
+      const drive = places.drives.find(d => d.path === mountPoint && (d.fstab?.userMountable || d.deviceActions && !d.fstab?.permission));
       if (!drive || drive.mounted === false) throw new CoreError("not found", "notFound");
       drive.mounted = false; emit({ type: "placesChanged" });
     },

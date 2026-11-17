@@ -119,11 +119,13 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
           const before = old ? mounted(old) : [], after = mounted(snapshot);
           const removed = before.filter(d => !old?.drives.some(previous => previous.path === d.path && previous.fstab?.automount) && !after.some(n => n.path === d.path));
           const added = old ? after.filter(d => !before.some(n => n.path === d.path)) : [];
-          const announcement = [...added.map(d => tr("sidebar.added", { name: d.name })), ...removed.map(d => tr("sidebar.removed", { name: d.name }))].join(". ");
+          const plugged = old ? snapshot.drives.filter(d => d.mounted === false && d.deviceActions && !old.drives.some(p => p.deviceActions?.key === d.deviceActions?.key)) : [];
+          const unplugged = old?.drives.filter(d => d.mounted === false && d.deviceActions && !snapshot.drives.some(p => p.deviceActions?.key === d.deviceActions?.key)) ?? [];
+          const announcement = [...plugged.map(d => tr("sidebar.deviceAdded", { name: d.name })), ...unplugged.map(d => tr("sidebar.removed", { name: d.name })), ...added.map(d => tr("sidebar.added", { name: d.name })), ...removed.map(d => tr("sidebar.removed", { name: d.name }))].join(". ");
           dispatch({ type: "places", snapshot, announcement: announcement || get().placesAnnouncement });
           let movedTabs = false;
           for (const w of [0, 1] as const) {
-            const affected = (path: string) => removed.some(d => d.path !== "/" && !unmounting.has(d.path) && inside(path, d.path));
+            const affected = (path: string) => removed.some(d => d.path !== "/" && ![...unmounting].some(root => pathInPlace(path, root)) && inside(path, d.path));
             const reloadActive = affected(activeTabOf(get(), w).path);
             if (get().windows[w].tabs.some(t => affected(t.path))) {
               movedTabs = true;
@@ -162,10 +164,15 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const state = get();
     const place = buildPlaces(state.places, state.connections, state.settings, state.home, true).flatMap(s => s.entries).find(e => e.key === key);
     if (!place || place.disabled || isUnmountBusy()) return;
+    let destination = place.path;
     if (place.state === "unmounted") {
-      if (!place.canMount || !place.path) return;
+      if (!place.canMount) return;
       dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "mount", key, busy: true } });
-      try { await api.fstabMount(place.path); await refreshPlaces(); }
+      try {
+        if (key.startsWith("fstab:") && place.path) await api.fstabMount(place.path);
+        else if (place.deviceKey) destination = await api.deviceMount(place.deviceKey);
+        await refreshPlaces();
+      }
       catch (error) { placeFailure(error); return; }
       finally { dispatch({ type: "dialog", dialog: null }); }
     }
@@ -178,7 +185,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (place.profileId) {
       const entry = state.connections.find(e => e.profile.id === place.profileId);
       if (entry) await chooseConnection(w, entry.profile);
-    } else if (place.path) await navigatePlace(w, place.path);
+    } else if (destination) await navigatePlace(w, destination);
   }
   function findPlace(key: string) {
     const s = get();
@@ -194,7 +201,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   }
   function placeFailure(error: unknown) {
     const code = error instanceof CoreError ? error.kind : "notPermitted";
-    const keys = { busy: "sidebar.errorBusy", notPermitted: "sidebar.errorPermission", permissionDenied: "sidebar.errorPermission", notFound: "sidebar.errorMissing", helperMissing: "sidebar.errorHelper", timeout: "sidebar.errorTimeout" } as const;
+    const keys = { busy: "sidebar.errorBusy", notPermitted: "sidebar.errorPermission", permissionDenied: "sidebar.errorPermission", notFound: "sidebar.errorMissing", helperMissing: "sidebar.errorHelper", polkitDismissed: "sidebar.errorDismissed", timeout: "sidebar.errorTimeout" } as const;
     toast(tr(keys[code as keyof typeof keys] ?? "sidebar.errorPermission"), "error");
   }
   function dropOnPlace(key: string, shift: boolean) {
@@ -231,26 +238,35 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   }
   const pathInPlace = (path: string, root: string) => inside(isArchivePath(path) ? archiveHostFolder(path) ?? path : path, root);
   function isUnmountBusy() { const d = get().dialog; return d?.kind === "placeConfirm" && d.busy === true; }
-  async function unmountPlace(key: string, confirmed = false) {
+  async function unmountPlace(key: string, confirmed = false, action: "unmount" | "eject" | "powerOff" = "unmount") {
     const place = findPlace(key);
-    if (!place?.canUnmount || isUnmountBusy()) return;
+    if (!place || !(action === "unmount" ? place.canUnmount : place.canRemove) || isUnmountBusy()) return;
     const root = place.path;
-    dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "unmount", key, busy: true } });
+    const suppressedRoots: string[] = [];
+    dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action, key, busy: true } });
     try {
       // Redacted GVfs paths stay in the backend; only indices into our own tabs return.
       const tabPaths = get().windows.flatMap(w => w.tabs.map(t => t.path));
-      const membershipKey = place.mountKey ?? (root ? `path:${root}` : undefined);
+      const membershipKey = place.deviceKey && (action !== "unmount" || !key.startsWith("fstab:"))
+        ? `${action === "unmount" ? "device" : "whole-device"}:${place.deviceKey}`
+        : place.mountKey ?? (root ? `path:${root}` : undefined);
       const affectedPaths = membershipKey
         ? (await api.placesMountAffected(membershipKey, tabPaths)).map(i => tabPaths[i]).filter((p): p is string => !!p)
         : [];
       if (!confirmed && affectedPaths.length) {
-        dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "unmount", key } }); return;
+        dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action, key } }); return;
       }
       // Keep navigation behind a modal while the helper owns the mount. All current tabs
       // were checked above; no new tab can enter the mount during this operation.
-      dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "unmount", key, busy: true } });
-      if (root) unmounting.add(root);
-      if (place.mountKey) await api.placesMountUnmount(place.mountKey);
+      dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action, key, busy: true } });
+      // Suppress unplug recovery for every partition while the operation is pending.
+      // Tabs move only once the requested helper sequence has succeeded.
+      suppressedRoots.push(...(root ? [root] : []), ...affectedPaths);
+      for (const point of suppressedRoots) unmounting.add(point);
+      if (place.deviceKey && action === "eject") await api.deviceEject(place.deviceKey);
+      else if (place.deviceKey && action === "powerOff") await api.devicePowerOff(place.deviceKey);
+      else if (place.deviceKey && !key.startsWith("fstab:")) await api.deviceUnmount(place.deviceKey);
+      else if (place.mountKey) await api.placesMountUnmount(place.mountKey);
       else if (place.profileId) await api.systemMountUnmount(place.profileId);
       else if (root) await api.fstabUnmount(root);
       const affected = (path: string) => affectedPaths.includes(path) || !!root && pathInPlace(path, root);
@@ -261,9 +277,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         void reload(w);
       }
       await refreshConnections(); await refreshPlaces();
-    } catch (error) { placeFailure(error); }
+    } catch (error) { placeFailure(error); await refreshPlaces(); }
     finally {
-      if (root) unmounting.delete(root);
+      for (const point of suppressedRoots) unmounting.delete(point);
       const dialog = get().dialog;
       if (dialog?.kind === "placeConfirm" && dialog.busy) dispatch({ type: "dialog", dialog: null });
     }
@@ -272,7 +288,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const dialog = get().dialog;
     if (dialog?.kind !== "placeConfirm" || dialog.busy) return;
     dispatch({ type: "dialog", dialog: null });
-    if (dialog.action === "unmount" && dialog.key) { await unmountPlace(dialog.key, true); return; }
+    if (["unmount", "eject", "powerOff"].includes(dialog.action) && dialog.key) { await unmountPlace(dialog.key, true, dialog.action as "unmount" | "eject" | "powerOff"); return; }
     try {
       if (dialog.action !== "emptyTrash") return;
       const id = await api.trashEmpty();
@@ -365,13 +381,15 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
 
   async function reload(w: WinIdx, then?: { focusName?: string }): Promise<void> {
     const startPath = activeTabOf(get(), w).path;
+    const removing = () => [...unmounting].some(root => pathInPlace(startPath, root));
+    if (removing()) return;
     const seq = ++reqSeq[w];
     if (then?.focusName !== undefined) dispatch({ type: "pendingFocus", w, name: then.focusName });
     let path = startPath;
     for (;;) {
       try {
         const listing = await api.list(path);
-        if (seq !== reqSeq[w] || disposed) return;
+        if (seq !== reqSeq[w] || disposed || removing()) return;
         if (listing.path !== path) path = listing.path;
         if (path !== activeTabOf(get(), w).path) {
           dispatch({ type: "window", w, update: (win) => tabs.navigate(win, path), listing: { path, entries: listing.entries } });
@@ -379,9 +397,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         if (parseRemotePath(path)) await refreshConnections();
         return;
       } catch (error) {
-        if (seq !== reqSeq[w] || disposed) return;
+        if (seq !== reqSeq[w] || disposed || removing()) return;
         await refreshConnections();
-        if (seq !== reqSeq[w] || disposed) return;
+        if (seq !== reqSeq[w] || disposed || removing()) return;
         // Der Ordner ist verschwunden (außen gelöscht/umbenannt): zur nächsten vorhandenen Ebene.
         if (error instanceof CoreError && error.kind === "notFound" && path !== "/" && parentPath(path) !== path) {
           path = parentPath(path);
