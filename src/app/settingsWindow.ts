@@ -182,8 +182,10 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
           if (!snapshot) await new Promise<void>(resolve => { readyForClose = resolve; });
           if (attempt !== closeAttempt) return;
           await send({ kind: "flush" });
+          // The native close invocation can also stall after the flush was acknowledged.
+          // Keep the emergency exit available for the entire close handshake.
+          if (attempt === closeAttempt) await api.settingsWindowClose(session, seq);
         })(), timeoutText());
-        if (attempt === closeAttempt) await api.settingsWindowClose(session, seq);
       } catch (error) { if (attempt === closeAttempt) abandon(error); }
       finally { closePromise = null; }
     })();

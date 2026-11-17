@@ -202,3 +202,34 @@ test("push failure delivery offers force close; a clean snapshot clears the erro
   deliver({ kind: "snapshot", snapshot: testSnapshot() });
   expect(client.getSnapshot()).toMatchObject({ canForce: false, error: "" });
 });
+
+test("an acknowledged flush with a hung native close still offers the emergency exit", async () => {
+  vi.useFakeTimers();
+  const api = createMockApi(); let deliver!: (value: SettingsWindowDelivery) => void;
+  api.settingsWindowAttach = async fn => { deliver = fn; };
+  const close = vi.spyOn(api, "settingsWindowClose").mockImplementationOnce(() => new Promise(() => {}));
+  const client = createSettingsWindowClient(api, createRuntime(api)); await client.attach();
+  deliver({ kind: "session", session: "s1" }); deliver({ kind: "snapshot", snapshot: testSnapshot() });
+  const done = client.close(); await tick();
+  deliver({ kind: "snapshot", snapshot: testSnapshot({ ack: 1 }) }); await tick();
+  expect(close).toHaveBeenCalledWith("s1", 1);
+  await vi.advanceTimersByTimeAsync(5000); await done;
+  expect(client.getSnapshot()).toMatchObject({ closing: false, canForce: true });
+  expect(close).toHaveBeenLastCalledWith("s1", 1, false, true);
+  await client.forceClose(); expect(close).toHaveBeenLastCalledWith("s1", 1, true);
+});
+
+test("missing main bridge times out a native close and a late snapshot cannot resume it", async () => {
+  vi.useFakeTimers();
+  const api = createMockApi(); let deliver!: (value: SettingsWindowDelivery) => void;
+  api.settingsWindowAttach = async fn => { deliver = fn; };
+  const close = vi.spyOn(api, "settingsWindowClose");
+  const client = createSettingsWindowClient(api, createRuntime(api)); await client.attach();
+  deliver({ kind: "session", session: "s1" }); deliver({ kind: "close", session: "s1" });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(client.getSnapshot()).toMatchObject({ closing: false, canForce: true });
+  expect(close).toHaveBeenCalledWith("s1", 0, false, true);
+  deliver({ kind: "snapshot", snapshot: testSnapshot() }); await tick();
+  expect(close.mock.calls.every(call => call[3] === true)).toBe(true);
+  await client.forceClose(); expect(close).toHaveBeenLastCalledWith("s1", 0, true);
+});

@@ -118,3 +118,24 @@ test.each([
   b.snapshot({ persistence: { outcome: { ...outcome, ...(outcome.kind === "repaired" ? { messages: [...outcome.messages] } : {}) } as SettingsWindowSnapshot["persistence"]["outcome"], error: "" } });
   expect(screen.getByText(text)).toBeVisible();
 });
+
+test("attach failure leaves the emergency close usable while the panel is busy", async () => {
+  const api = createMockApi();
+  vi.spyOn(api, "settingsWindowAttach").mockRejectedValue(new Error("attach failed"));
+  const close = vi.spyOn(api, "settingsWindowClose");
+  render(<SettingsWindow api={api} search="?lang=en" />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("attach failed");
+  expect(screen.getByRole("main")).toHaveAttribute("aria-busy", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Close anyway" }));
+  await waitFor(() => expect(close).toHaveBeenCalledWith("", 0, true));
+});
+
+test("German close failure shows the translated loss warning and clears on recovery", async () => {
+  const b = setup(); b.snapshot({ settings: { ...testSnapshot().settings, language: "de" } });
+  act(() => b.receive({ kind: "error", session: "s1", message: "relay failed" }));
+  expect(screen.getByRole("button", { name: "Trotzdem schließen" })).toBeVisible();
+  expect(screen.getByText("Nicht gespeicherte Änderungen gehen verloren")).toBeVisible();
+  b.snapshot({ settings: { ...testSnapshot().settings, language: "de" } });
+  expect(screen.queryByText("relay failed")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Trotzdem schließen" })).toBeNull();
+});
