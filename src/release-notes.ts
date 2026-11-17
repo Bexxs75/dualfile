@@ -8,12 +8,12 @@ export const releaseNotes: Record<string, ReleaseNote> = {
     date: "2026-11-17",
     de: {
       new: ["Nach einem Update zeigen dir die Neuigkeiten, was sich geändert hat."],
-      improved: ["Strg+D am Shell-Prompt schließt das Terminal.", "Fenstergröße und maximierter Zustand werden wiederhergestellt. Unter X11 auch die Position; unter Wayland bestimmt sie der Desktop."],
+      improved: ["Die Einstellungen öffnen sich in einem eigenen Fenster, das du frei verschieben und in der Größe ändern kannst.", "Strg+D am Shell-Prompt schließt das Terminal.", "Fenstergröße und maximierter Zustand werden wiederhergestellt. Unter X11 auch die Position; unter Wayland bestimmt sie der Desktop."],
       fixed: [],
     },
     en: {
       new: ["After an update, What's new shows you what changed."],
-      improved: ["Ctrl+D at the shell prompt closes the terminal.", "Window size and maximized state are restored. On X11 the position is restored too; on Wayland the desktop places the window."],
+      improved: ["Settings open in their own window that you can move and resize freely.", "Ctrl+D at the shell prompt closes the terminal.", "Window size and maximized state are restored. On X11 the position is restored too; on Wayland the desktop places the window."],
       fixed: [],
     },
   },
