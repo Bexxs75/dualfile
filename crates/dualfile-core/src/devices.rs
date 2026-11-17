@@ -13,6 +13,8 @@ pub struct Device {
     pub whole: String,
     pub parent: Option<String>,
     pub whole_complete: bool,
+    /// Whole disk with partitions: a hybrid ISO repeats its partition's filesystem here.
+    pub partitioned: bool,
     pub number: String,
     pub label: String,
     pub uuid: String,
@@ -46,6 +48,7 @@ impl Device {
     }
     pub fn browsable(&self) -> bool {
         ["disk", "part", "rom"].contains(&self.kind.as_str())
+            && !self.partitioned
             && !self.fstype.is_empty()
             && !["swap", "LVM2_member", "linux_raid_member"].contains(&self.fstype.as_str())
     }
@@ -135,6 +138,9 @@ pub fn parse_lsblk(json: &[u8]) -> Result<Vec<Device>, &'static str> {
                 path: path.clone(),
                 parent: parent.map(|(_, _, p)| p.to_owned()),
                 whole_complete: true,
+                partitioned: node["children"]
+                    .as_array()
+                    .is_some_and(|c| c.iter().any(|c| c["type"] == "part")),
                 whole: whole.clone(),
                 number,
                 label: if label.chars().any(char::is_control) {
@@ -381,5 +387,23 @@ mod tests {
         merge(&mut rows, &devices, "", &entries, |_| "opaque".into());
         assert_eq!(rows.len(), 2); // fstab + optical; no duplicate or hidden LUKS row.
         assert!(rows[0].device_actions.is_some());
+    }
+    #[test]
+    fn hybrid_iso_stick_shows_only_its_partitions() {
+        // Ubuntu installer stick: disk and first partition carry the same ISO filesystem.
+        let all = parse_lsblk(br#"{"blockdevices":[{"path":"/dev/sdc","maj:min":"8:32","type":"disk","rm":true,"tran":"usb","fstype":"iso9660","label":"Ubuntu-Server 26.04.1 LTS amd64","uuid":"2026-08-06","children":[{"path":"/dev/sdc1","maj:min":"8:33","type":"part","fstype":"iso9660","label":"Ubuntu-Server 26.04.1 LTS amd64","uuid":"2026-08-06","mountpoints":["/media/u/Ubuntu-Server 26.04.1 LTS amd64"]},{"path":"/dev/sdc2","maj:min":"8:34","type":"part","fstype":"vfat","label":"ESP"}]}]}"#).unwrap();
+        assert!(!all[0].browsable() && all[1].browsable() && all[2].browsable());
+        let table = r"36 1 8:33 / /media/u/Ubuntu-Server\04026.04.1\040LTS\040amd64 ro - iso9660 /dev/sdc1 ro";
+        let mut rows = vec![Drive::new(
+            "/media/u/Ubuntu-Server 26.04.1 LTS amd64".into(),
+            "iso9660",
+            "/dev/sdc1",
+            "ro",
+        )];
+        merge(&mut rows, &all, table, &[], Device::key);
+        // Mounted partition + unmounted ESP; no extra unmounted row for the whole stick.
+        assert_eq!(rows.len(), 2);
+        assert!(rows[0].mounted && rows[0].device_actions.is_some());
+        assert_eq!(rows[1].device, "/dev/sdc2");
     }
 }
