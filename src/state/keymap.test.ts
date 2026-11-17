@@ -163,7 +163,7 @@ describe("Kontext", () => {
 
 describe("Unbekanntes", () => {
   it("unbekannte Tasten ergeben null", () => {
-    for (const key of ["a", "x", "F1", "F9", "F12", "Shift", "Control", "Alt", "ä", "Dead"]) {
+    for (const key of ["a", "x", "F1", "F12", "Shift", "Control", "Alt", "ä", "Dead"]) {
       expect(list(key), key).toBeNull();
     }
   });

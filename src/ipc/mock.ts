@@ -116,6 +116,8 @@ export interface MockOptions {
 
 /** Die Mock-API plus Schalter für Tests und den Entwurf. */
 export interface MockApi extends DualfileApi {
+  devPlug(drive?: import("./types").Drive): void;
+  devUnplug(path?: string): void;
   requestClose(): void;
   requestSshPrompt(text: string): Promise<string | null>;
   closeSshPrompts(): void;
@@ -901,6 +903,17 @@ const MOCK_LOG = [
 export function createMockApi(options: MockOptions = {}): MockApi {
   const unmountedSystemPlaces = new Set<string>();
   const home = normalize(options.home ?? "/home/demo");
+  const places: import("./types").PlacesSnapshot = {
+    home, userDirs: [{ kind: "downloads", path: `${home}/Downloads` }],
+    trash: { path: `${home}/.local/share/Trash/files`, empty: true },
+    drives: [
+      { name: "/", path: "/", kind: "root", fstype: "ext4", mounted: true, space: { available: 80e9, total: 100e9 } },
+      { name: "USB-Stick", path: "/run/media/demo/USB-Stick", kind: "removable", mounted: true, space: { available: 12e9, total: 32e9 } },
+      { name: "Sicherung", path: "/run/media/demo/Sicherung", kind: "removable", mounted: true, space: { available: 8e9, total: 100e9 } },
+      { name: "NAS (fstab)", path: "/mnt/nas", kind: "network", fstype: "nfs", source: "fstab", mounted: false, fstab: { userMountable: true, noauto: true, automount: false } },
+    ],
+    networkMounts: [{ name: "Shared", scheme: "smb", host: "nas", port: null, user: null, path: "/shared", url: "smb://nas/shared", sources: ["mounted"], mountedAt: "/run/user/1000/gvfs/smb-share:server=nas,share=shared" }],
+  };
   const scheduler = options.scheduler ?? defaultScheduler;
   const clock = options.now ?? (() => Date.now());
   const root = sampleTree(home, clock(), options.samples ?? false, options.compareDemo ?? options.samples ?? false);
@@ -2208,6 +2221,19 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       pendingErrors.delete(jobId); answer(decision);
     },
     ...createMockSshPrompts(scheduler),
+    async placesSnapshot() { return structuredClone(places); },
+    async placesSpace() { return { available: 12e9, total: 32e9 }; },
+    async placesSetVisible() {},
+    async trashOpenSystem() {},
+    async sidebarResizeWindow(delta) { return { actualDelta: delta, canGrow: true }; },
+    devPlug(drive = { name: "TESTSTICK", path: "/run/media/demo/TESTSTICK", kind: "removable", mounted: true }) {
+      places.drives = [...places.drives.filter(d => d.path !== drive.path), drive];
+      handlers.forEach(handler => handler({ type: "placesChanged" }));
+    },
+    devUnplug(path = "/run/media/demo/TESTSTICK") {
+      places.drives = places.drives.filter(d => d.path !== path);
+      handlers.forEach(handler => handler({ type: "placesChanged" }));
+    },
     async localDrives() { return [{ name: "USB-Stick", path: "/run/media/demo/USB-Stick" }, { name: "Sicherung", path: "/run/media/demo/Sicherung" }]; },
     async systemPlacesList() { return structuredClone(mockSystemPlaces).map(p => unmountedSystemPlaces.has(p.url) ? { ...p, mountedAt: null, sources: p.sources.filter(s => s !== "mounted") } : p); },
     async systemPlacesImport(urls) {
@@ -2253,6 +2279,9 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     spaceFree: async () => null,
     async list(path): Promise<Listing> {
       const resolved = resolvePath(path);
+      if (places.drives.some(d => d.path === resolved && d.mounted !== false) || places.networkMounts.some(m => m.mountedAt === resolved)) {
+        if (!find(resolved)) return { path: resolved, entries: [] };
+      }
       const node = needDir(resolved);
       if (node.entry.error) throw new CoreError(`Zugriff verweigert: ${resolved}`, "permission");
       return { path: resolved, entries: [...node.children!.values()].map((child) => snapshot(child, resolved)) };
@@ -2639,6 +2668,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     async loadSettings() {
       if (!settings) {
         const fresh: Settings = {
+          sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [],
           lastSeenVersion: null,
           version: 6,
           verifyPolicy: "auto",

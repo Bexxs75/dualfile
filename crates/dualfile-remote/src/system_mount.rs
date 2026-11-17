@@ -1,10 +1,9 @@
 //! Delegate authentication and mounting to the desktop. Capture only bounded, sanitized helper diagnostics.
-use dualfile_core::system_places::{mounted_path, parse_url, DiscoveryPaths};
+use dualfile_core::system_places::{mounted_path_bounded, parse_url, DiscoveryPaths};
 use std::{
-    io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,108 +35,45 @@ pub fn run_gio(
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
-    dualfile_core::appenv::apply_clean_env(&mut command);
-    dualfile_core::appenv::apply_external_current_dir(&mut command);
-    let mut child = command.spawn().map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            MountError::Unavailable
-        } else {
-            MountError::Failed(e.kind().to_string())
-        }
-    })?;
-    let mut stderr = child.stderr.take().expect("piped stderr");
-    // Nonblocking reads keep the deadline effective even if a descendant holds the pipe.
-    if rustix::fs::fcntl_getfl(&stderr)
-        .and_then(|flags| rustix::fs::fcntl_setfl(&stderr, flags | rustix::fs::OFlags::NONBLOCK))
-        .is_err()
-    {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(MountError::Failed(String::new()));
-    }
-    let mut output = Vec::new();
-    let start = Instant::now();
-    let result = loop {
-        drain_diagnostics(&mut stderr, &mut output);
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                break if status.success() {
-                    Ok(())
-                } else {
-                    Err(MountError::Failed(sanitize_diagnostics(&output)))
-                }
-            }
-            Err(_) => break Err(MountError::Failed(sanitize_diagnostics(&output))),
-            _ => {}
-        }
-        if start.elapsed() >= timeout {
-            break Err(MountError::Timeout(sanitize_diagnostics(&output)));
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    };
-    let _ = child.kill();
-    let _ = child.wait();
-    drain_diagnostics(&mut stderr, &mut output);
-    match result {
-        Err(MountError::Failed(_)) => Err(MountError::Failed(sanitize_diagnostics(&output))),
-        other => other,
-    }
+    dualfile_core::appenv::run_isolated(command, timeout).map_err(|e| match e {
+        dualfile_core::appenv::HelperError::Unavailable => MountError::Unavailable,
+        dualfile_core::appenv::HelperError::Failed(message) => MountError::Failed(message),
+        dualfile_core::appenv::HelperError::Timeout => MountError::Timeout(String::new()),
+    })
 }
-
-fn drain_diagnostics(reader: &mut impl Read, output: &mut Vec<u8>) {
-    let mut buffer = [0; 4096];
-    for _ in 0..16 {
-        match reader.read(&mut buffer) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => output.extend_from_slice(&buffer[..n.min(8192 - output.len())]),
-        }
-    }
-}
-
-fn sanitize_diagnostics(bytes: &[u8]) -> String {
-    let text = String::from_utf8_lossy(bytes);
-    let mut safe = Vec::new();
-    for line in text.lines() {
-        // Do not retain arbitrary password values (including quoted values with spaces).
-        let lower = line.to_lowercase();
-        if ["password", "passwd", "passwort", "pwd="]
-            .iter()
-            .any(|key| lower.contains(key))
-        {
-            safe.push("[redacted]".to_owned());
-            continue;
-        }
-        for word in line.split_whitespace() {
-            let mut word = word.to_owned();
-            if let Some(start) = word.find("://") {
-                let authority = start + 3;
-                let end = word[authority..]
-                    .find('/')
-                    .map_or(word.len(), |i| authority + i);
-                if let Some(at) = word[authority..end].rfind('@') {
-                    word.replace_range(authority..authority + at, "[redacted]");
-                } else if word[authority..end].contains(':') {
-                    // The bounded capture may end in the middle of user:password@host.
-                    word.truncate(authority);
-                    word.push_str("[redacted]");
-                }
-            }
-            safe.push(word.chars().filter(|c| !c.is_control()).collect());
-        }
-    }
-    safe.join(" ").chars().take(200).collect()
+fn bounded_mounted_path(
+    place: &dualfile_core::system_places::SystemPlace,
+    paths: &DiscoveryPaths,
+) -> Option<PathBuf> {
+    mounted_path_bounded(place, paths)
 }
 pub fn connect(url: &str, paths: &DiscoveryPaths) -> Result<PathBuf, MountError> {
+    connect_with(url, paths, || {
+        run_gio(Path::new("gio"), url, false, Duration::from_secs(30))
+    })
+}
+fn connect_with(
+    url: &str,
+    paths: &DiscoveryPaths,
+    mount: impl FnOnce() -> Result<(), MountError>,
+) -> Result<PathBuf, MountError> {
     let place = parse_url(url, "", "")
         .filter(|p| p.url == url)
         .ok_or(MountError::Invalid)?;
-    if let Some(path) = mounted_path(&place, paths) {
+    if let Some(path) = bounded_mounted_path(&place, paths) {
         return Ok(path);
     }
-    run_gio(Path::new("gio"), url, false, Duration::from_secs(30))?;
+    let result = mount();
+    // A timeout does not imply failure: the daemon may have completed the mount.
+    if result.is_err() {
+        if let Some(path) = bounded_mounted_path(&place, paths) {
+            return Ok(path);
+        }
+        result?;
+    }
     // Give the FUSE daemon a bounded opportunity to publish the mount.
     for _ in 0..20 {
-        if let Some(path) = mounted_path(&place, paths) {
+        if let Some(path) = bounded_mounted_path(&place, paths) {
             return Ok(path);
         }
         std::thread::sleep(Duration::from_millis(100));
@@ -145,7 +81,18 @@ pub fn connect(url: &str, paths: &DiscoveryPaths) -> Result<PathBuf, MountError>
     Err(MountError::Failed(String::new()))
 }
 pub fn unmount(url: &str) -> Result<(), MountError> {
-    run_gio(Path::new("gio"), url, true, Duration::from_secs(30))
+    let result = run_gio(Path::new("gio"), url, true, Duration::from_secs(30));
+    if matches!(result, Err(MountError::Timeout(_))) {
+        let (mounts, complete) = dualfile_core::system_places::probe_mounts(
+            &DiscoveryPaths::system(),
+            dualfile_core::places_pool::mount_checks(),
+            Duration::from_millis(750),
+        );
+        if complete && mounts.iter().all(|place| place.url != url) {
+            return Ok(());
+        }
+    }
+    result
 }
 
 #[cfg(test)]
@@ -154,6 +101,36 @@ mod tests {
     use dualfile_core::system_places::DiscoveryPaths;
     use std::{fs, os::unix::fs::PermissionsExt};
     use std::{process::Command, time::Duration};
+    #[test]
+    fn connect_timeout_rechecks_mounts_even_when_sidebar_probes_are_stuck() {
+        let tmp = tempfile::tempdir().unwrap();
+        let paths = DiscoveryPaths {
+            home: tmp.path().into(),
+            data: tmp.path().into(),
+            config: tmp.path().into(),
+            runtime: tmp.path().join("run"),
+        };
+        fs::create_dir_all(paths.runtime.join("gvfs")).unwrap();
+        let mut releases = Vec::new();
+        for i in 0..4 {
+            let (release, blocked) = std::sync::mpsc::channel();
+            releases.push(release);
+            dualfile_core::places_pool::paths().run_keyed(
+                format!("test-hang-{i}"),
+                Duration::from_millis(20),
+                move || blocked.recv().unwrap(),
+            );
+        }
+        let mounted = paths.runtime.join("gvfs/smb-share:server=host,share=team");
+        let result = super::connect_with("smb://host/team", &paths, || {
+            fs::create_dir_all(&mounted).unwrap();
+            Err(MountError::Timeout(String::new()))
+        });
+        for release in releases {
+            let _ = release.send(());
+        }
+        assert_eq!(result, Ok(mounted));
+    }
     #[test]
     fn gio_cleans_appimage_environment_and_discards_output() {
         if std::env::var_os("DUALFILE_GIO_ENV_TEST").is_none() {
@@ -228,7 +205,7 @@ mod tests {
         assert_eq!(connect("smb://host/share", &paths), Ok(mounted));
     }
     #[test]
-    fn failed_gio_preserves_bounded_sanitized_diagnostics() {
+    fn failed_gio_only_returns_allowlisted_diagnostics() {
         let tmp = tempfile::tempdir().unwrap();
         let gio = tmp.path().join("gio");
         fs::write(&gio, "#!/bin/sh\nprintf 'gio: smb://user:secret@host/share: Host unreachable\nPassword=another secret\n' >&2\nexit 1\n").unwrap();
@@ -251,7 +228,7 @@ mod tests {
         else {
             panic!("expected failure");
         };
-        assert_eq!(detail.chars().count(), 200);
+        assert!(detail.is_empty());
         fs::write(
             &gio,
             "#!/bin/sh\necho 'Authentication rejected' >&2\nexec sleep 10\n",
@@ -262,6 +239,6 @@ mod tests {
         else {
             panic!("expected timeout");
         };
-        assert!(detail.contains("Authentication rejected"));
+        assert!(detail.is_empty());
     }
 }

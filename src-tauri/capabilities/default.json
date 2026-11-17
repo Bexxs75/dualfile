@@ -12,6 +12,12 @@
     "allow-terminal-close",
     "allow-ssh-prompt-answer",
     "allow-local-drives",
+    "allow-places-snapshot",
+    "allow-places-space",
+    "allow-places-set-visible",
+    "allow-trash-open-system",
+    "allow-sidebar-resize-window",
+
     "allow-system-places-list",
     "allow-system-places-import",
     "allow-system-mount-connect",

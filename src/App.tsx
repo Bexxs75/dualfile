@@ -1,3 +1,4 @@
+import { SidebarLayout } from "./components/Sidebar";
 import { SystemUpdates } from "./components/dialogs/SystemDialogs";
 import { JobDialogs } from "./components/dialogs/JobDialogs";
 import { SshPromptDialogs } from "./components/dialogs/SshPromptDialog";
@@ -111,10 +112,10 @@ function Shell({ api }: { api: DualfileApi }) {
       <NoticeBar />
       <SystemUpdates />
       <Ribbon />
-      <div className="panes">
+      <SidebarLayout>
         <Pane w={0} />
         <Pane w={1} />
-      </div>
+      </SidebarLayout>
       {terminal && <TerminalPanel api={api} cwd={terminalCwd} />}
       <JobsPanel />
       <FKeys />

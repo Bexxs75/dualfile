@@ -430,6 +430,10 @@ export interface WindowSession {
 export type VerifyPolicy = "never" | "auto" | "always";
 
 export interface Settings {
+  sidebarMode?: "hidden" | "icons" | "full";
+  sidebarWidth?: number;
+  sidebarCollapsed?: string[];
+  sidebarHidden?: string[];
   verifyPolicy: VerifyPolicy;
   version: number;
   theme: "schiefer" | "papier" | "werkstatt";
@@ -481,6 +485,7 @@ export type ItemErrorDecision = "skip" | "retry" | "abort";
 export interface ItemErrorInfo { jobId: number; name: string; kind: "permission" | "verifyFailed" | "io" | "disconnected"; message: string }
 
 export type CoreEvent =
+  | { type: "placesChanged" }
   | { type: "closeSaveRequested" }
   | { type: "closeRequested"; count: number }
   | { type: "itemError"; error: ItemErrorInfo }
@@ -685,6 +690,22 @@ export interface Thumbnail { bytes: number[]; width: number; height: number }
 export interface Drive {
   name: string;
   path: string;
+  device?: string;
+  fstype?: string;
+  kind?: "root" | "partition" | "removable" | "network" | "fuse" | "automount";
+  readOnly?: boolean;
+  source?: "mount" | "fstab";
+  mounted?: boolean;
+  fstab?: { userMountable: boolean; automount: boolean; noauto: boolean } | null;
+  space?: { available: number; total: number } | null;
+}
+export interface UserDir { kind: "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos"; path: string }
+export interface PlacesSnapshot {
+  home: string;
+  userDirs: UserDir[];
+  trash: { path: string; empty: boolean };
+  drives: Drive[];
+  networkMounts: SystemPlace[];
 }
 
 export interface SystemPlace {
@@ -700,7 +721,7 @@ export interface SystemPlace {
 }
 
 export type SettingsTab = "appearance" | "system" | "info" | "keyboard";
-export type SettingsWindowSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |

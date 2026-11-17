@@ -116,15 +116,8 @@ function PathBar({ w }: { w: WinIdx }) {
   const editing = useAppState((state) => state.pathEditing === w);
   const bookmarks = useAppState(state => state.settings.bookmarks);
   const pinned = isPinned(bookmarks, path);
-  // Eingehängte Wechselmedien (USB u.a.) direkt als Orte; bei Fensterfokus neu laden (ein-/ausstecken).
-  const [drives, setDrives] = useState<import("../ipc/types").Drive[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const load = () => void controller.api.localDrives().then(d => { if (alive) setDrives(d); }).catch(() => {});
-    load();
-    window.addEventListener("focus", load);
-    return () => { alive = false; window.removeEventListener("focus", load); };
-  }, [controller]);
+  const places = useAppState(state => state.places);
+  const drives = places?.drives ?? [];
   const crumbs = crumbsOf(path, connections);
   const remote = parseRemotePath(path);
   const connection = remote ? connections[remote.id] : undefined;
@@ -152,7 +145,7 @@ function PathBar({ w }: { w: WinIdx }) {
     ...bookmarks.map(bookmark => ({ label: bookmark.name, icon: "pin" as const, hint: displayPath(bookmark.path, connections),
       action: () => { void controller.navigatePlace(w, bookmark.path); } })),
     ...(drives.length ? [{ kind: "heading" as const, label: tr("places.drives") }] : []),
-    ...drives.map(drive => ({ label: drive.name, icon: "disk" as const, hint: drive.path, current: path === drive.path,
+    ...drives.filter(d => d.mounted !== false || d.fstab?.automount).map(drive => ({ label: drive.name, icon: "disk" as const, hint: drive.path, current: path === drive.path,
       action: () => { void controller.navigatePlace(w, drive.path); } })),
     { label: tr("header.manageConnections"), icon: "list", action: () => controller.openDialog({ kind: "connections" }) },
     { label: tr("places.new"), icon: "plus", action: () => { void controller.openConnectionEditor(); } },

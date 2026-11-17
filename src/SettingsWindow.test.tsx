@@ -139,3 +139,14 @@ test("German close failure shows the translated loss warning and clears on recov
   expect(screen.queryByText("relay failed")).toBeNull();
   expect(screen.queryByRole("button", { name: "Trotzdem schließen" })).toBeNull();
 });
+
+test("sidebar preferences appear and synchronize in the separate settings window", async () => {
+  const b = setup();
+  b.snapshot({ settings: { ...testSnapshot().settings, sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: ["drive:/data"] } });
+  await b.user.click(screen.getByRole("radio", { name: "Icons" }));
+  await waitFor(() => expect(b.send).toHaveBeenCalledWith(expect.objectContaining({ kind: "patch", patch: { sidebarMode: "icons" } })));
+  b.snapshot({ ack: 1, settings: { ...testSnapshot().settings, sidebarMode: "hidden", sidebarWidth: 260, sidebarCollapsed: ["devices"], sidebarHidden: [] } });
+  expect(screen.getByRole("radio", { name: "Hidden" })).toHaveAttribute("aria-checked", "true");
+  expect(screen.getByRole("spinbutton", { name: "Sidebar width" })).toHaveValue(260);
+  expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
+});

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-trash-open-system"
+description = "Enables the trash_open_system command without any pre-configured scope."
+commands.allow = ["trash_open_system"]
+
+[[permission]]
+identifier = "deny-trash-open-system"
+description = "Denies the trash_open_system command without any pre-configured scope."
+commands.deny = ["trash_open_system"]

@@ -1,6 +1,7 @@
 export type BookmarkCommand = "bookmark1" | "bookmark2" | "bookmark3" | "bookmark4" | "bookmark5" | "bookmark6" | "bookmark7" | "bookmark8" | "bookmark9";
 
 export type Command =
+  | "toggleSidebar" | "toggleSidebarIcons" | "focusSidebar"
   | "switchPane"
   | "moveUp"
   | "moveDown"
@@ -84,6 +85,7 @@ const TAB_COMMANDS = new Set<Command>(["newTab", "closeTab", "nextTab", "prevTab
  * (Pfeile, Leer, Enter, Rücktaste, Tab, Alt-Lesezeichen, Esc, +/-/*) bleibt strukturell fest.
  */
 export const REBINDABLE: Record<RebindableCommand, string> = {
+  toggleSidebar: "F9", toggleSidebarIcons: "Shift+F9", focusSidebar: "",
   rename: "F2",
   view: "F3",
   edit: "F4",
@@ -109,6 +111,7 @@ export const REBINDABLE: Record<RebindableCommand, string> = {
 };
 
 export type RebindableCommand =
+  | "toggleSidebar" | "toggleSidebarIcons" | "focusSidebar"
   | "rename" | "view" | "edit" | "copy" | "move" | "makeDir" | "trash" | "deletePermanent"
   | "selectAll" | "pathInput" | "refresh" | "toggleHidden" | "swapPanes" | "newTab" | "closeTab"
   | "undo" | "multiRename" | "terminal" | "quickView" | "pack" | "compareDirs" | "compareFiles";
@@ -187,10 +190,9 @@ function structuralCommand(event: KeyboardEventLike): Command | null {
 }
 
 function resolveCommand(event: KeyboardEventLike, bindings?: Record<string, string>): Command | null {
-  const effective: Record<string, string> = { ...REBINDABLE };
-  if (bindings) for (const [command, spec] of Object.entries(bindings)) if (command in REBINDABLE && typeof spec === "string") effective[command] = spec;
+  const effective = effectiveBindings(bindings);
   const reverse = new Map<string, Command>();
-  for (const [command, spec] of Object.entries(effective)) reverse.set(spec, command as Command);
+  for (const [command, spec] of Object.entries(effective)) { if (spec) reverse.set(spec, command as Command); }
   const spec = eventToSpec(event);
   // Umbelegbare Tasten werden ausschließlich hier aufgelöst: eine verschobene, von niemandem
   // übernommene Standardtaste ergibt null und fällt nicht an die strukturelle Logik.
@@ -226,4 +228,14 @@ export function mapDiffKey(event: KeyboardEventLike): DiffKeyCommand | null {
   if (key === "n") return "nextDifference";
   if (key === "p") return "prevDifference";
   return null;
+}
+
+/** Existing explicit bindings win over newly introduced defaults, including in settings UI. */
+export function effectiveBindings(bindings?: Record<string, string>): Record<RebindableCommand, string> {
+  const effective = { ...REBINDABLE };
+  for (const command of REBINDABLE_COMMANDS) if (typeof bindings?.[command] === "string") effective[command] = bindings[command]!;
+  for (const command of ["toggleSidebar", "toggleSidebarIcons"] as const) {
+    if (bindings?.[command] === undefined && Object.entries(bindings ?? {}).some(([other, key]) => other !== command && key === REBINDABLE[command])) effective[command] = "";
+  }
+  return effective;
 }

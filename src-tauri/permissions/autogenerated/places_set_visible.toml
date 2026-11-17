@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-places-set-visible"
+description = "Enables the places_set_visible command without any pre-configured scope."
+commands.allow = ["places_set_visible"]
+
+[[permission]]
+identifier = "deny-places-set-visible"
+description = "Denies the places_set_visible command without any pre-configured scope."
+commands.deny = ["places_set_visible"]

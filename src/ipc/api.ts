@@ -94,6 +94,11 @@ export interface DualfileApi extends SystemApi {
   /** Runs a cancellable job; its ID arrives through onEvent before this resolves. */
   undoRun(id: number): Promise<UndoResult>;
   onUndoChanged(handler: () => void): () => void;
+  placesSnapshot(): Promise<import("./types").PlacesSnapshot>;
+  placesSpace(path: string): Promise<{ available: number; total: number } | null>;
+  placesSetVisible(visible: boolean): Promise<void>;
+  trashOpenSystem(): Promise<void>;
+  sidebarResizeWindow(delta: number): Promise<{ actualDelta: number; canGrow: boolean; restoredWidth?: number }>;
   localDrives(): Promise<import("./types").Drive[]>;
   systemPlacesList(): Promise<import("./types").SystemPlace[]>;
   systemPlacesImport(urls: string[]): Promise<ConnectionEntry[]>;

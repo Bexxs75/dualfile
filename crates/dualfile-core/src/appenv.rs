@@ -301,3 +301,357 @@ mod cwd_tests {
         }
     }
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum HelperError {
+    Unavailable,
+    Failed(String),
+    Timeout,
+}
+
+/// The response deadline includes process creation and environment/CWD preparation, which
+/// can themselves block on a filesystem. Such a syscall retains a fixed helper worker.
+pub fn run_isolated(
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+) -> Result<(), HelperError> {
+    crate::places_pool::helpers()
+        .run(timeout + std::time::Duration::from_millis(200), move || {
+            run_bounded(&mut command, timeout)
+        })
+        .unwrap_or(Err(HelperError::Timeout))
+}
+
+/// Only the short-lived intermediary is tracked/reaped. The desktop application runs
+/// in a separate session and never consumes a helper slot for its lifetime.
+pub fn launch_isolated(
+    command: std::process::Command,
+    timeout: std::time::Duration,
+) -> Result<(), HelperError> {
+    launch_in_pool(crate::places_pool::helpers(), command, timeout)
+}
+fn launch_in_pool(
+    pool: &crate::places_pool::Pool,
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+) -> Result<(), HelperError> {
+    pool.run(timeout + std::time::Duration::from_millis(200), move || {
+        use std::os::unix::process::CommandExt;
+        // SAFETY: after fork only async-signal-safe libc calls are made. The grandchild
+        // inherits Command's exec-error pipe, so spawn still reports an exec failure.
+        unsafe {
+            command.pre_exec(|| {
+                let pid = libc::fork();
+                if pid < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if pid > 0 {
+                    libc::_exit(0);
+                }
+                if libc::setsid() < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                // stdout is /dev/null. Do not leave the application attached to the
+                // intermediary's diagnostic pipe, whose reader closes on return.
+                if libc::dup2(libc::STDOUT_FILENO, libc::STDERR_FILENO) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        run_bounded(&mut command, timeout)
+    })
+    .unwrap_or(Err(HelperError::Timeout))
+}
+/// Bound concurrent helpers, diagnostics and cleanup. Unreaped children retain their slot.
+pub fn run_bounded(
+    command: &mut std::process::Command,
+    timeout: std::time::Duration,
+) -> Result<(), HelperError> {
+    use std::{
+        io::Read,
+        process::{Child, Stdio},
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Mutex,
+        },
+        time::{Duration, Instant},
+    };
+    static ACTIVE: AtomicUsize = AtomicUsize::new(0);
+    static REAP: Mutex<Vec<Child>> = Mutex::new(Vec::new());
+    {
+        let mut pending = REAP.lock().unwrap_or_else(|e| e.into_inner());
+        pending.retain_mut(|child| {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                ACTIVE.fetch_sub(1, Ordering::SeqCst);
+                false
+            } else {
+                true
+            }
+        });
+    }
+    static REAPER: std::sync::Once = std::sync::Once::new();
+    REAPER.call_once(|| {
+        std::thread::spawn(|| loop {
+            std::thread::sleep(Duration::from_millis(200));
+            REAP.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .retain_mut(|child| {
+                    if matches!(child.try_wait(), Ok(Some(_))) {
+                        ACTIVE.fetch_sub(1, Ordering::SeqCst);
+                        false
+                    } else {
+                        true
+                    }
+                });
+        });
+    });
+    loop {
+        let active = ACTIVE.load(Ordering::SeqCst);
+        if active >= 4 {
+            return Err(HelperError::Timeout);
+        }
+        if ACTIVE
+            .compare_exchange(active, active + 1, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            break;
+        }
+    }
+    struct Slot(bool);
+    impl Drop for Slot {
+        fn drop(&mut self) {
+            if self.0 {
+                ACTIVE.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+    }
+    let mut slot = Slot(true);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    apply_clean_env(command);
+    apply_external_current_dir(command);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    let mut child = command.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            HelperError::Unavailable
+        } else {
+            HelperError::Failed(String::new())
+        }
+    })?;
+    let mut stderr = child.stderr.take();
+    let nonblocking = stderr.as_ref().is_none_or(|stderr| {
+        rustix::fs::fcntl_getfl(stderr)
+            .and_then(|flags| rustix::fs::fcntl_setfl(stderr, flags | rustix::fs::OFlags::NONBLOCK))
+            .is_ok()
+    });
+    fn drain(stderr: &mut Option<std::process::ChildStderr>, output: &mut Vec<u8>) {
+        let Some(stderr) = stderr else {
+            return;
+        };
+        let mut buffer = [0; 4096];
+        for _ in 0..16 {
+            match stderr.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => output.extend_from_slice(&buffer[..n.min(8192 - output.len())]),
+            }
+        }
+    }
+    let start = Instant::now();
+    let mut output = Vec::new();
+    let result = loop {
+        if !nonblocking {
+            break Err(HelperError::Failed(String::new()));
+        }
+        drain(&mut stderr, &mut output);
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // The process can write and exit between the preceding read and try_wait.
+                drain(&mut stderr, &mut output);
+                break if status.success() {
+                    Ok(())
+                } else {
+                    Err(HelperError::Failed(safe_helper_error(&output)))
+                };
+            }
+            Err(_) => break Err(HelperError::Failed(String::new())),
+            _ => {}
+        }
+        if start.elapsed() >= timeout {
+            break Err(HelperError::Timeout);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    if result.is_err() {
+        #[cfg(unix)]
+        {
+            // SAFETY: the child starts a dedicated process group; a negative pid addresses it.
+            unsafe {
+                libc::kill(-(child.id() as i32), libc::SIGKILL);
+            }
+        }
+        let _ = child.kill();
+    }
+    // No blocking wait, including after SIGKILL: uninterruptible I/O can outlive it.
+    let cleanup = Instant::now();
+    while cleanup.elapsed() < Duration::from_millis(100) {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return result;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    slot.0 = false;
+    REAP.lock().unwrap_or_else(|e| e.into_inner()).push(child);
+    result
+}
+fn safe_helper_error(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes).to_lowercase();
+    // Only fixed diagnostic codes/text survive; never interpolate sources, usernames or paths.
+    for (needle, message) in [
+        ("busy", "busy"),
+        ("permission denied", "not permitted"),
+        ("not permitted", "not permitted"),
+        ("not found", "not found"),
+        ("host unreachable", "Host unreachable"),
+    ] {
+        if text.contains(needle) {
+            return message.into();
+        }
+    }
+    String::new()
+}
+#[cfg(test)]
+mod bounded_helper_tests {
+    use super::*;
+    #[test]
+    fn open_desktop_applications_do_not_consume_mount_helper_slots() {
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..4 {
+            let mut command = std::process::Command::new("sh");
+            command
+                .args([
+                    "-c",
+                    "printf started > \"$1\"; sleep 1; printf done > \"$1\"",
+                    "launcher",
+                ])
+                .arg(tmp.path().join(i.to_string()));
+            assert_eq!(
+                launch_isolated(command, std::time::Duration::from_secs(1)),
+                Ok(())
+            );
+        }
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while (0..4).any(|i| !tmp.path().join(i.to_string()).exists()) {
+            assert!(std::time::Instant::now() < until);
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!((0..4).all(
+            |i| std::fs::read_to_string(tmp.path().join(i.to_string())).unwrap() == "started"
+        ));
+        assert_eq!(
+            run_isolated(
+                std::process::Command::new("true"),
+                std::time::Duration::from_secs(1)
+            ),
+            Ok(())
+        );
+        while (0..4)
+            .any(|i| std::fs::read_to_string(tmp.path().join(i.to_string())).unwrap() != "done")
+        {
+            assert!(std::time::Instant::now() < until);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert_eq!(
+            launch_isolated(
+                std::process::Command::new(tmp.path().join("missing")),
+                std::time::Duration::from_secs(1)
+            ),
+            Err(HelperError::Unavailable)
+        );
+    }
+    #[test]
+    fn busy_launch_pool_reports_failure_and_never_starts_expired_work() {
+        let pool = crate::places_pool::Pool::new(1);
+        let (release, blocked) = std::sync::mpsc::channel();
+        pool.run(std::time::Duration::from_millis(20), move || {
+            blocked.recv().unwrap()
+        });
+        let tmp = tempfile::tempdir().unwrap();
+        let marker = tmp.path().join("must-not-start");
+        let mut command = std::process::Command::new("touch");
+        command.arg(&marker);
+        assert_eq!(
+            launch_in_pool(&pool, command, std::time::Duration::from_millis(10)),
+            Err(HelperError::Timeout)
+        );
+        release.send(()).unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        // The expired queued job may still occupy the queue until the released worker
+        // receives it. Wait for recovery instead of racing that receive.
+        while pool
+            .run(std::time::Duration::from_millis(20), || 7)
+            .is_none()
+        {
+            assert!(std::time::Instant::now() < until);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(!marker.exists());
+    }
+    #[test]
+    fn desktop_launcher_timeout_does_not_kill_foreground_application() {
+        let tmp = tempfile::tempdir().unwrap();
+        let marker = tmp.path().join("finished");
+        let mut command = std::process::Command::new("sh");
+        command
+            .args(["-c", "sleep 0.35; printf done > \"$1\"", "launcher"])
+            .arg(&marker);
+        assert_eq!(
+            launch_isolated(command, std::time::Duration::from_millis(20)),
+            Ok(())
+        );
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while !marker.exists() {
+            assert!(std::time::Instant::now() < until, "application was killed");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    #[test]
+    fn final_stderr_before_exit_is_always_drained() {
+        for _ in 0..20 {
+            let mut command = std::process::Command::new("sh");
+            command.args(["-c", "printf 'permission denied' >&2; exit 1"]);
+            assert_eq!(
+                run_bounded(&mut command, std::time::Duration::from_secs(1)),
+                Err(HelperError::Failed("not permitted".into()))
+            );
+        }
+    }
+    #[test]
+    fn credentials_never_survive_errors() {
+        let text =
+            b"credentials=/root/secret username=alice //alice:secret@host/share permission denied";
+        assert_eq!(safe_helper_error(text), "not permitted");
+        assert_eq!(
+            safe_helper_error(b"credentials=/root/secret username=alice"),
+            ""
+        );
+    }
+    #[test]
+    fn helper_timeout_has_a_response_deadline() {
+        let start = std::time::Instant::now();
+        assert_eq!(
+            run_bounded(
+                std::process::Command::new("sh").args(["-c", "exec sleep 10"]),
+                std::time::Duration::from_millis(30)
+            ),
+            Err(HelperError::Timeout)
+        );
+        assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    }
+}

@@ -1,0 +1,896 @@
+//! Read-only places discovery; all filesystem access runs in fixed isolated pools.
+use crate::convert::{CoreEventDto, UiError};
+use dualfile_core::{
+    drives, fstab, places_pool, system_places, user_dirs,
+    vfs::{LocalVfs, SpaceFree, VPath, Vfs},
+};
+use serde::Serialize;
+use std::{
+    io::Read,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Condvar, Mutex, OnceLock,
+    },
+    time::{Duration, Instant},
+};
+use tauri::{Emitter, Manager};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    home: String,
+    user_dirs: Vec<user_dirs::UserDir>,
+    trash: Trash,
+    drives: Vec<drives::Drive>,
+    network_mounts: Vec<system_places::SystemPlace>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Trash {
+    path: String,
+    empty: bool,
+}
+fn read(path: impl AsRef<std::path::Path>, cap: u64) -> String {
+    let mut text = String::new();
+    if let Ok(file) = std::fs::File::open(path) {
+        let _ = file.take(cap).read_to_string(&mut text);
+    }
+    text
+}
+fn bounded_read(path: std::path::PathBuf, cap: u64) -> Option<String> {
+    // Kernel control files do not enter the probed mount. Concurrent pane listings may
+    // read them together; per-path exclusion here would spuriously reject the second pane.
+    if path.starts_with("/proc") {
+        return places_pool::control().run(Duration::from_millis(100), move || read(path, cap));
+    }
+    places_pool::metadata().run_keyed(
+        path.to_string_lossy().into_owned(),
+        Duration::from_millis(100),
+        move || read(path, cap),
+    )
+}
+
+fn mount_table() -> &'static drives::MountTableCache {
+    static TABLE: OnceLock<drives::MountTableCache> = OnceLock::new();
+    TABLE.get_or_init(drives::MountTableCache::default)
+}
+fn cached_mount_table() -> Option<Arc<str>> {
+    mount_table().get_or_read(|| bounded_read("/proc/self/mountinfo".into(), 4 * 1024 * 1024))
+}
+fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
+    let paths = system_places::DiscoveryPaths::system();
+    let home = paths.home.to_string_lossy().into_owned();
+    let user_dirs = user_dirs::parse(
+        &bounded_read(paths.config.join("user-dirs.dirs"), 65536).unwrap_or_default(),
+        &home,
+    )
+    .into_iter()
+    .filter(|d| {
+        let path = d.path.clone();
+        places_pool::paths()
+            .run_keyed(path.clone(), Duration::from_millis(100), move || {
+                std::path::Path::new(&path).is_dir()
+            })
+            .unwrap_or(false)
+    })
+    .collect();
+    let trash_path = paths.data.join("Trash/files");
+    let probe = trash_path.clone();
+    let empty = places_pool::paths()
+        .run_keyed(
+            probe.to_string_lossy().into_owned(),
+            Duration::from_millis(100),
+            move || std::fs::read_dir(probe).map_or(true, |mut d| d.next().is_none()),
+        )
+        .unwrap_or(true);
+    let table = cached_mount_table()?;
+    let appdir = std::env::var("APPDIR").ok();
+    let mounts = if table.is_empty() {
+        drives::parse_mounts(
+            &bounded_read("/proc/mounts".into(), 4 * 1024 * 1024).unwrap_or_default(),
+            appdir.as_deref(),
+        )
+    } else {
+        drives::parse_mountinfo(&table, appdir.as_deref())
+    };
+    let drives = fstab::merge(
+        mounts,
+        fstab::parse_fstab(&bounded_read("/etc/fstab".into(), 256 * 1024).unwrap_or_default()),
+    );
+    let (mounts, complete) =
+        system_places::probe_mounts(&paths, places_pool::paths(), Duration::from_millis(500));
+    let mut network_mounts: Vec<_> = mounts.into_iter().filter_map(public_mount).collect();
+    if !complete {
+        if let Some(previous) = previous {
+            for mount in &previous.network_mounts {
+                if !network_mounts
+                    .iter()
+                    .any(|m| m.mounted_at == mount.mounted_at && m.url == mount.url)
+                {
+                    network_mounts.push(mount.clone());
+                }
+            }
+        }
+    }
+    Some(Snapshot {
+        home,
+        user_dirs,
+        trash: Trash {
+            path: trash_path.to_string_lossy().into_owned(),
+            empty,
+        },
+        drives,
+        network_mounts,
+    })
+}
+/// Reading the kernel table is isolated from all probes that can enter a remote mount.
+pub async fn navigation_mount(path: String) -> Option<String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let table = cached_mount_table()?;
+        drives::navigation_mount(&path, &table)
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+fn public_mount(mut mount: system_places::SystemPlace) -> Option<system_places::SystemPlace> {
+    // Authentication-bearing local paths cannot be navigated by the current IPC contract.
+    // Keep a redacted display-only row until opaque navigation is supported.
+    let local = mount.mounted_at.as_ref()?.to_str()?;
+    if local.contains('@')
+        || ["user=", "username=", "password=", "credentials="]
+            .iter()
+            .any(|key| local.contains(key))
+    {
+        mount.mounted_at = None;
+    }
+    mount.name = format!("{}{}", mount.host, mount.path);
+    mount.user = None;
+    if let Some((scheme, rest)) = mount.url.split_once("://") {
+        let rest = rest.split_once('@').map_or(rest, |(_, host)| host);
+        mount.url = format!("{scheme}://{rest}");
+    }
+    Some(mount)
+}
+trait SpaceProbe: Send + Sync {
+    fn measure(&self, path: &str) -> Option<SpaceFree>;
+}
+struct LocalSpace;
+impl SpaceProbe for LocalSpace {
+    fn measure(&self, path: &str) -> Option<SpaceFree> {
+        LocalVfs.space_free(&VPath::local(path).ok()?)
+    }
+}
+fn fill_space(
+    drives: &mut [drives::Drive],
+    pool: &places_pool::Pool,
+    probe: Arc<dyn SpaceProbe>,
+    budget: Duration,
+    per_entry: Duration,
+) {
+    let deadline = Instant::now() + budget;
+    for drive in drives {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        if drive.mounted && drives::local_space_type(&drive.fstype) {
+            let probe = probe.clone();
+            let path = drive.path.clone();
+            drive.space = pool
+                .run(per_entry.min(remaining), move || probe.measure(&path))
+                .flatten();
+        }
+    }
+}
+fn measure(path: String) -> Option<SpaceFree> {
+    places_pool::network_space()
+        .run_keyed(path.clone(), Duration::from_millis(300), move || {
+            LocalSpace.measure(&path)
+        })
+        .flatten()
+}
+pub struct Places {
+    visible: AtomicBool,
+    stop: AtomicBool,
+    cache: Mutex<Option<Snapshot>>,
+    refreshing: Mutex<()>,
+    cache_ready: Condvar,
+    restored_sidebar: Mutex<Option<Option<f64>>>,
+}
+impl Default for Places {
+    fn default() -> Self {
+        Self {
+            visible: AtomicBool::new(false),
+            stop: AtomicBool::new(false),
+            cache: Mutex::new(None),
+            refreshing: Mutex::new(()),
+            cache_ready: Condvar::new(),
+            restored_sidebar: Mutex::new(Some(None)),
+        }
+    }
+}
+impl Places {
+    fn refresh(&self) -> Option<(Snapshot, bool)> {
+        let _refresh = self.refreshing.try_lock().ok()?;
+        let previous = self.cache.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        mount_table().invalidate();
+        let snapshot = discover(previous.as_ref())?;
+        let changed = self.cache_snapshot(snapshot.clone());
+        Some((snapshot, changed))
+    }
+    fn cache_snapshot(&self, snapshot: Snapshot) -> bool {
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+        let changed = cache.as_ref().is_some_and(|old| old != &snapshot);
+        *cache = Some(snapshot);
+        self.cache_ready.notify_all();
+        changed
+    }
+    fn cached_snapshot(&self, timeout: Duration) -> Option<Snapshot> {
+        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+        self.cache_ready
+            .wait_timeout_while(cache, timeout, |cache| cache.is_none())
+            .unwrap_or_else(|e| e.into_inner())
+            .0
+            .clone()
+    }
+    pub fn stop(&self) {
+        self.stop.store(true, Ordering::Relaxed);
+    }
+}
+#[tauri::command]
+pub async fn places_snapshot(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Places>>,
+) -> Result<Snapshot, UiError> {
+    main_only(window.label())?;
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut snapshot = state
+            .refresh()
+            .map(|(s, _)| s)
+            .or_else(|| state.cached_snapshot(Duration::from_millis(1500)))
+            .ok_or_else(|| UiError::new("timeout", "Places unavailable"))?;
+        fill_space(
+            &mut snapshot.drives,
+            places_pool::space(),
+            Arc::new(LocalSpace),
+            Duration::from_millis(1500),
+            Duration::from_millis(300),
+        );
+        Ok(snapshot)
+    })
+    .await
+    .map_err(|_| UiError::internal())?
+}
+#[tauri::command]
+pub fn places_set_visible(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Places>>,
+    visible: bool,
+) -> Result<(), UiError> {
+    main_only(window.label())?;
+    state.visible.store(visible, Ordering::Relaxed);
+    Ok(())
+}
+#[tauri::command]
+pub async fn places_space(
+    window: tauri::WebviewWindow,
+    path: String,
+) -> Result<Option<SpaceFree>, UiError> {
+    main_only(window.label())?;
+    if !path.starts_with('/') || path.len() > 4096 || path.chars().any(char::is_control) {
+        return Err(UiError::new("invalidPath", "Invalid place"));
+    }
+    tauri::async_runtime::spawn_blocking(move || measure(path))
+        .await
+        .map_err(|_| UiError::internal())
+}
+#[tauri::command]
+pub async fn trash_open_system(window: tauri::WebviewWindow) -> Result<(), UiError> {
+    main_only(window.label())?;
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg("trash:/");
+        dualfile_core::appenv::launch_isolated(command, Duration::from_secs(5))
+            .map_err(|_| UiError::new("unavailable", "System trash unavailable"))
+    })
+    .await
+    .map_err(|_| UiError::internal())?
+}
+fn main_only(label: &str) -> Result<(), UiError> {
+    if label == "main" {
+        Ok(())
+    } else {
+        Err(UiError::new("permissionDenied", "Main window only"))
+    }
+}
+
+fn open_monitor() -> Option<std::fs::File> {
+    let mut file = std::fs::File::open("/proc/self/mountinfo").ok()?;
+    // Reading acknowledges the proc poll generation before the descriptor is armed.
+    let mut sink = std::io::sink();
+    std::io::copy(&mut (&mut file).take(4 * 1024 * 1024), &mut sink).ok()?;
+    Some(file)
+}
+
+#[derive(Default)]
+struct WatchDiff {
+    pending: Option<Duration>,
+    last: Option<Snapshot>,
+}
+impl WatchDiff {
+    fn dirty(&mut self, now: Duration) {
+        self.pending = Some(now + Duration::from_millis(300));
+    }
+    fn due(&mut self, now: Duration) -> bool {
+        if self.pending.is_some_and(|deadline| now >= deadline) {
+            self.pending = None;
+            true
+        } else {
+            false
+        }
+    }
+    fn publish(&mut self, snapshot: Snapshot) -> bool {
+        let changed = self.last.as_ref().is_none_or(|old| old != &snapshot);
+        self.last = Some(snapshot);
+        changed
+    }
+}
+
+/// poll is only a wake-up source. Discovery itself has its own workers and deadline.
+pub fn start(app: tauri::AppHandle, state: Arc<Places>) {
+    let restored = places_pool::metadata()
+        .run_keyed(
+            "settings-restore".into(),
+            Duration::from_millis(300),
+            || {
+                let path = dualfile_core::settings::config_dir().join("settings.json");
+                match std::fs::File::open(path) {
+                    Ok(file) => {
+                        let mut text = String::new();
+                        file.take(1024 * 1024).read_to_string(&mut text).ok()?;
+                        let settings = serde_json::from_str(&text).ok()?;
+                        Some(restored_sidebar_width(&settings))
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(0.0),
+                    Err(_) => None,
+                }
+            },
+        )
+        .flatten();
+    *state
+        .restored_sidebar
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(restored);
+    std::thread::spawn(move || {
+        use std::os::fd::AsRawFd;
+        let mut file = places_pool::control()
+            .run_keyed(
+                "mount-monitor".into(),
+                Duration::from_millis(300),
+                open_monitor,
+            )
+            .flatten();
+        if file.is_none() {
+            log::warn!("Mount notifications unavailable; polling places");
+        }
+        let mut last_poll = Instant::now() - Duration::from_secs(5);
+        let mut last_monitor = Duration::ZERO;
+        let clock = Instant::now();
+        let mut diff = WatchDiff::default();
+        if let Some((snapshot, _)) = state.refresh() {
+            if diff.publish(snapshot) {
+                let _ = app.emit(crate::CORE_EVENT, CoreEventDto::PlacesChanged);
+            }
+        }
+        let (tx, rx) = std::sync::mpsc::sync_channel(1);
+        use notify_debouncer_mini::notify::{RecursiveMode, Watcher};
+        let _watcher = places_pool::metadata().run(Duration::from_millis(300), move || {
+            let mut watcher = notify_debouncer_mini::notify::recommended_watcher(move |_| {
+                let _ = tx.try_send(());
+            })
+            .ok()?;
+            let _ = watcher.watch(std::path::Path::new("/etc"), RecursiveMode::NonRecursive);
+            Some(watcher)
+        });
+        while !state.stop.load(Ordering::Relaxed) {
+            let mut changed = rx.try_recv().is_ok();
+            if let Some(mounts) = &file {
+                let mut fd = libc::pollfd {
+                    fd: mounts.as_raw_fd(),
+                    events: libc::POLLPRI | libc::POLLERR,
+                    revents: 0,
+                };
+                // SAFETY: fd points to one initialized pollfd for the duration of poll.
+                let result = unsafe { libc::poll(&mut fd, 1, 100) };
+                if result < 0 {
+                    log::warn!("Mount notifications failed; polling places");
+                    file = None;
+                } else if result > 0 {
+                    changed = true;
+                    file = places_pool::control()
+                        .run_keyed(
+                            "mount-monitor".into(),
+                            Duration::from_millis(300),
+                            open_monitor,
+                        )
+                        .flatten();
+                }
+            } else {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            if changed {
+                mount_table().invalidate();
+                diff.dirty(clock.elapsed());
+            }
+            retry_monitor(&mut file, &mut last_monitor, clock.elapsed(), || {
+                places_pool::control()
+                    .run_keyed(
+                        "mount-monitor".into(),
+                        Duration::from_millis(100),
+                        open_monitor,
+                    )
+                    .flatten()
+            });
+            let poll_due = poll_due(state.visible.load(Ordering::Relaxed), last_poll.elapsed());
+            // Do not ask the main thread for visibility on every 100 ms poll pass.
+            let visible_poll = poll_due
+                && app
+                    .get_webview_window("main")
+                    .is_some_and(|window| window.is_visible().unwrap_or(false));
+            if poll_due {
+                last_poll = Instant::now();
+            }
+            if diff.due(clock.elapsed()) || visible_poll {
+                if let Some((snapshot, _)) = state.refresh() {
+                    if diff.publish(snapshot) {
+                        let _ = app.emit(crate::CORE_EVENT, CoreEventDto::PlacesChanged);
+                    }
+                }
+            }
+        }
+    });
+}
+
+fn poll_due(visible: bool, elapsed: Duration) -> bool {
+    visible && elapsed >= Duration::from_secs(5)
+}
+fn retry_monitor<T>(
+    file: &mut Option<T>,
+    last_attempt: &mut Duration,
+    now: Duration,
+    open: impl FnOnce() -> Option<T>,
+) {
+    if file.is_none() && now.saturating_sub(*last_attempt) >= Duration::from_secs(5) {
+        *last_attempt = now;
+        *file = open();
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResizeResult {
+    actual_delta: f64,
+    can_grow: bool,
+    restored_width: f64,
+}
+fn restored_sidebar_width(settings: &serde_json::Value) -> f64 {
+    match settings["sidebar_mode"].as_str() {
+        Some("full") => settings["sidebar_width"]
+            .as_u64()
+            .unwrap_or(210)
+            .clamp(160, 400) as f64,
+        Some("icons") => 44.0,
+        _ => 0.0,
+    }
+}
+fn resized_width(current: u32, delta: i32, maximum: u32, minimum: u32) -> u32 {
+    (current as i64 + delta as i64).clamp(minimum.min(maximum) as i64, maximum as i64) as u32
+}
+fn initial_resize(delta: f64, restored: Option<Option<f64>>) -> (f64, f64) {
+    match restored {
+        Some(Some(width)) => (delta - width, width),
+        Some(None) => (0.0, 0.0), // Unknown restored geometry: never grow it a second time.
+        None => (delta, 0.0),
+    }
+}
+fn resize_result(requested: f64, applied: f64, room: bool, restored_width: f64) -> ResizeResult {
+    ResizeResult {
+        actual_delta: applied,
+        can_grow: room && (applied - requested).abs() < 1.0,
+        restored_width,
+    }
+}
+#[tauri::command]
+pub async fn sidebar_resize_window(
+    window: tauri::WebviewWindow,
+    state: tauri::State<'_, Arc<Places>>,
+    delta: f64,
+) -> Result<ResizeResult, UiError> {
+    main_only(window.label())?;
+    if !delta.is_finite() || delta.abs() > 400.0 {
+        return Err(UiError::new("invalidInput", "Invalid sidebar width"));
+    }
+    resize_transaction(delta, &state.restored_sidebar, |delta, credit| {
+        resize_geometry(window, delta, credit)
+    })
+    .await
+}
+async fn resize_transaction<F, R>(
+    delta: f64,
+    restored_sidebar: &Mutex<Option<Option<f64>>>,
+    resize: F,
+) -> Result<ResizeResult, UiError>
+where
+    F: FnOnce(f64, f64) -> R,
+    R: std::future::Future<Output = Result<ResizeResult, UiError>>,
+{
+    if delta == 0.0 {
+        return Ok(resize_result(0.0, 0.0, false, 0.0));
+    }
+    let restored = restored_sidebar
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    let (delta, credit) = initial_resize(delta, restored);
+    if delta == 0.0 {
+        return Ok(resize_result(0.0, 0.0, false, credit));
+    }
+    resize(delta, credit).await
+}
+/// Growth to credit to the sidebar. Fractional scaling rounds sizes by up to `tolerance` px,
+/// and compositors may stop short, so near misses and partial moves count; a move the wrong
+/// way or past the request (a user drag during the settle time) counts nothing.
+fn confirmed_resize_delta(before: u32, requested: u32, actual: u32, tolerance: u32) -> f64 {
+    let want = requested as i64 - before as i64;
+    let got = actual as i64 - before as i64;
+    if want == 0 || got == 0 || want.signum() != got.signum() {
+        return 0.0;
+    }
+    if (requested as i64 - actual as i64).abs() <= tolerance as i64 {
+        want as f64
+    } else if got.abs() < want.abs() {
+        got as f64
+    } else {
+        0.0
+    }
+}
+async fn resize_geometry(
+    window: tauri::WebviewWindow,
+    delta: f64,
+    credit: f64,
+) -> Result<ResizeResult, UiError> {
+    let error = |_| UiError::new("unavailable", "Window geometry unavailable");
+    let scale = window.scale_factor().map_err(error)?;
+    let before = window.inner_size().map_err(error)?;
+    if window.is_maximized().map_err(error)? || window.is_fullscreen().map_err(error)? {
+        return Ok(ResizeResult {
+            actual_delta: 0.0,
+            can_grow: false,
+            restored_width: credit,
+        });
+    }
+    let monitor = window
+        .current_monitor()
+        .map_err(error)?
+        .ok_or_else(|| UiError::new("unavailable", "Monitor unavailable"))?;
+    let area = monitor.work_area();
+    let outer = window.outer_size().map_err(error)?;
+    let decoration = outer.width.saturating_sub(before.width);
+    let width = resized_width(
+        before.width,
+        (delta * scale).round() as i32,
+        area.size.width.saturating_sub(decoration),
+        (900.0 * scale) as u32,
+    );
+    window
+        .set_size(tauri::PhysicalSize::new(width, before.height))
+        .map_err(error)?;
+    // Let the compositor apply or refuse a tiled-window request; no UI-thread sleep.
+    tauri::async_runtime::spawn_blocking(|| std::thread::sleep(Duration::from_millis(120)))
+        .await
+        .map_err(|_| UiError::internal())?;
+    let actual = window.inner_size().map_err(error)?;
+    let applied = if actual.height == before.height {
+        confirmed_resize_delta(before.width, width, actual.width, scale.ceil() as u32) / scale
+    } else {
+        0.0
+    };
+    if applied != 0.0 && !crate::window_state::is_wayland() {
+        if let Ok(position) = window.outer_position() {
+            let x = (position.x - (applied * scale).round() as i32).clamp(
+                area.position.x,
+                area.position.x + area.size.width.saturating_sub(actual.width + decoration) as i32,
+            );
+            let _ = window.set_position(tauri::PhysicalPosition::new(x, position.y));
+        }
+    }
+    Ok(resize_result(
+        delta,
+        applied,
+        actual.width < area.size.width.saturating_sub(decoration),
+        credit,
+    ))
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn user_resize_during_settle_does_not_earn_sidebar_growth_credit() {
+        assert_eq!(confirmed_resize_delta(1200, 1410, 1410, 1), 210.0);
+        // Work-area clamping still permits confirmed partial growth.
+        assert_eq!(confirmed_resize_delta(1200, 1300, 1300, 1), 100.0);
+        assert_eq!(confirmed_resize_delta(1200, 1410, 1200, 1), 0.0);
+        assert_eq!(confirmed_resize_delta(1200, 1410, 1500, 1), 0.0);
+        assert_eq!(confirmed_resize_delta(1200, 990, 1300, 1), 0.0);
+    }
+    #[test]
+    fn fractional_scaling_rounding_and_short_moves_still_earn_credit() {
+        // 125 %/150 % scaling: the compositor rounds to logical pixels.
+        assert_eq!(confirmed_resize_delta(1200, 1463, 1462, 2), 263.0);
+        assert_eq!(confirmed_resize_delta(1200, 1463, 1465, 2), 263.0);
+        assert_eq!(confirmed_resize_delta(1463, 1200, 1201, 2), -263.0);
+        // Stopped short (clamped or late): count what actually happened, so hiding undoes it exactly.
+        assert_eq!(confirmed_resize_delta(1200, 1410, 1350, 1), 150.0);
+        assert_eq!(confirmed_resize_delta(1200, 990, 1100, 1), -100.0);
+    }
+    #[test]
+    fn zero_delta_and_unknown_restore_never_touch_window_geometry() {
+        let saved = Mutex::new(Some(Some(210.0)));
+        let zero = tauri::async_runtime::block_on(resize_transaction(0.0, &saved, |_, _| async {
+            panic!("zero delta must not query, resize, sleep or reposition the window")
+        }))
+        .unwrap();
+        assert_eq!(zero.actual_delta, 0.0);
+        assert_eq!(*saved.lock().unwrap(), Some(Some(210.0)));
+        let failed_read = Mutex::new(Some(None));
+        let unknown =
+            tauri::async_runtime::block_on(resize_transaction(210.0, &failed_read, |_, _| async {
+                panic!("failed restore read must skip the first grow")
+            }))
+            .unwrap();
+        assert_eq!(unknown.actual_delta, 0.0);
+        assert_eq!(*failed_read.lock().unwrap(), None);
+        let restored =
+            tauri::async_runtime::block_on(resize_transaction(210.0, &saved, |_, _| async {
+                panic!("restored width must not grow again")
+            }))
+            .unwrap();
+        assert_eq!(restored.restored_width, 210.0);
+    }
+    #[test]
+    fn monitor_loss_retries_until_rearmed_and_polling_requires_visibility() {
+        let mut file = Some(1);
+        let mut last = Duration::ZERO;
+        retry_monitor(&mut file, &mut last, Duration::from_secs(5), || {
+            panic!("already armed")
+        });
+        file = None;
+        retry_monitor(&mut file, &mut last, Duration::from_secs(5), || None);
+        retry_monitor(&mut file, &mut last, Duration::from_secs(9), || {
+            panic!("retry too early")
+        });
+        retry_monitor(&mut file, &mut last, Duration::from_secs(10), || Some(2));
+        assert_eq!(file, Some(2));
+        assert!(!poll_due(false, Duration::from_secs(100)));
+        assert!(!poll_due(true, Duration::from_secs(4)));
+        assert!(poll_due(true, Duration::from_secs(5)));
+    }
+    #[test]
+    fn zero_partial_refused_and_restored_geometry() {
+        let zero = resize_result(0.0, 0.0, false, 0.0);
+        assert_eq!(zero.actual_delta, 0.0);
+        assert!(!zero.can_grow);
+        let partial = resize_result(210.0, 100.0, true, 0.0);
+        assert_eq!(partial.actual_delta, 100.0);
+        assert!(!partial.can_grow);
+        assert!(!resize_result(210.0, 0.0, true, 0.0).can_grow);
+        assert!(resize_result(210.0, 210.0, true, 0.0).can_grow);
+        assert!(!resize_result(210.0, 210.0, false, 0.0).can_grow);
+        assert_eq!(initial_resize(210.0, Some(None)), (0.0, 0.0));
+        assert_eq!(initial_resize(210.0, Some(Some(210.0))), (0.0, 210.0));
+        assert_eq!(initial_resize(210.0, Some(Some(0.0))), (210.0, 0.0));
+        assert_eq!(initial_resize(-44.0, None), (-44.0, 0.0));
+    }
+    #[test]
+    fn resize_clamps_to_work_area_and_minimum() {
+        assert_eq!(resized_width(1280, 210, 1400, 900), 1400);
+        assert_eq!(resized_width(950, -210, 1920, 900), 900);
+    }
+    #[test]
+    fn commands_reject_secondary_windows() {
+        for label in ["settings", "connection-editor"] {
+            assert!(main_only(label).is_err());
+        }
+    }
+    #[test]
+    fn only_known_local_filesystems_are_measured() {
+        for fs in ["autofs", "nfs4", "cifs", "fuse.sshfs", "9p", "unknown"] {
+            assert!(!drives::local_space_type(fs));
+        }
+    }
+    #[test]
+    fn credential_bearing_mount_paths_are_not_public() {
+        let mut p = system_places::parse_url("smb://alice@host/share", "mounted", "Share").unwrap();
+        p.mounted_at = Some("/run/user/1000/gvfs/smb-share:server=host,user=alice".into());
+        let p = public_mount(p).unwrap();
+        assert_eq!(p.name, "host/share");
+        assert!(p.mounted_at.is_none());
+        assert!(!format!("{p:?}").contains("alice"));
+        assert!(!serde_json::to_string(&p).unwrap().contains("alice"));
+    }
+}
+
+#[cfg(test)]
+mod space_budget_tests {
+    use super::*;
+    struct Slow;
+    impl SpaceProbe for Slow {
+        fn measure(&self, _: &str) -> Option<SpaceFree> {
+            std::thread::sleep(Duration::from_millis(250));
+            Some(SpaceFree {
+                available: 1,
+                total: 2,
+            })
+        }
+    }
+    #[test]
+    fn hung_network_space_does_not_starve_local_space() {
+        let (release, blocked) = std::sync::mpsc::channel();
+        places_pool::network_space().run_keyed(
+            "test-network-space".into(),
+            Duration::from_millis(20),
+            move || blocked.recv().unwrap(),
+        );
+        struct Fast;
+        impl SpaceProbe for Fast {
+            fn measure(&self, _: &str) -> Option<SpaceFree> {
+                Some(SpaceFree {
+                    available: 10,
+                    total: 20,
+                })
+            }
+        }
+        let mut drives = vec![drives::Drive::new("/local".into(), "ext4", "/dev/a", "rw")];
+        fill_space(
+            &mut drives,
+            places_pool::space(),
+            Arc::new(Fast),
+            Duration::from_secs(1),
+            Duration::from_millis(100),
+        );
+        release.send(()).unwrap();
+        assert_eq!(
+            drives[0].space,
+            Some(SpaceFree {
+                available: 10,
+                total: 20
+            })
+        );
+    }
+    #[test]
+    fn slow_statvfs_cannot_exceed_response_budget_or_spawn_replacements() {
+        let mut drives = vec![
+            drives::Drive::new("/local".into(), "ext4", "/dev/a", "rw"),
+            drives::Drive::new("/net".into(), "nfs", "host:/", "rw"),
+        ];
+        let pool = places_pool::Pool::new(1);
+        let start = Instant::now();
+        fill_space(
+            &mut drives,
+            &pool,
+            Arc::new(Slow),
+            Duration::from_millis(50),
+            Duration::from_millis(30),
+        );
+        assert!(start.elapsed() < Duration::from_millis(200));
+        assert!(drives.iter().all(|d| d.space.is_none()));
+    }
+}
+
+#[cfg(test)]
+mod restored_geometry_tests {
+    use super::*;
+    #[test]
+    fn upgrades_add_width_once_and_existing_settings_preserve_restored_size() {
+        assert_eq!(
+            restored_sidebar_width(&serde_json::json!({"version":6})),
+            0.0
+        );
+        assert_eq!(
+            restored_sidebar_width(&serde_json::json!({"sidebar_mode":"full","sidebar_width":260})),
+            260.0
+        );
+        assert_eq!(
+            restored_sidebar_width(&serde_json::json!({"sidebar_mode":"icons"})),
+            44.0
+        );
+        assert_eq!(
+            restored_sidebar_width(&serde_json::json!({"sidebar_mode":"hidden"})),
+            0.0
+        );
+    }
+}
+
+#[cfg(test)]
+mod watcher_tests {
+    use super::*;
+    fn snapshot(table: &str) -> Snapshot {
+        Snapshot {
+            home: "/home/test".into(),
+            user_dirs: vec![],
+            trash: Trash {
+                path: "/trash".into(),
+                empty: true,
+            },
+            drives: drives::parse_mountinfo(table, None),
+            network_mounts: vec![],
+        }
+    }
+    #[test]
+    fn first_snapshot_waits_for_inflight_refresh_and_first_publish_notifies() {
+        let state = Places::default();
+        let refreshing = state.refreshing.lock().unwrap();
+        assert!(state.refresh().is_none());
+        let expected = snapshot("1 0 8:1 / / rw - ext4 /dev/a rw");
+        std::thread::scope(|scope| {
+            let (done, result) = std::sync::mpsc::channel();
+            let state = &state;
+            scope.spawn(move || {
+                done.send(state.cached_snapshot(Duration::from_secs(1)))
+                    .unwrap()
+            });
+            assert_eq!(
+                result.recv_timeout(Duration::from_millis(20)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+            );
+            state.cache_snapshot(expected.clone());
+            assert_eq!(
+                result.recv_timeout(Duration::from_secs(1)).unwrap(),
+                Some(expected.clone())
+            );
+        });
+        drop(refreshing);
+        let mut diff = WatchDiff::default();
+        assert!(diff.publish(expected.clone()));
+        assert!(!diff.publish(expected));
+        let empty = Places::default();
+        let now = Instant::now();
+        assert_eq!(empty.cached_snapshot(Duration::from_millis(20)), None);
+        assert!(now.elapsed() < Duration::from_secs(1));
+    }
+    #[test]
+    fn injected_mount_tables_and_clock_emit_once_per_visible_burst() {
+        let mut diff = WatchDiff::default();
+        let base = "1 0 8:1 / / rw - ext4 /dev/a rw";
+        assert!(diff.publish(snapshot(base)));
+        diff.dirty(Duration::from_millis(0));
+        diff.dirty(Duration::from_millis(100));
+        assert!(!diff.due(Duration::from_millis(399)));
+        assert!(diff.due(Duration::from_millis(400)));
+        assert!(!diff.due(Duration::from_millis(500)));
+        assert!(!diff.publish(snapshot(&format!(
+            "{base}\n2 1 0:1 / /container rw - overlay overlay rw"
+        ))));
+        assert!(diff.publish(snapshot(&format!(
+            "{base}\n3 1 8:2 / /media/USB rw - vfat /dev/b rw"
+        ))));
+        assert!(!diff.publish(snapshot(&format!(
+            "{base}\n3 1 8:2 / /media/USB rw - vfat /dev/b rw"
+        ))));
+    }
+    #[test]
+    fn gvfs_poll_diff_detects_changes_inside_existing_runtime_mount() {
+        let mut diff = WatchDiff::default();
+        let mut s = snapshot("");
+        assert!(diff.publish(s.clone()));
+        let mut mount = system_places::parse_url("smb://host/share", "mounted", "Share").unwrap();
+        mount.mounted_at = Some("/run/user/1000/gvfs/smb-share:server=host,share=share".into());
+        s.network_mounts.push(mount);
+        assert!(diff.publish(s.clone()));
+        assert!(!diff.publish(s.clone()));
+        s.network_mounts.clear();
+        assert!(diff.publish(s));
+    }
+}

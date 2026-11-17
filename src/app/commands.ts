@@ -2,7 +2,7 @@ import type { Controller } from "./controller";
 import { activeTabOf, focusedEntry, visibleEntries, type AppState } from "./state";
 import type { IconName } from "../components/Icon";
 import type { TranslationKey } from "../i18n";
-import type { Command } from "../state/keymap";
+import { effectiveBindings, type Command } from "../state/keymap";
 import { isArchivePath } from "../state/paths";
 
 export type ToolKind = "usage" | "dupes" | "similar";
@@ -27,6 +27,9 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
     result.push({ id, title: tr(key), icon, shortcut, group: "actions", execute, enabled });
   };
   const command = (id: Command, key: TranslationKey, icon: IconName, shortcut: string, enabled?: PaletteCommand["enabled"]) => add(id, key, icon, shortcut, () => controller.command(id), enabled);
+  command("toggleSidebar", "sidebar.toggle", "sidebar", effectiveBindings(state.settings.keybindings).toggleSidebar);
+  command("toggleSidebarIcons", "sidebar.toggleIcons", "sidebar", effectiveBindings(state.settings.keybindings).toggleSidebarIcons);
+  command("focusSidebar", "sidebar.focus", "sidebar", "");
   command("goBack", "action.back", "back", "Alt+←", s => activeTabOf(s, s.active).back.length > 0);
   command("goForward", "action.forward", "forward", "Alt+→", s => activeTabOf(s, s.active).forward.length > 0);
   command("swapPanes", "menu.view.swapPanes", "swap", "Ctrl+U");

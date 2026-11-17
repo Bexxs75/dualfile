@@ -478,7 +478,7 @@ pub struct Caps {
     pub can_rename_in_place: bool,
 }
 
-#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SpaceFree {
     pub available: u64,
     pub total: u64,

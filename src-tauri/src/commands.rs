@@ -46,7 +46,33 @@ where
 
 #[tauri::command]
 pub async fn list(state: Shared<'_>, path: String) -> Result<ListingDto, UiError> {
-    run(state, move |s| s.list(&path)).await
+    // VFS, archives and ordinary local directories retain their original execution path.
+    if !path.starts_with('/') {
+        return run(state, move |s| s.list(&path)).await;
+    }
+    let key = crate::places::navigation_mount(path.clone()).await;
+    let Some(key) = key else {
+        return run(state, move |s| s.list(&path)).await;
+    };
+    let state = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        dualfile_core::places_pool::navigation()
+            .run_keyed_wait(key, std::time::Duration::from_secs(3), move || {
+                let installing = crate::system::INSTALLING
+                    .read()
+                    .map_err(|_| UiError::internal())?;
+                if *installing {
+                    return Err(UiError::new(
+                        "updateBusy",
+                        "Update installation in progress",
+                    ));
+                }
+                state.list(&path)
+            })
+            .unwrap_or_else(|| Err(UiError::new("timeout", "Directory unavailable")))
+    })
+    .await
+    .map_err(|_| UiError::internal())?
 }
 
 #[tauri::command]
@@ -867,7 +893,16 @@ pub async fn local_drives(
     window: tauri::WebviewWindow,
 ) -> Result<Vec<dualfile_core::drives::Drive>, UiError> {
     ssh_main_window(window.label())?;
-    Ok(dualfile_core::drives::local_drives())
+    Ok(tauri::async_runtime::spawn_blocking(|| {
+        dualfile_core::places_pool::metadata()
+            .run(
+                std::time::Duration::from_millis(1500),
+                dualfile_core::drives::local_drives,
+            )
+            .unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default())
 }
 
 #[tauri::command]
@@ -876,9 +911,13 @@ pub async fn system_places_list(
 ) -> Result<Vec<dualfile_core::system_places::SystemPlace>, UiError> {
     ssh_main_window(window.label())?;
     tauri::async_runtime::spawn_blocking(|| {
-        dualfile_core::system_places::discover(
-            &dualfile_core::system_places::DiscoveryPaths::system(),
-        )
+        dualfile_core::places_pool::metadata()
+            .run(std::time::Duration::from_millis(1500), || {
+                dualfile_core::system_places::discover(
+                    &dualfile_core::system_places::DiscoveryPaths::system(),
+                )
+            })
+            .unwrap_or_default()
     })
     .await
     .map_err(|_| UiError::new("remote", "Netzwerkorte nicht verfügbar"))

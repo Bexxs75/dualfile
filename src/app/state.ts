@@ -72,6 +72,9 @@ export interface ListerState {
 }
 
 export interface AppState {
+  places: import("../ipc/types").PlacesSnapshot | null;
+  placesAnnouncement: string;
+  sidebarFocus: string | null;
   connections: readonly import("../ipc/types").ConnectionEntry[];
   remoteConnections: import("../state/paths").RemoteConnections;
   phase: "loading" | "ready";
@@ -120,6 +123,7 @@ export interface AppState {
 }
 
 export const defaultSettings: Settings = {
+  sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [],
   version: 5,
   verifyPolicy: "auto",
   theme: "schiefer",
@@ -150,6 +154,7 @@ const emptyListing: PaneListing = { path: null, entries: [], error: null, loadin
 
 export function initialState(): AppState {
   return {
+    places: null, placesAnnouncement: "", sidebarFocus: null,
     connections: [], remoteConnections: {},
     phase: "loading",
     home: "/",
@@ -226,6 +231,8 @@ export function visibleEntries(state: AppState, w: WinIdx): readonly Entry[] {
 // ---------------------------------------------------------------- Aktionen
 
 export type Action =
+  | { type: "places"; snapshot: import("../ipc/types").PlacesSnapshot; announcement: string }
+  | { type: "sidebarFocus"; key: string | null }
   | { type: "connections"; entries: readonly import("../ipc/types").ConnectionEntry[]; remote: import("../state/paths").RemoteConnections }
   | { type: "jobsExpanded"; expanded: boolean }
   | { type: "closeRequested"; count: number | null }
@@ -311,6 +318,8 @@ function withPending(state: AppState, w: WinIdx, name: string | null): AppState 
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case "places": return { ...state, places: action.snapshot, placesAnnouncement: action.announcement };
+    case "sidebarFocus": return { ...state, sidebarFocus: action.key };
     case "connections": return { ...state, connections: action.entries, remoteConnections: action.remote };
     case "jobsExpanded": return { ...state, jobsExpanded: action.expanded };
     case "closeRequested": return { ...state, closeRequested: action.count };

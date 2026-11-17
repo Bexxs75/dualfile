@@ -638,6 +638,14 @@ pub struct SettingsDto {
     #[serde(default)]
     pub last_seen_version: Option<String>,
 
+    #[serde(default = "default_sidebar_mode")]
+    pub sidebar_mode: String,
+    #[serde(default = "default_sidebar_width")]
+    pub sidebar_width: u16,
+    #[serde(default = "default_sidebar_collapsed")]
+    pub sidebar_collapsed: Vec<String>,
+    #[serde(default = "default_sidebar_hidden")]
+    pub sidebar_hidden: Vec<String>,
     pub density: String,
     pub font_size: u8,
     pub language: String,
@@ -653,6 +661,19 @@ pub struct SettingsDto {
     #[serde(default)]
     pub column_widths: settings::ColumnWidths,
     pub session: SessionDto,
+}
+
+fn default_sidebar_mode() -> String {
+    "full".into()
+}
+fn default_sidebar_width() -> u16 {
+    210
+}
+fn default_sidebar_collapsed() -> Vec<String> {
+    Vec::new()
+}
+fn default_sidebar_hidden() -> Vec<String> {
+    Vec::new()
 }
 
 fn default_show_parent_entry() -> bool {
@@ -701,6 +722,10 @@ impl From<&settings::Settings> for SettingsDto {
             last_update_check: s.last_update_check.clone(),
             last_seen_version: s.last_seen_version.clone(),
 
+            sidebar_mode: s.sidebar_mode.clone(),
+            sidebar_width: s.sidebar_width,
+            sidebar_collapsed: s.sidebar_collapsed.clone(),
+            sidebar_hidden: s.sidebar_hidden.clone(),
             density: s.density.clone(),
             font_size: s.font_size,
             language: s.language.clone(),
@@ -765,6 +790,10 @@ impl From<&SettingsDto> for settings::Settings {
             last_update_check: s.last_update_check.clone(),
             last_seen_version: s.last_seen_version.clone(),
 
+            sidebar_mode: s.sidebar_mode.clone(),
+            sidebar_width: s.sidebar_width,
+            sidebar_collapsed: s.sidebar_collapsed.clone(),
+            sidebar_hidden: s.sidebar_hidden.clone(),
             density: s.density.clone(),
             font_size: s.font_size,
             language: s.language.clone(),
@@ -857,6 +886,7 @@ pub struct ItemErrorInfoDto {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CoreEventDto {
+    PlacesChanged,
     CloseRequested {
         count: usize,
     },
