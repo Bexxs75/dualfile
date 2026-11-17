@@ -29,6 +29,7 @@ mod terminal;
 mod validate;
 mod verification;
 mod watch;
+mod window_state;
 
 use convert::CoreEventDto;
 use state::{AppState, EventSink};
@@ -80,6 +81,7 @@ pub fn run() {
         .plugin(diagnostics::plugin())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(window_state::plugin())
         .setup(|app| {
             diagnostics::log_start();
             // Title bar / task bar icon (X11 and XWayland; Wayland desktops take

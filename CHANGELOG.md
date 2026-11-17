@@ -3,6 +3,12 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Added
+
+- **Dualfile remembers the size and position of its main window.** The next start opens the window as you left it, including the maximized state. On Wayland desktops only the size and the maximized state are restored: applications cannot read or set their window position there, so the compositor places the window (KDE can remember it with a window rule). On X11 the position is restored too. The connection editor window is not remembered.
+
 ## [0.3.4] - 2026-11-16
 
 ### Changed
