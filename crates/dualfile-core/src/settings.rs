@@ -45,6 +45,10 @@ pub struct Settings {
     pub last_update_check: Option<String>,
     pub last_seen_version: Option<String>,
 
+    pub sidebar_mode: String,
+    pub sidebar_width: u16,
+    pub sidebar_collapsed: Vec<String>,
+    pub sidebar_hidden: Vec<String>,
     pub density: String,
     pub font_size: u8,
     pub language: String,
@@ -97,6 +101,10 @@ impl Default for Settings {
             last_update_check: None,
             last_seen_version: None,
 
+            sidebar_mode: "full".into(),
+            sidebar_width: 210,
+            sidebar_collapsed: Vec::new(),
+            sidebar_hidden: Vec::new(),
             density: "normal".into(),
             font_size: 14,
             language: "auto".into(),
@@ -387,6 +395,10 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         last_update_check: field(&mut obj, "last_update_check", None, &mut fixes),
         last_seen_version: field(&mut obj, "last_seen_version", None, &mut fixes),
 
+        sidebar_mode: field(&mut obj, "sidebar_mode", "full".into(), &mut fixes),
+        sidebar_width: field(&mut obj, "sidebar_width", 210, &mut fixes),
+        sidebar_collapsed: field(&mut obj, "sidebar_collapsed", Vec::new(), &mut fixes),
+        sidebar_hidden: field(&mut obj, "sidebar_hidden", Vec::new(), &mut fixes),
         density: field(&mut obj, "density", d.density.clone(), &mut fixes),
         font_size: field(&mut obj, "font_size", d.font_size, &mut fixes),
         language: field(&mut obj, "language", d.language.clone(), &mut fixes),
@@ -421,6 +433,27 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
     {
         s.last_seen_version = None;
         fixes.push("last_seen_version".into());
+    }
+    if !["hidden", "icons", "full"].contains(&s.sidebar_mode.as_str()) {
+        s.sidebar_mode = "full".into();
+        fixes.push("sidebar_mode".into());
+    }
+    if !(160..=400).contains(&s.sidebar_width) {
+        s.sidebar_width = s.sidebar_width.clamp(160, 400);
+        fixes.push("sidebar_width".into());
+    }
+    let before = s.sidebar_collapsed.len();
+    s.sidebar_collapsed
+        .retain(|v| SIDEBAR_SECTIONS.contains(&v.as_str()));
+    s.sidebar_collapsed.truncate(8);
+    if s.sidebar_collapsed.len() != before {
+        fixes.push("sidebar_collapsed".into());
+    }
+    let before = s.sidebar_hidden.len();
+    s.sidebar_hidden.retain(|v| valid_sidebar_key(v));
+    s.sidebar_hidden.truncate(500);
+    if s.sidebar_hidden.len() != before {
+        fixes.push("sidebar_hidden".into());
     }
     s.connections = load_connections(&mut obj, &mut fixes);
     s.plugins = load_plugins(&mut obj, &mut fixes);
@@ -1399,5 +1432,55 @@ mod release_notes_tests {
         for valid in ["0.3.10", "0.3.5-rc.1", "1.2.3+build.01", "1.2.3-0.a-1"] {
             assert!(valid_seen_version(valid), "{valid}");
         }
+    }
+}
+
+pub const SIDEBAR_SECTIONS: &[&str] = &["places", "remote", "devices", "network"];
+pub fn valid_sidebar_key(key: &str) -> bool {
+    key.len() <= 4112
+        && !key.chars().any(char::is_control)
+        && key.split_once(':').is_some_and(|(kind, value)| {
+            !value.is_empty()
+                && [
+                    "xdg", "bookmark", "drive", "fstab", "conn", "mount", "trash", "net",
+                ]
+                .contains(&kind)
+        })
+}
+#[cfg(test)]
+mod sidebar_tests {
+    use super::*;
+    #[test]
+    fn old_files_default_silently_and_bad_fields_repair() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("settings.json"), r#"{"version":6}"#).unwrap();
+        let (s, outcome) = load(dir.path());
+        assert_eq!(outcome, LoadOutcome::Loaded);
+        assert_eq!(s.sidebar_mode, "full");
+        assert_eq!(s.sidebar_width, 210);
+        fs::write(dir.path().join("settings.json"), r#"{"version":6,"sidebar_mode":7,"sidebar_width":999,"sidebar_collapsed":["bad"],"sidebar_hidden":["bad"]}"#).unwrap();
+        let (s, outcome) = load(dir.path());
+        assert_eq!(s.sidebar_width, 400);
+        assert!(s.sidebar_hidden.is_empty());
+        let LoadOutcome::Repaired(fixes) = outcome else {
+            panic!()
+        };
+        for key in [
+            "sidebar_mode",
+            "sidebar_width",
+            "sidebar_collapsed",
+            "sidebar_hidden",
+        ] {
+            assert!(fixes.contains(&key.to_owned()));
+        }
+        fs::write(
+            dir.path().join("settings.json"),
+            serde_json::to_vec(
+                &serde_json::json!({"version":6,"sidebar_hidden":vec!["drive:/x";501]}),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(load(dir.path()).0.sidebar_hidden.len(), 500);
     }
 }

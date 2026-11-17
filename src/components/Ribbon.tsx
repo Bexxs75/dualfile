@@ -9,9 +9,10 @@ export function Ribbon() {
   const tr = useT();
   const bookmarks = useAppState((state) => state.settings.bookmarks);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const mode = useAppState(s => s.settings.sidebarMode ?? "full");
   const ordered = [...bookmarks].sort((a, b) => a.order - b.order);
   const noFocus = (event: { preventDefault(): void }) => event.preventDefault();
-  if (!ordered.length) return null;
+  if (mode !== "hidden" || !ordered.length) return null;
   return (
     <div className="ribbon" role="toolbar" aria-label={tr("bookmarks.title")}>
       {ordered.map((bookmark, index) => (

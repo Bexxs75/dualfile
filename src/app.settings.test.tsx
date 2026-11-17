@@ -16,7 +16,7 @@ const root = () => document.documentElement;
 
 describe("Lesezeichen", () => {
   test("Klick wechselt den Ordner des aktiven Fensters, das andere bleibt (Spiegeln aus)", async () => {
-    const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { bookmarks } });
+    const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { bookmarks, sidebarMode: "hidden" } });
     const ribbon = within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
     expect(ribbon.getByRole("button", { name: /Downloads/ })).toHaveTextContent("Alt+1");
     await app.user.click(ribbon.getByRole("button", { name: /Projekte/ }));
@@ -25,7 +25,7 @@ describe("Lesezeichen", () => {
   });
 
   test("Alt+1…9 öffnet Lesezeichen im aktiven Fenster", async () => {
-    const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { bookmarks } });
+    const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { bookmarks, sidebarMode: "hidden" } });
     await app.user.keyboard("{Tab}{Alt>}2{/Alt}");
     await waitFor(() => expect(pathOf(app, 1)).toBe(PROJEKTE));
     expect(pathOf(app, 0)).toBe(DOCS);
@@ -34,7 +34,7 @@ describe("Lesezeichen", () => {
   });
 
   test("anheften und lösen; Strg+D schaltet ebenfalls um", async () => {
-    const app = await setupApp({ left: DOCS });
+    const app = await setupApp({ left: DOCS, settings: { sidebarMode: "hidden" } });
     const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
     await app.user.click(within(app.pane(0)).getByRole("button", { name: "Ordner merken …" }));
     expect(ribbon().getByRole("button", { name: /^Dokumente/ })).toBeInTheDocument();
@@ -46,7 +46,7 @@ describe("Lesezeichen", () => {
   });
 
   test("Rechtsklick: Name und Farbe ändern, Lesezeichen lösen", async () => {
-    const app = await setupApp({ settings: { bookmarks } });
+    const app = await setupApp({ settings: { bookmarks, sidebarMode: "hidden" } });
     const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
     await app.user.pointer({ keys: "[MouseRight]", target: ribbon().getByRole("button", { name: /^Projekte/ }) });
     const dlg = app.dialog();
@@ -69,7 +69,7 @@ describe("Lesezeichen", () => {
   });
 
   test("Reihenfolge per Ziehen", async () => {
-    const app = await setupApp({ settings: { bookmarks } });
+    const app = await setupApp({ settings: { bookmarks, sidebarMode: "hidden" } });
     const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
     const first = ribbon().getByRole("button", { name: /^Downloads/ });
     const second = ribbon().getByRole("button", { name: /^Projekte/ });

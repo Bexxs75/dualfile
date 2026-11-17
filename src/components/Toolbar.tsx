@@ -64,6 +64,7 @@ export function Toolbar() {
   return <>
     <div className="bar header-toolbar bg-surface border-line" role="toolbar" aria-label={tr("ui.toolbar")}>
       <span className="brand text-muted"><Icon name="columns" />{tr("app.title")}</span>
+      {iconButton("sidebar", tr("sidebar.toggle"), tr("sidebar.toggle"), () => controller.command("toggleSidebar"), state.settings.sidebarMode !== "hidden")}
       {iconButton("hidden", tr("menu.view.hidden"), tr("tip.hidden"), () => controller.command("toggleHidden"), showHidden)}
       {iconButton("swap", tr("menu.view.swapPanes"), tr("tip.swapPanes"), () => controller.command("swapPanes"))}
       {iconButton("preview", tr("menu.view.quickView"), tr("tip.quickView"), () => controller.command("quickView"), quickView)}

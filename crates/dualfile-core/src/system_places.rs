@@ -409,7 +409,7 @@ pub fn discover(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
     }
     let mounted = mounts(paths);
     for place in &mut out {
-        if let Some(path) = match_mount(place, &mounted) {
+        if let Some(path) = match_mount(place, &mounted, &|p| p.is_dir()) {
             place.mounted_at = Some(path);
             if !place.sources.iter().any(|s| s == "mounted") {
                 place.sources.push("mounted".into());
@@ -422,9 +422,63 @@ pub fn discover(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
     out
 }
 pub fn mounts(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
+    mounts_with(paths, &dirs, &|path| path.is_dir())
+}
+/// Each directory read and existence probe owns a separate bounded slot. A path still
+/// executing after timeout is skipped until it returns; subsequent refreshes cannot pile up.
+pub fn mounts_bounded(
+    paths: &DiscoveryPaths,
+    pool: &crate::places_pool::Pool,
+    budget: std::time::Duration,
+) -> Vec<SystemPlace> {
+    probe_mounts(paths, pool, budget).0
+}
+/// The completion flag prevents a timed-out probe from being treated as an unmount.
+pub fn probe_mounts(
+    paths: &DiscoveryPaths,
+    pool: &crate::places_pool::Pool,
+    budget: std::time::Duration,
+) -> (Vec<SystemPlace>, bool) {
+    let complete = std::cell::Cell::new(true);
+    let until = std::time::Instant::now() + budget;
+    let deadline = || {
+        until
+            .saturating_duration_since(std::time::Instant::now())
+            .min(std::time::Duration::from_millis(100))
+    };
+    let mounts = mounts_with(
+        paths,
+        &|path| {
+            let p = path.to_owned();
+            let result = pool.run_keyed(p.to_string_lossy().into_owned(), deadline(), move || {
+                dirs(&p)
+            });
+            if result.is_none() {
+                complete.set(false);
+            }
+            result.unwrap_or_default()
+        },
+        &|path| {
+            let p = path.to_owned();
+            let result = pool.run_keyed(p.to_string_lossy().into_owned(), deadline(), move || {
+                p.is_dir()
+            });
+            if result.is_none() {
+                complete.set(false);
+            }
+            result.unwrap_or(false)
+        },
+    );
+    (mounts, complete.get())
+}
+fn mounts_with(
+    paths: &DiscoveryPaths,
+    dirs: &impl Fn(&Path) -> Vec<PathBuf>,
+    is_dir: &impl Fn(&Path) -> bool,
+) -> Vec<SystemPlace> {
     let mut out = Vec::new();
     for path in dirs(&paths.runtime.join("gvfs")) {
-        if !path.is_dir() {
+        if !is_dir(&path) {
             continue;
         }
         let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -495,7 +549,7 @@ pub fn mounts(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
                     scheme.file_name().unwrap().to_string_lossy(),
                     host.file_name().unwrap().to_string_lossy()
                 );
-                if host.is_dir() {
+                if is_dir(&host) {
                     if let Some(mut p) = parse_url(&url, "mounted", "") {
                         p.mounted_at = Some(host);
                         push(&mut out, Some(p));
@@ -508,9 +562,26 @@ pub fn mounts(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
 }
 /// Resolve descendants of a mount without trusting a persisted local path.
 pub fn mounted_path(place: &SystemPlace, paths: &DiscoveryPaths) -> Option<PathBuf> {
-    match_mount(place, &mounts(paths))
+    match_mount(place, &mounts(paths), &|p| p.is_dir())
 }
-fn match_mount(place: &SystemPlace, mounted: &[SystemPlace]) -> Option<PathBuf> {
+pub fn mounted_path_bounded(place: &SystemPlace, paths: &DiscoveryPaths) -> Option<PathBuf> {
+    let pool = crate::places_pool::mount_checks();
+    let mounted = mounts_bounded(paths, pool, std::time::Duration::from_millis(500));
+    match_mount(place, &mounted, &|path| {
+        let p = path.to_owned();
+        pool.run_keyed(
+            p.to_string_lossy().into_owned(),
+            std::time::Duration::from_millis(100),
+            move || p.is_dir(),
+        )
+        .unwrap_or(false)
+    })
+}
+fn match_mount(
+    place: &SystemPlace,
+    mounted: &[SystemPlace],
+    is_dir: &impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
     let scheme = |p: &SystemPlace| match p.scheme.as_str() {
         "webdav" | "dav" => "dav",
         "webdavs" | "davs" => "davs",
@@ -541,7 +612,7 @@ fn match_mount(place: &SystemPlace, mounted: &[SystemPlace]) -> Option<PathBuf> 
             }
             Some(p.mounted_at.as_ref()?.join(suffix.trim_start_matches('/')))
         })
-        .find(|p| p.is_dir())
+        .find(|p| is_dir(p))
 }
 
 #[cfg(test)]
@@ -564,6 +635,34 @@ mod tests {
             fs::create_dir_all(dir).unwrap();
         }
         (tmp, p)
+    }
+    #[test]
+    fn blocked_gvfs_probe_does_not_hide_kio_and_recovers_after_answer() {
+        let (_tmp, paths) = fixture();
+        let gvfs = paths.runtime.join("gvfs");
+        fs::create_dir_all(gvfs.join("smb-share:server=nas,share=team")).unwrap();
+        fs::create_dir_all(paths.runtime.join("kio-fuse-test/sftp/host")).unwrap();
+        let pool = crate::places_pool::Pool::new(2);
+        let (release, blocked) = std::sync::mpsc::channel();
+        pool.run_keyed(
+            gvfs.to_string_lossy().into_owned(),
+            std::time::Duration::from_millis(20),
+            move || blocked.recv().unwrap(),
+        );
+        let (mounts, complete) = probe_mounts(&paths, &pool, std::time::Duration::from_secs(1));
+        assert!(!complete);
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].host, "host");
+        release.send(()).unwrap();
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(1);
+        loop {
+            let (mounts, complete) = probe_mounts(&paths, &pool, std::time::Duration::from_secs(1));
+            if complete {
+                assert_eq!(mounts.len(), 2);
+                break;
+            }
+            assert!(std::time::Instant::now() < until);
+        }
     }
     #[test]
     fn smb_import_splits_share_and_folder_and_discards_password() {

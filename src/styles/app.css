@@ -574,3 +574,40 @@ html.editor-window-root body { padding: 0; }
   .settings-window .keys-row { grid-template-columns: minmax(0, 1fr) auto; }
   .settings-window .keys-actions { grid-column: 1 / -1; justify-content: flex-end; }
 }
+
+/* Shared places tree. Width belongs to the sidebar; panes retain their own grid. */
+.body-row { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.body-row > .panes { min-width: 0; }
+.sidebar { flex: none; position: relative; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); color: var(--fg); }
+.sidebar-tree { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; padding: 5px; }
+.sidebar-heading { display: flex; align-items: center; gap: 5px; width: 100%; min-height: 28px; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; text-align: left; }
+.sidebar-section + .sidebar-section { margin-top: 10px; }
+.sidebar-entry { position: relative; display: flex; gap: 8px; align-items: center; width: 100%; min-height: var(--rowh, 28px); padding: 5px 6px; border-radius: 4px; text-align: left; }
+.sidebar-entry:hover, .sidebar-entry:focus-visible { background: var(--panel2); }
+.sidebar-entry[aria-current] { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); box-shadow: inset 3px 0 var(--accent); }
+.sidebar-entry.unmounted, .sidebar-entry.place-hidden { opacity: .5; }
+.sidebar-entry .place-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-entry kbd, .place-markers { font-size: 9px; color: var(--muted); }
+.place-icon { position: relative; display: inline-flex; flex: none; }
+.place-state { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); top: -3px; right: -3px; }
+.place-state.mounted { background: #67b981; }
+.place-state.connecting, .place-state.automount { background: var(--warn); }
+.place-badge { position: absolute; bottom: -6px; right: -8px; background: var(--panel); border-radius: 2px; font-size: 8px; line-height: 10px; padding: 0 1px; }
+.place-space { position: absolute; height: 3px; bottom: 0; left: 6px; right: 6px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.place-space i { display: block; height: 100%; background: var(--accent); }
+.place-space.warning i { background: var(--warn); }
+.sidebar-icons .sidebar-tree { padding: 3px; }
+.sidebar-icons .sidebar-entry { justify-content: center; height: 34px; }
+.sidebar-icons .sidebar-heading { justify-content: center; min-height: 12px; }
+.rail-divider { width: 22px; height: 1px; background: var(--line); }
+.sidebar-expand, .sidebar-new { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 4px; border-top: 1px solid var(--line); color: var(--muted); }
+.sidebar-resizer { position: absolute; width: 6px; top: 0; bottom: 0; right: -4px; cursor: col-resize; touch-action: none; z-index: 2; }
+.sidebar-resizer:hover { background: var(--accent); opacity: .5; }
+.sidebar-tooltip { position: absolute; left: 100%; bottom: 35px; width: max-content; max-width: 360px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; box-shadow: 0 4px 16px #0005; z-index: 90; pointer-events: none; overflow-wrap: anywhere; }
+.sidebar-menu { position: fixed; z-index: 100; background: var(--panel); border: 1px solid var(--line); padding: 5px; box-shadow: 0 4px 16px #0005; }
+.sidebar-menu button { display: block; width: 100%; text-align: left; padding: 7px; }
+.sidebar-popover { position: fixed; left: 52px; z-index: 50; background: var(--panel); border: 1px solid var(--line); padding: 4px; }
+.sidebar-undo { position: absolute; bottom: 44px; left: 8px; min-width: 200px; padding: 8px; background: var(--panel2); border: 1px solid var(--line); z-index: 51; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.sidebar-popover { width: 210px; max-height: 60vh; overflow: auto; }
+.sidebar-icons .sidebar-popover .sidebar-entry { justify-content: flex-start; }

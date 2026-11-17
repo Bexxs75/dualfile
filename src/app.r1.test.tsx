@@ -29,7 +29,7 @@ test.each(["de", "en"] as const)("tools menu keyboard, wrap, activation and focu
 });
 
 test("panel pin toggles its own folder; empty bookmarks disappear; filter shortcut and panel switch", async () => {
-  const app = await setupApp({ left: DOCS, right: DOWNLOADS });
+  const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { sidebarMode: "hidden" } });
   expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
   expect(app.pane(0)).toHaveClass("active");
   expect(app.pane(1)).not.toHaveClass("active");

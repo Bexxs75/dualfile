@@ -20,6 +20,7 @@ describe("Standardtasten ohne Overrides", () => {
   it("jeder umbelegbare Befehl liegt auf seiner Standardtaste", () => {
     for (const command of REBINDABLE_COMMANDS) {
       const spec = REBINDABLE[command];
+      if (!spec) { expect(mapKey(k(spec))).toBeNull(); continue; }
       const parts = spec.split("+");
       const key = parts[parts.length - 1];
       const event = k(key, { ctrlKey: parts.includes("Ctrl"), shiftKey: parts.includes("Shift") });

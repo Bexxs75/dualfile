@@ -15,6 +15,7 @@ mod diagnostics;
 mod item_error;
 mod keychain;
 mod lanes;
+mod places;
 mod plans;
 mod plugins;
 mod regex_tools;
@@ -85,6 +86,10 @@ pub fn run() {
         .plugin(window_state::plugin())
         .setup(|app| {
             diagnostics::log_start();
+            window_state::initialize_backend();
+            let places = Arc::new(places::Places::default());
+            places::start(app.handle().clone(), places.clone());
+            app.manage(places);
             app.manage(Arc::new(settings_window::SettingsRelay::default()));
             // Title bar / task bar icon (X11 and XWayland; Wayland desktops take
             // it from the start-menu entry that matches the application id).
@@ -177,6 +182,11 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            places::places_snapshot,
+            places::places_space,
+            places::places_set_visible,
+            places::trash_open_system,
+            places::sidebar_resize_window,
             settings_window::settings_window_open,
             settings_window::settings_window_close,
             settings_window::settings_window_attach,
@@ -305,6 +315,7 @@ pub fn run() {
             if let Some(bridge) = handle.try_state::<Arc<ssh_prompt::SshPromptBridge>>() { bridge.close(); }
         }
         if let RunEvent::Exit = event {
+            handle.state::<Arc<places::Places>>().stop();
             if CONFIRMED_CLOSE.load(std::sync::atomic::Ordering::SeqCst) { return; }
             // Jobs get cancelled and clean up their temporary files; do not wait forever.
             if let Some(state) = handle.try_state::<Arc<AppState>>() {

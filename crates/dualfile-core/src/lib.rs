@@ -31,3 +31,7 @@ mod remote_tests;
 #[cfg(unix)]
 pub mod drives;
 pub mod system_places;
+
+pub mod fstab;
+pub mod places_pool;
+pub mod user_dirs;

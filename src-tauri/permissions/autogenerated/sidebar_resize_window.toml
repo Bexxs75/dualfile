@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-sidebar-resize-window"
+description = "Enables the sidebar_resize_window command without any pre-configured scope."
+commands.allow = ["sidebar_resize_window"]
+
+[[permission]]
+identifier = "deny-sidebar-resize-window"
+description = "Denies the sidebar_resize_window command without any pre-configured scope."
+commands.deny = ["sidebar_resize_window"]

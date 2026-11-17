@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppState, useController, useT } from "../../app/context";
 import type { TranslationKey } from "../../i18n";
-import { eventToSpec, REBINDABLE, REBINDABLE_COMMANDS, RESERVED_SPECS, type RebindableCommand } from "../../state/keymap";
+import { effectiveBindings, eventToSpec, REBINDABLE, REBINDABLE_COMMANDS, RESERVED_SPECS, type RebindableCommand } from "../../state/keymap";
 import { Shortcut } from "../Shortcut";
 
 type Notice = { kind: "reserved" } | { kind: "conflict"; command: RebindableCommand; spec: string; owner: RebindableCommand };
@@ -10,7 +10,7 @@ const cmdKey = (command: RebindableCommand) => `keys.cmd.${command}` as Translat
 
 /** Wirksame Taste eines Befehls: Override, sonst Standard. */
 export function effectiveSpec(command: RebindableCommand, bindings: Record<string, string> | undefined): string {
-  return bindings?.[command] ?? REBINDABLE[command];
+  return effectiveBindings(bindings)[command];
 }
 
 /** Abschnitt „Tastenkürzel“ der Einstellungen: Tastenfang, Konfliktprüfung, Zurücksetzen. */

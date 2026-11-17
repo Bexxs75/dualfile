@@ -171,6 +171,14 @@ export function SettingsPanel({ startTab }: { startTab?: import("../../ipc/types
       </div>
       <div className="settings" role="tabpanel" id="settings-panel" aria-labelledby={`settings-tab-${tab}`}>
         {tab === "appearance" && <>
+        <section className="settings-section" aria-label={tr("sidebar.title")}>
+          <h3>{tr("sidebar.title")}</h3>
+          <Segmented label={tr("sidebar.mode")} value={settings.sidebarMode ?? "full"} options={(["hidden", "icons", "full"] as const).map(value => ({ value, text: tr(`sidebar.${value}`) }))} onChange={sidebarMode => set({ sidebarMode })} />
+          <label className="fld"><span>{tr("sidebar.width")}</span><input type="number" min={160} max={400} value={settings.sidebarWidth ?? 210} onChange={e => { const n = Number(e.target.value); if (n >= 160 && n <= 400) set({ sidebarWidth: Math.round(n) }); }} /></label>
+          {(["places", "remote", "devices"] as const).map(id => <label className="fld" key={id}><span>{tr(id === "devices" ? "places.drives" : `sidebar.${id}`)}</span><input type="checkbox" checked={!(settings.sidebarCollapsed ?? []).includes(id)} onChange={e => set({ sidebarCollapsed: e.target.checked ? (settings.sidebarCollapsed ?? []).filter(v => v !== id) : [...(settings.sidebarCollapsed ?? []), id] })} /></label>)}
+          <button className="tb" disabled={!settings.sidebarHidden?.length} onClick={() => set({ sidebarHidden: [] })}>{tr("sidebar.resetHidden")}</button>
+          <p className="muted">{tr("sidebar.desktopHelp")}</p>
+        </section>
         <label className="fld"><span>{tr("settings.showParentEntry")}</span><input type="checkbox" checked={settings.showParentEntry !== false} onChange={event => set({ showParentEntry: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.extensionColumn")}</span><input type="checkbox" checked={settings.extensionColumn === true} onChange={event => set({ extensionColumn: event.target.checked })} /></label>
         <div className="fld"><span>{tr("settings.paneColors.title")}</span></div>

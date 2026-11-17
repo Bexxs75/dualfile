@@ -17,21 +17,31 @@ fn flags(wayland: bool) -> StateFlags {
 }
 
 #[cfg(target_os = "linux")]
-fn is_wayland() -> bool {
+fn detect_wayland() -> bool {
     use gtk::prelude::*;
     gtk::gdk::Display::default().is_some_and(|display| display.type_().name().contains("Wayland"))
 }
 
 #[cfg(not(target_os = "linux"))]
-fn is_wayland() -> bool {
+fn detect_wayland() -> bool {
     false
+}
+
+static WAYLAND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Setup has an initialized GTK display; async commands must not call GTK themselves.
+pub(crate) fn initialize_backend() {
+    WAYLAND.store(detect_wayland(), std::sync::atomic::Ordering::Relaxed);
+}
+pub(crate) fn is_wayland() -> bool {
+    WAYLAND.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// VISIBLE stays out of the flags: the tray-start logic decides whether the window shows.
 /// Only the main window is tracked, so editor or settings windows never overwrite its size.
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_window_state::Builder::default()
-        .with_state_flags(flags(is_wayland()))
+        .with_state_flags(flags(detect_wayland()))
         .with_filter(|label| label == "main")
         .build()
 }

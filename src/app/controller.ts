@@ -1,3 +1,4 @@
+import { buildPlaces, inside } from "../state/places";
 import { currentVersion, releaseNotes } from "../release-notes";
 import { selectReleaseVersions, seenVersionOnClose } from "../state/releaseNotes";
 import { formatJobPresentation } from "../state/jobPresentation";
@@ -91,6 +92,91 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   let unsubscribeEvents: (() => void) | null = null;
   let unsubscribeStore: (() => void) | null = null;
   let disposed = false;
+
+  let placesRequest: Promise<void> | null = null;
+  let placesAgain = false;
+  let lastVisibleMode: "icons" | "full" = "full";
+  let placesVisibility: boolean | null = null;
+  function sidebarVisible() { return (get().settings.sidebarMode ?? "full") !== "hidden" && (typeof document === "undefined" || document.visibilityState !== "hidden"); }
+  function syncPlacesVisibility() {
+    const visible = sidebarVisible();
+    if (placesVisibility === visible) return;
+    placesVisibility = visible;
+    void api.placesSetVisible(visible).catch(() => {});
+    if (visible) void refreshPlaces();
+  }
+  function refreshPlaces(): Promise<void> {
+    if (placesRequest) { placesAgain = true; return placesRequest; }
+    placesRequest = (async () => {
+      do {
+        placesAgain = false;
+        try {
+          const snapshot = await api.placesSnapshot();
+          if (disposed) return;
+          const old = get().places;
+          const mounted = (p: import("../ipc/types").PlacesSnapshot) => [...p.drives.filter(d => d.mounted !== false || d.fstab?.automount), ...p.networkMounts.filter(m => m.mountedAt).map(m => ({ path: m.mountedAt!, name: m.name }))];
+          const before = old ? mounted(old) : [], after = mounted(snapshot);
+          const removed = before.filter(d => !old?.drives.some(previous => previous.path === d.path && previous.fstab?.automount) && !after.some(n => n.path === d.path));
+          const added = old ? after.filter(d => !before.some(n => n.path === d.path)) : [];
+          const announcement = [...added.map(d => tr("sidebar.added", { name: d.name })), ...removed.map(d => tr("sidebar.removed", { name: d.name }))].join(". ");
+          dispatch({ type: "places", snapshot, announcement: announcement || get().placesAnnouncement });
+          let movedTabs = false;
+          for (const w of [0, 1] as const) {
+            const affected = (path: string) => removed.some(d => d.path !== "/" && inside(path, d.path));
+            const reloadActive = affected(activeTabOf(get(), w).path);
+            if (get().windows[w].tabs.some(t => affected(t.path))) {
+              movedTabs = true;
+              reqSeq[w]++;
+              dispatch({ type: "window", w, update: win => ({ ...win, tabs: win.tabs.map(t => affected(t.path) ? { ...t, path: get().home, back: [], forward: [], selection: sel.createSelection() } : t) }) });
+              if (reloadActive) void reload(w);
+            }
+          }
+          if (movedTabs) toast(tr("sidebar.removedHome"));
+        } catch { /* Keep the last complete snapshot when a filesystem misses its deadline. */ }
+      } while (placesAgain && !disposed);
+    })().finally(() => { placesRequest = null; });
+    return placesRequest;
+  }
+  function toggleSidebar() {
+    const mode = get().settings.sidebarMode ?? "full";
+    if (mode !== "hidden") lastVisibleMode = mode;
+    updateSettings(s => ({ ...s, sidebarMode: mode === "hidden" ? lastVisibleMode : "hidden" }));
+  }
+  function toggleSidebarIcons() {
+    const mode = get().settings.sidebarMode ?? "full";
+    lastVisibleMode = mode === "icons" ? "full" : "icons";
+    updateSettings(s => ({ ...s, sidebarMode: lastVisibleMode }));
+  }
+  function setSidebarWidth(width: number) {
+    updateSettings(s => ({ ...s, sidebarWidth: Math.max(160, Math.min(400, Math.round(width))), sidebarMode: "full" }));
+  }
+  function collapseSidebarSection(id: string, collapse: boolean) {
+    updateSettings(s => ({ ...s, sidebarCollapsed: collapse ? [...new Set([...(s.sidebarCollapsed ?? []), id])] : (s.sidebarCollapsed ?? []).filter(v => v !== id) }));
+  }
+  function hidePlace(key: string, hidden: boolean) {
+    if (key.startsWith("bookmark:")) return;
+    updateSettings(s => ({ ...s, sidebarHidden: hidden ? [...new Set([...(s.sidebarHidden ?? []), key])].slice(0, 500) : (s.sidebarHidden ?? []).filter(v => v !== key) }));
+  }
+  async function openPlace(key: string, target: "active" | "other" | "tab" = "active") {
+    const state = get();
+    const place = buildPlaces(state.places, state.connections, state.settings, state.home, true).flatMap(s => s.entries).find(e => e.key === key);
+    if (!place || place.state === "unmounted" || place.disabled) return;
+    if (key.startsWith("trash:")) { try { await api.trashOpenSystem(); } catch { toast(tr("sidebar.trashUnavailable"), "error"); } return; }
+    const w = target === "other" ? otherWindow(state.active) : state.active;
+    if (target === "tab") newTab(w);
+    if (place.profileId) {
+      const entry = state.connections.find(e => e.profile.id === place.profileId);
+      if (entry) await chooseConnection(w, entry.profile);
+    } else if (place.path) await navigatePlace(w, place.path);
+  }
+  function focusFileList() { document.querySelector<HTMLElement>(`[data-pane="${get().active}"] [role="grid"]`)?.focus(); }
+  function focusSidebar() {
+    if (get().settings.sidebarMode === "hidden") toggleSidebar();
+    later(() => document.querySelector<HTMLElement>('.sidebar [role="treeitem"][tabindex="0"]')?.focus(), 0);
+  }
+  const focusPlaces = () => { void refreshPlaces(); };
+  const visibilityPlaces = () => syncPlacesVisibility();
+  function pollPlaces() { if (disposed) return; if (sidebarVisible()) void refreshPlaces(); later(pollPlaces, 60000); }
 
   let connectionRequest = 0;
   async function refreshConnections(): Promise<void> {
@@ -840,6 +926,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const w = state.active;
     typeaheadState = createTypeahead();
     switch (cmd) {
+      case "toggleSidebar": return toggleSidebar();
+      case "toggleSidebarIcons": return toggleSidebarIcons();
+      case "focusSidebar": return focusSidebar();
       case "switchPane":
         return dispatch({ type: "active", w: otherWindow(w) });
       case "moveUp":
@@ -1012,6 +1101,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   function handleEvent(event: CoreEvent): void {
     if (disposed) return;
     switch (event.type) {
+      case "placesChanged": void refreshPlaces(); return;
       case "job": {
         // 9b exposes the job ID through events before undoRun resolves.
         if (event.status.name === "Rückgängig") {
@@ -1022,6 +1112,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         compareFeature.onJobEvent(event.status);
         const status = event.status;
         if (["done", "failed", "cancelled"].includes(status.state)) rememberedErrors.delete(status.id);
+        if (status.state === "done") void refreshPlaces();
         if (status.state === "done" && status.failed.length === 0) {
           later(() => dispatch({ type: "closeJob", id: status.id }), jobDismissMs);
         }
@@ -1159,6 +1250,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   }
 
   function onStoreChange(): void {
+    syncPlacesVisibility();
     const state = get();
     if (state.phase !== "ready") return;
     syncWatch();
@@ -1194,6 +1286,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       const [{ settings, outcome }, home] = await Promise.all([api.loadSettings(), api.homeDir()]);
       if (disposed) return;
       dispatch({ type: "init", settings, outcome, home });
+      lastVisibleMode = settings.sidebarMode === "icons" ? "icons" : "full";
+      syncPlacesVisibility();
+      window.addEventListener("focus", focusPlaces);
+      document.addEventListener("visibilitychange", visibilityPlaces);
+      later(pollPlaces, 60000);
+      await refreshPlaces();
       lastSaved = currentSnapshot();
       lastSettingsRef = get().settings;
       lastWindows = get().windows;
@@ -1216,6 +1314,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   function dispose(): void {
     if (saveTimer !== null) void saveNow();
     disposed = true;
+    window.removeEventListener("focus", focusPlaces);
+    document.removeEventListener("visibilitychange", visibilityPlaces);
+    void api.placesSetVisible(false).catch(() => {});
     [...jobWaiters].forEach((cancel) => cancel());
     unsubscribeEvents?.();
     unsubscribeUndo?.();
@@ -1229,6 +1330,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     ...compareFeature,
     api,
     refreshConnections,
+    refreshPlaces, openPlace, toggleSidebar, toggleSidebarIcons, setSidebarWidth, collapseSidebarSection, hidePlace, focusSidebar, focusFileList,
+    setSidebarFocus: (key: string | null) => dispatch({ type: "sidebarFocus", key }),
     openConnectionEditor,
     openSettings,
     disconnectConnection: async (profileId: string): Promise<void> => {

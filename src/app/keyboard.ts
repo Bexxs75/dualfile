@@ -1,10 +1,13 @@
 import { useEffect } from "react";
-import { mapKey, type KeyContext } from "../state/keymap";
+import { mapKey, type KeyContext, type Command } from "../state/keymap";
 import type { Controller } from "./controller";
 import type { AppStore } from "./controller";
 import { activeTabOf } from "./state";
 import { isModalOpen } from "../components/Modal";
 
+type GlobalAction = "palette" | "connections" | "settings" | "filter" | "pin" | "undoHistory";
+export const SIDEBAR_COMMANDS = new Set<Command | GlobalAction>(["palette", "connections", "settings", "filter", "pin", "undo", "undoHistory", "toggleSidebar", "toggleSidebarIcons", "focusSidebar", "switchPane", "newTab", "closeTab", "nextTab", "prevTab", "pathInput", "refresh", "toggleHidden", "swapPanes", "terminal", "quickView", "bookmark1", "bookmark2", "bookmark3", "bookmark4", "bookmark5", "bookmark6", "bookmark7", "bookmark8", "bookmark9"]);
+const CTRL_ACTIONS: Partial<Record<string, GlobalAction | "undo">> = { k: "palette", p: "palette", n: "connections", ",": "settings", f: "filter", d: "pin", z: "undo" };
 const INPUT_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
 /**
@@ -24,6 +27,16 @@ export function useGlobalKeys(store: AppStore, controller: Controller): void {
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) return;
       if (target?.closest(".terminal-panel")) return;
+      if (target?.closest(".sidebar")) {
+        const command = mapKey(event, "list", state.settings.keybindings);
+        const plainCtrl = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+        const global: GlobalAction | "undo" | undefined = plainCtrl
+          ? CTRL_ACTIONS[event.key.toLowerCase()]
+          : !event.altKey && event.ctrlKey !== event.metaKey && event.key.toLowerCase() === "z" ? (event.shiftKey ? "undoHistory" : "undo") : undefined;
+        const action = global ?? command;
+        if (!action || !SIDEBAR_COMMANDS.has(action)) return;
+        if (!global && command) { event.preventDefault(); controller.command(command); if (command === "switchPane") controller.focusFileList(); return; }
+      }
       const typing = target !== null && (INPUT_TAGS.has(target.tagName) || target.isContentEditable);
       const context: KeyContext = typing ? "input" : "list";
       // Ein fokussierter Knopf löst sich mit Enter/Leertaste selbst aus.

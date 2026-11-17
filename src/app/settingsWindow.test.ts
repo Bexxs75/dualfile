@@ -233,3 +233,12 @@ test("missing main bridge times out a native close and a late snapshot cannot re
   expect(close.mock.calls.every(call => call[3] === true)).toBe(true);
   await client.forceClose(); expect(close).toHaveBeenLastCalledWith("s1", 0, true);
 });
+
+test("main bridge merges sidebar patches and publishes main sidebar changes", async () => {
+  const b = await bridge();
+  b.receive({ session: "s1", seq: 1, kind: "patch", patch: { sidebarMode: "icons", sidebarWidth: 260, sidebarHidden: ["drive:/data"], sidebarCollapsed: ["devices"] } });
+  await tick();
+  expect(b.runtime.store.getState().settings).toMatchObject({ sidebarMode: "icons", sidebarWidth: 260, sidebarHidden: ["drive:/data"], sidebarCollapsed: ["devices"] });
+  b.runtime.controller.toggleSidebar(); await tick();
+  expect(b.push.mock.lastCall![0].settings.sidebarMode).toBe("hidden"); b.stop();
+});

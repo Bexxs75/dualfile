@@ -211,6 +211,19 @@ fn settings_path(text: &str) -> bool {
 
 /// Checks settings coming from the UI before they are written (the core only repairs on load).
 pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
+    if !["hidden", "icons", "full"].contains(&s.sidebar_mode.as_str())
+        || !(160..=400).contains(&s.sidebar_width)
+        || s.sidebar_collapsed.len() > 8
+        || s.sidebar_collapsed
+            .iter()
+            .any(|v| !dualfile_core::settings::SIDEBAR_SECTIONS.contains(&v.as_str()))
+        || s.sidebar_hidden.len() > 500
+        || s.sidebar_hidden
+            .iter()
+            .any(|v| !dualfile_core::settings::valid_sidebar_key(v))
+    {
+        return Err(bad_settings("sidebar"));
+    }
     if s.last_seen_version
         .as_deref()
         .is_some_and(|v| !dualfile_core::settings::valid_seen_version(v))
@@ -513,6 +526,10 @@ mod tests {
 
     fn settings() -> SettingsDto {
         SettingsDto {
+            sidebar_mode: "full".into(),
+            sidebar_width: 210,
+            sidebar_collapsed: vec![],
+            sidebar_hidden: vec![],
             version: 1,
             verify_policy: Default::default(),
             theme: "schiefer".into(),
@@ -672,5 +689,34 @@ mod smb_tests {
             Scheme::Webdav
         );
         assert!(parse_path("webdav:id!/../folder", home).is_err());
+    }
+}
+
+#[cfg(test)]
+mod sidebar_validation_tests {
+    use super::*;
+    #[test]
+    fn sidebar_ui_fields_are_strictly_validated() {
+        let mut s = SettingsDto::from(&dualfile_core::settings::Settings::default());
+        assert!(validate_settings(&s).is_ok());
+        s.sidebar_mode = "other".into();
+        assert!(validate_settings(&s).is_err());
+        s.sidebar_mode = "icons".into();
+        s.sidebar_width = 401;
+        assert!(validate_settings(&s).is_err());
+        s.sidebar_width = 160;
+        s.sidebar_collapsed = vec!["unknown".into()];
+        assert!(validate_settings(&s).is_err());
+        s.sidebar_collapsed = vec!["places".into()];
+        for keys in [
+            vec!["drive:/x".into(); 501],
+            vec!["unknown:/x".into()],
+            vec!["drive:/a\0b".into()],
+        ] {
+            s.sidebar_hidden = keys;
+            assert!(validate_settings(&s).is_err());
+        }
+        s.sidebar_hidden = vec!["drive:/data".into()];
+        assert!(validate_settings(&s).is_ok());
     }
 }

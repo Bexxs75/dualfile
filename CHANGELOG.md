@@ -7,6 +7,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Added
 
+- Read-only places sidebar with live mounts, XDG folders, bookmarks, connections, local free space, icon rail, keyboard navigation and synchronized sidebar settings. F9 shows/hides it; Shift+F9 switches icons/full without replacing existing bindings. Floating windows grow with the sidebar where the compositor permits. GVfs/KIO mounts whose local paths contain sign-in information appear with redacted labels but remain display-only until opaque-key navigation is available.
+
 - **What’s new after an update:** a German or English dialog shows bundled release notes once, with skipped versions grouped newest first. Close it to acknowledge, or reopen the current notes through Tools or the command palette. Fresh installations stay quiet; downgrades preserve the last acknowledged version.
 
 - **Dualfile remembers the size and position of its main window.** The next start opens the window as you left it, including the maximized state. On Wayland desktops only the size and the maximized state are restored: applications cannot read or set their window position there, so the compositor places the window (KDE can remember it with a window rule). On X11 the position is restored too. Other windows (such as the connection editor) are not remembered.

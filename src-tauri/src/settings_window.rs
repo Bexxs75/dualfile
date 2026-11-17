@@ -235,6 +235,15 @@ struct SettingsProjection {
     check_updates_on_start: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     keybindings: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_width: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_collapsed: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_hidden: Option<Vec<String>>,
+
     last_update_check: Option<String>,
 }
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -276,6 +285,14 @@ pub struct SettingsPatch {
     check_updates_on_start: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     keybindings: Option<std::collections::BTreeMap<String, String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_width: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_collapsed: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_hidden: Option<Vec<String>>,
 }
 impl SettingsPatch {
     fn validate(&self) -> Result<(), UiError> {
@@ -331,6 +348,18 @@ impl SettingsPatch {
         }
         if let Some(value) = &self.check_updates_on_start {
             settings.check_updates_on_start = *value;
+        }
+        if let Some(value) = &self.sidebar_mode {
+            settings.sidebar_mode = value.clone();
+        }
+        if let Some(value) = &self.sidebar_width {
+            settings.sidebar_width = *value;
+        }
+        if let Some(value) = &self.sidebar_collapsed {
+            settings.sidebar_collapsed = value.clone();
+        }
+        if let Some(value) = &self.sidebar_hidden {
+            settings.sidebar_hidden = value.clone();
         }
         if let Some(value) = &self.keybindings {
             settings.keybindings = value.clone();
@@ -896,6 +925,10 @@ mod tests {
             "trayEnabled",
             "checkUpdatesOnStart",
             "lastUpdateCheck",
+            "sidebarMode",
+            "sidebarWidth",
+            "sidebarCollapsed",
+            "sidebarHidden",
             "keybindings",
         ];
         let mut projection = json!({});

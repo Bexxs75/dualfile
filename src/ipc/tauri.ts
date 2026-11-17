@@ -209,6 +209,11 @@ export function createTauriApi(): DualfileApi {
     pluginColumns: (paths, columnIds) => call("plugin_columns", { paths, columnIds }),
     pluginPreview: (path, pluginId) => call("plugin_preview", { path, pluginId: pluginId ?? null }),
 
+    placesSnapshot: () => call("places_snapshot"),
+    placesSpace: path => call("places_space", { path }),
+    placesSetVisible: visible => call("places_set_visible", { visible }),
+    trashOpenSystem: () => call("trash_open_system"),
+    sidebarResizeWindow: delta => call("sidebar_resize_window", { delta }),
     localDrives: () => call("local_drives"),
     systemPlacesList: () => call("system_places_list"),
     systemPlacesImport: (urls) => call("system_places_import", { urls }),
