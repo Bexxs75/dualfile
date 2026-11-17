@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-fstab-mount"
+description = "Enables the fstab_mount command without any pre-configured scope."
+commands.allow = ["fstab_mount"]
+
+[[permission]]
+identifier = "deny-fstab-mount"
+description = "Denies the fstab_mount command without any pre-configured scope."
+commands.deny = ["fstab_mount"]

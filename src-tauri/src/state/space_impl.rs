@@ -17,7 +17,7 @@ impl AppState {
             self.submit_job_titled(
                 "Platzbelegung".into(),
                 JobTitleDto::new("space", "", 0),
-                vec![],
+                JobPaths::read(vec![path.to_string_lossy().into_owned()]),
                 move |_| {
                     Box::new(move |job| {
                         let result = usage::measure_usage(
@@ -82,7 +82,12 @@ impl AppState {
             self.submit_job_titled(
                 "Duplikate finden".into(),
                 JobTitleDto::new("dupes", "", 0),
-                vec![],
+                JobPaths::read(
+                    roots
+                        .iter()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect(),
+                ),
                 move |_| {
                     Box::new(move |job| {
                         let result = dupes::find_duplicates(
@@ -215,7 +220,7 @@ impl AppState {
                     report
                 })
             },
-        );
+        )?;
         Ok(TrashResultDto { job_id, skipped })
     }
 }

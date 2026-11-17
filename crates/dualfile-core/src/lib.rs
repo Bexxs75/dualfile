@@ -35,3 +35,6 @@ pub mod system_places;
 pub mod fstab;
 pub mod places_pool;
 pub mod user_dirs;
+
+#[cfg(target_os = "linux")]
+pub mod trash_empty;

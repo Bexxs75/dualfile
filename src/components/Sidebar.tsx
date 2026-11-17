@@ -67,12 +67,14 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
     window.addEventListener("resize", measure);
     return () => { mounted.current = false; clearTimeout(timer); observer?.disconnect(); window.removeEventListener("resize", measure); };
   }, []);
-  const effective = shown === 0 ? "hidden" : shown === 44 ? "icons" : "full";
+  const effective = mode === "hidden" || shown === 0 ? "hidden" : shown === 44 ? "icons" : "full";
   return <div className="body-row" ref={root}><Sidebar mode={effective} width={shown || width} /><div className="panes">{children}</div><span className="sr-only" role="status" aria-live="polite">{tr("sidebar.title")}: {tr(`sidebar.${effective}`)}</span></div>;
 }
 
 export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; width: number }) {
   const state = useAppState(s => s), controller = useController(), tr = useT();
+  const [bookmarkDrag, setBookmarkDrag] = useState<number | null>(null);
+  const [dropKey, setDropKey] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [popover, setPopover] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ key?: string; x: number; y: number } | null>(null);
@@ -112,7 +114,7 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
     const node = [...(tree.current?.querySelectorAll<HTMLElement>("[data-place-key]") ?? [])].find(n => n.dataset.placeKey === key);
     node?.focus();
   }
-  function context(key: string | undefined, x: number, y: number) { hideTooltip(); setMenu({ key, x: Math.min(x, window.innerWidth - 240), y: Math.min(y, window.innerHeight - 110) }); }
+  function context(key: string | undefined, x: number, y: number) { hideTooltip(); setMenu({ key, x: Math.min(x, window.innerWidth - 240), y: Math.max(8, Math.min(y, window.innerHeight - 420)) }); }
   function onKey(event: KeyboardEvent) {
     const index = rows.findIndex(r => r.key === focusKey), row = rows[index];
     if (!row) return;
@@ -140,16 +142,35 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
   }
   if (mode === "hidden") return null;
   const menuEntry = entries.find(e => e.key === menu?.key);
+  const orderedBookmarks = [...state.settings.bookmarks].sort((a, b) => a.order - b.order);
+  function bookmarkDrop(index: number) {
+    if (bookmarkDrag !== null) controller.moveBookmark(bookmarkDrag, Math.min(index > bookmarkDrag ? index - 1 : index, orderedBookmarks.length - 1));
+    else controller.pinDraggedBookmark(index);
+    setBookmarkDrag(null); setDropKey(null);
+  }
+  function gap(index: number) {
+    return <div role="none" className={`sidebar-bookmark-gap ${dropKey === `gap:${index}` ? "drop-over" : ""}`} aria-label={tr("sidebar.pinHere")}
+      onDragOver={e => { if (state.drag || bookmarkDrag !== null) { e.preventDefault(); e.stopPropagation(); setDropKey(`gap:${index}`); } }}
+      onDragLeave={() => setDropKey(null)} onDrop={e => { e.preventDefault(); e.stopPropagation(); bookmarkDrop(index); }} />;
+  }
   function entryNode(entry: Place, inPopover = false) {
     const used = entry.space?.total ? 1 - entry.space.available / entry.space.total : null;
+    const bookmarkIndex = orderedBookmarks.findIndex(b => `bookmark:${b.path}` === entry.key);
     return <div role="none" className="sidebar-entry-wrap" key={entry.key}>
+      {bookmarkIndex >= 0 && gap(bookmarkIndex)}
       <button type="button" role="treeitem" aria-level={2} data-place-key={entry.key} tabIndex={entry.key === focusKey ? 0 : -1}
         aria-current={(state.active === 0 ? left : right) === entry.key ? "location" : undefined}
-        aria-disabled={entry.state === "unmounted" || entry.disabled} aria-label={description(entry)} aria-describedby={tooltip?.key === entry.key ? tipId : undefined}
-        className={`sidebar-entry ${entry.hidden ? "place-hidden" : ""} ${entry.state === "unmounted" || entry.disabled ? "unmounted" : ""}`}
+        aria-disabled={(entry.state === "unmounted" && !entry.canMount) || entry.disabled} aria-label={description(entry)} aria-describedby={tooltip?.key === entry.key ? tipId : undefined}
+        className={`sidebar-entry ${state.drag ? "drop-target" : ""} ${dropKey === entry.key ? "drop-over" : ""} ${entry.hidden ? "place-hidden" : ""} ${entry.state === "unmounted" || entry.disabled ? "unmounted" : ""}`}
         onFocus={() => { controller.setSidebarFocus(entry.key); showTooltip(entry); }} onBlur={hideTooltip} onMouseEnter={() => showTooltip(entry)} onMouseLeave={hideTooltip}
         onClick={event => void controller.openPlace(entry.key, event.ctrlKey ? "other" : "active")}
         onAuxClick={event => { if (event.button === 1) { event.preventDefault(); void controller.openPlace(entry.key, "tab"); } }}
+        draggable={bookmarkIndex >= 0}
+        onDragStart={event => { if (bookmarkIndex >= 0) { controller.dragEnd(); setBookmarkDrag(bookmarkIndex); event.dataTransfer?.setData("application/x-dualfile-bookmark", String(bookmarkIndex)); } }}
+        onDragEnd={() => { setBookmarkDrag(null); setDropKey(null); controller.dragEnd(); }}
+        onDragOver={event => { if (state.drag || (bookmarkDrag !== null && bookmarkIndex >= 0)) { event.preventDefault(); setDropKey(entry.key); } }}
+        onDragLeave={() => setDropKey(null)}
+        onDrop={event => { event.preventDefault(); event.stopPropagation(); setDropKey(null); if (bookmarkDrag !== null && bookmarkIndex >= 0) { controller.moveBookmark(bookmarkDrag, bookmarkIndex); setBookmarkDrag(null); } else controller.dropOnPlace(entry.key, event.shiftKey); }}
         onContextMenu={event => { event.preventDefault(); context(entry.key, event.clientX, event.clientY); }}>
         <span className="place-icon" style={entry.color ? { color: entry.color } : undefined}><Icon name={entry.icon} />
           {mode === "icons" && !inPopover && !entry.color && <small className="place-badge">{entry.badge}</small>}
@@ -158,6 +179,7 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
         {(mode === "full" || inPopover) && <><span className="place-name">{label(entry)}</span>{entry.hint && <kbd>Alt+{entry.hint}</kbd>}<span className="place-markers">{left === entry.key ? "L" : ""}{right === entry.key ? "R" : ""}</span></>}
         {used !== null && <span className={`place-space ${used > .9 ? "warning" : ""}`} aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, used * 100))}%` }} /></span>}
       </button>
+      {bookmarkIndex === orderedBookmarks.length - 1 && bookmarkIndex >= 0 && gap(orderedBookmarks.length)}
     </div>;
   }
   return <nav className={`sidebar sidebar-${mode}`} aria-label={tr("sidebar.places")} style={{ width: mode === "icons" ? 44 : width }}>
@@ -166,8 +188,10 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
         const closed = collapsed.includes(section.id), expanded = !closed || popover === section.id;
         return <div role="none" className="sidebar-section" key={section.id}>
           <button role="treeitem" type="button" aria-level={1} aria-expanded={expanded} aria-owns={expanded ? `${tipId}-${section.id}` : undefined} aria-label={tr(section.label)}
-            data-place-key={section.id} tabIndex={focusKey === section.id ? 0 : -1} className="sidebar-heading"
+            data-place-key={section.id} tabIndex={focusKey === section.id ? 0 : -1} className={`sidebar-heading ${dropKey === "places" ? "drop-over" : ""}`}
             onFocus={() => controller.setSidebarFocus(section.id)} onClick={() => { if (mode === "icons" && closed) setPopover(popover === section.id ? null : section.id); else controller.collapseSidebarSection(section.id, !closed); }}
+            onDragOver={e => { if (section.id === "places" && (state.drag || bookmarkDrag !== null)) { e.preventDefault(); setDropKey("places"); } }}
+            onDrop={e => { if (section.id === "places") { e.preventDefault(); bookmarkDrop(orderedBookmarks.length); } }}
             onContextMenu={e => { e.preventDefault(); context(undefined, e.clientX, e.clientY); }}>
             {mode === "full" ? <><Icon name={expanded ? "down" : "right"} size={12} />{tr(section.label)}</> : closed ? "…" : <span className="rail-divider" />}
           </button>
@@ -193,7 +217,37 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
         target.addEventListener("pointermove", move); target.addEventListener("pointerup", finish); target.addEventListener("pointercancel", cancel);
       }} />
     {tooltip && <div className="sidebar-tooltip" id={tipId} role="tooltip">{description(tooltip)}</div>}
-    {menu && <div ref={menuRef} className="sidebar-menu" role="menu" style={{ left: menu.x, top: menu.y }} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMenu(null); }} onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); setMenu(null); focus(focusKey); } }}>
+    {menu && <div ref={menuRef} className="sidebar-menu" role="menu" style={{ left: menu.x, top: menu.y }} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMenu(null); }} onKeyDown={e => {
+      if (e.key === "Escape") { e.preventDefault(); setMenu(null); focus(focusKey); }
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+        e.preventDefault(); const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>("button")];
+        const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+        buttons[e.key === "Home" ? 0 : e.key === "End" ? buttons.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
+      }
+    }}>
+      {menuEntry && <>
+        {!menuEntry.disabled && <>
+          <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key); setMenu(null); }}>{tr("context.open")}</button>
+          {!menuEntry.key.startsWith("trash:") && <>
+            <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key, "other"); setMenu(null); }}>{tr("sidebar.openOther")}</button>
+            <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key, "tab"); setMenu(null); }}>{tr("sidebar.openTab")}</button>
+          </>}
+        </>}
+        {menuEntry.key.startsWith("bookmark:") && <>
+          <button role="menuitem" onClick={() => { controller.openDialog({ kind: "bookmark", path: menuEntry.path! }); setMenu(null); }}>{tr("sidebar.edit")}</button>
+          <button role="menuitem" onClick={() => { const b = orderedBookmarks.find(b => b.path === menuEntry.path); if (b) setRemovedBookmark(b); controller.unpinBookmark(menuEntry.path!); setMenu(null); }}>{tr("sidebar.removeBookmark")}</button>
+        </>}
+        {menuEntry.profileId && <>
+          {(menuEntry.state === "disconnected" || state.connections.find(e => e.profile.id === menuEntry.profileId)?.profile.protocol !== "system") && <button role="menuitem" onClick={() => { if (menuEntry.state === "disconnected") void controller.openPlace(menuEntry.key); else void controller.disconnectConnection(menuEntry.profileId!); setMenu(null); }}>{tr(menuEntry.state === "disconnected" ? "sidebar.connect" : "sidebar.disconnect")}</button>}
+          <button role="menuitem" onClick={() => { void controller.openConnectionEditor(state.connections.find(e => e.profile.id === menuEntry.profileId)?.profile); setMenu(null); }}>{tr("sidebar.edit")}</button>
+        </>}
+        {menuEntry.canMount && <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key); setMenu(null); }}>{tr("sidebar.mount")}</button>}
+        {menuEntry.canUnmount && <button role="menuitem" onClick={() => { void controller.unmountPlace(menuEntry.key); setMenu(null); }}>{tr("sidebar.unmount")}</button>}
+        {menuEntry.canSave && <button role="menuitem" onClick={() => { void controller.savePlaceConnection(menuEntry.key); setMenu(null); }}>{tr("sidebar.saveConnection")}</button>}
+        {menuEntry.key.startsWith("trash:") && <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" }); setMenu(null); }}>{tr("sidebar.emptyTrash")}</button>}
+        {menuEntry.path && <button role="menuitem" onClick={() => { void navigator.clipboard.writeText(menuEntry.path!).catch(() => controller.toast(tr("error.io"), "error")); setMenu(null); }}>{tr("sidebar.copyPath")}</button>}
+        <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeProperties", key: menuEntry.key }); setMenu(null); }}>{tr("context.properties")}</button>
+      </>}
       {menuEntry && !menuEntry.key.startsWith("bookmark:") && <button role="menuitem" onClick={() => { controller.hidePlace(menuEntry.key, !menuEntry.hidden); setMenu(null); focus(menuEntry.key); }}>{tr(menuEntry.hidden ? "sidebar.showAgain" : "sidebar.hideEntry")}</button>}
       <button role="menuitemcheckbox" aria-checked={showHidden} onClick={() => { setShowHidden(!showHidden); setMenu(null); focus(focusKey); }}>{tr("sidebar.showHidden")}</button>
     </div>}

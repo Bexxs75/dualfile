@@ -30,6 +30,9 @@ export interface Toast {
 export type JobKind = "copy" | "move" | "trash" | "delete" | "rename" | "extract" | "pack" | "compare" | "sync" | "undo";
 
 export type Dialog =
+  | { kind: "placeConfirm"; action: "mount" | "unmount" | "emptyTrash"; busy?: boolean; key?: string }
+  | { kind: "trashConfirm"; paths: string[] }
+  | { kind: "placeProperties"; key: string }
   | { kind: "whatsNew"; versions: readonly string[] }
   | { kind: "history" }
   | { kind: "connections"; entry?: { action: "import" | "system" | "connect" | "disconnect"; profile?: import("../ipc/types").ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }

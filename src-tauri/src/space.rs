@@ -58,7 +58,10 @@ impl<T> Default for ScanStore<T> {
 }
 impl<T> ScanStore<T> {
     // Submission holds this lock until the job id is installed, including queued jobs.
-    pub fn start(&self, submit: impl FnOnce(Arc<Mutex<Slot<T>>>) -> u64) -> Result<u64, UiError> {
+    pub fn start(
+        &self,
+        submit: impl FnOnce(Arc<Mutex<Slot<T>>>) -> Result<u64, UiError>,
+    ) -> Result<u64, UiError> {
         let mut slots = self.slots.lock().unwrap();
         if slots.len() >= 2 {
             return Err(UiError::new(
@@ -67,7 +70,7 @@ impl<T> ScanStore<T> {
             ));
         }
         let slot = Arc::new(Mutex::new(Slot::default()));
-        let id = submit(slot.clone());
+        let id = submit(slot.clone())?;
         slots.insert(id, slot);
         Ok(id)
     }
@@ -478,15 +481,15 @@ mod tests {
         store
             .start(|slot| {
                 worker = Some(slot);
-                1
+                Ok(1)
             })
             .unwrap();
-        store.start(|_| 2).unwrap();
-        assert_eq!(store.start(|_| 3).unwrap_err().kind, "invalidInput");
+        store.start(|_| Ok(2)).unwrap();
+        assert_eq!(store.start(|_| Ok(3)).unwrap_err().kind, "invalidInput");
         store.close(1).unwrap();
         worker.unwrap().lock().unwrap().result = Some(7);
         assert!(store.get(1).is_err());
-        store.start(|_| 3).unwrap();
+        store.start(|_| Ok(3)).unwrap();
     }
     #[test]
     fn untrusted_keeper_and_repeated_group_rejected() {

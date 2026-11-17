@@ -55,7 +55,7 @@ impl AppState {
         let dirs = lock(&self.undo_dirs).get(&id).cloned().unwrap_or_default();
         let result = Arc::new(Mutex::new(None));
         let output = result.clone();
-        let job_id = self.submit_job("Rückgängig".into(), dirs, move |_| {
+        let submission = self.submit_job("Rückgängig".into(), dirs, move |_| {
             Box::new(move |job| {
                 let result = UndoResultDto::from_report(journal.undo(id, &LocalVfs, job));
                 if result.done > 0 {
@@ -83,6 +83,19 @@ impl AppState {
                 report
             })
         });
+        let job_id = match submission {
+            Ok(id) => id,
+            Err(_) => {
+                return UndoResultDto {
+                    ok: false,
+                    done: 0,
+                    remaining: 0,
+                    errors: vec!["io"],
+                    cancelled: false,
+                    job_id: 0,
+                }
+            }
+        };
         let status = self.jobs.wait(job_id);
         let mut answer = lock(&result).take().unwrap_or_else(|| UndoResultDto {
             ok: false,

@@ -93,6 +93,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   let unsubscribeStore: (() => void) | null = null;
   let disposed = false;
 
+  const unmounting = new Set<string>();
   let placesRequest: Promise<void> | null = null;
   let placesAgain = false;
   let lastVisibleMode: "icons" | "full" = "full";
@@ -122,12 +123,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
           dispatch({ type: "places", snapshot, announcement: announcement || get().placesAnnouncement });
           let movedTabs = false;
           for (const w of [0, 1] as const) {
-            const affected = (path: string) => removed.some(d => d.path !== "/" && inside(path, d.path));
+            const affected = (path: string) => removed.some(d => d.path !== "/" && !unmounting.has(d.path) && inside(path, d.path));
             const reloadActive = affected(activeTabOf(get(), w).path);
             if (get().windows[w].tabs.some(t => affected(t.path))) {
               movedTabs = true;
               reqSeq[w]++;
-              dispatch({ type: "window", w, update: win => ({ ...win, tabs: win.tabs.map(t => affected(t.path) ? { ...t, path: get().home, back: [], forward: [], selection: sel.createSelection() } : t) }) });
+              dispatch({ type: "window", w, update: win => ({ ...win, tabs: win.tabs.map(t => affected(t.path) ? tabs.createTab(get().home, t.sort) : t) }) });
               if (reloadActive) void reload(w);
             }
           }
@@ -160,14 +161,130 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   async function openPlace(key: string, target: "active" | "other" | "tab" = "active") {
     const state = get();
     const place = buildPlaces(state.places, state.connections, state.settings, state.home, true).flatMap(s => s.entries).find(e => e.key === key);
-    if (!place || place.state === "unmounted" || place.disabled) return;
+    if (!place || place.disabled || isUnmountBusy()) return;
+    if (place.state === "unmounted") {
+      if (!place.canMount || !place.path) return;
+      dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "mount", key, busy: true } });
+      try { await api.fstabMount(place.path); await refreshPlaces(); }
+      catch (error) { placeFailure(error); return; }
+      finally { dispatch({ type: "dialog", dialog: null }); }
+    }
     if (key.startsWith("trash:")) { try { await api.trashOpenSystem(); } catch { toast(tr("sidebar.trashUnavailable"), "error"); } return; }
     const w = target === "other" ? otherWindow(state.active) : state.active;
-    if (target === "tab") newTab(w);
+    if (target === "tab") {
+      newTab(w);
+      dispatch({ type: "window", w, update: win => ({ ...win, tabs: win.tabs.map((t, i) => i === win.activeTab ? { ...t, lockRoot: undefined } : t) }) });
+    }
     if (place.profileId) {
       const entry = state.connections.find(e => e.profile.id === place.profileId);
       if (entry) await chooseConnection(w, entry.profile);
     } else if (place.path) await navigatePlace(w, place.path);
+  }
+  function findPlace(key: string) {
+    const s = get();
+    return buildPlaces(s.places, s.connections, s.settings, s.home, true).flatMap(section => section.entries).find(e => e.key === key);
+  }
+  function readOnlyPlace(path: string) {
+    return get().places?.drives.filter(d => inside(path, d.path)).sort((a, b) => b.path.length - a.path.length)[0]?.readOnly === true;
+  }
+  function unmountedPlace(path: string) {
+    if (parseRemotePath(path) || isArchivePath(path)) return false;
+    const drive = get().places?.drives.filter(d => inside(path, d.path)).sort((a, b) => b.path.length - a.path.length)[0];
+    return drive?.mounted === false && !drive.fstab?.automount;
+  }
+  function placeFailure(error: unknown) {
+    const code = error instanceof CoreError ? error.kind : "notPermitted";
+    const keys = { busy: "sidebar.errorBusy", notPermitted: "sidebar.errorPermission", permissionDenied: "sidebar.errorPermission", notFound: "sidebar.errorMissing", helperMissing: "sidebar.errorHelper", timeout: "sidebar.errorTimeout" } as const;
+    toast(tr(keys[code as keyof typeof keys] ?? "sidebar.errorPermission"), "error");
+  }
+  function dropOnPlace(key: string, shift: boolean) {
+    const drag = get().drag; dragEnd();
+    if (!drag) return;
+    const place = findPlace(key);
+    if (!place) return;
+    if (key.startsWith("trash:")) {
+      if (inArchive(drag.from) || parseRemotePath(activeTabOf(get(), drag.from).path)) { toast(tr("error.readOnly"), "error"); return; }
+      const paths = targetPaths(drag.from);
+      if (paths.length) dispatch({ type: "dialog", dialog: { kind: "trashConfirm", paths } });
+      return;
+    }
+    if (place.state === "disconnected") { toast(tr("sidebar.dropConnect"), "error"); return; }
+    if (place.state === "unmounted" || place.disabled || !place.path) { toast(tr("sidebar.dropMount"), "error"); return; }
+    if (isArchivePath(place.path) || place.readOnly || readOnlyPlace(place.path)) { toast(tr("error.readOnly"), "error"); return; }
+    const remote = parseRemotePath(place.path);
+    if (remote && !get().connections.some(e => e.connected && (e.profile.id === remote.id || e.connectionId === remote.id))) { toast(tr("sidebar.dropConnect"), "error"); return; }
+    openTransfer(shift ? "move" : "copy", drag.from, place.path);
+  }
+  function pinDraggedBookmark(index: number) {
+    const drag = get().drag; dragEnd();
+    if (!drag) return;
+    const plan = planOperation("copy", snapshot(drag.from), snapshot(otherWindow(drag.from)));
+    if (!plan || plan.count !== 1 || plan.folderCount !== 1) { toast(tr("sidebar.pinFolder"), "error"); return; }
+    const path = plan.sources[0]!;
+    const current = get().settings.bookmarks;
+    if (current.length >= 200 && !current.some(b => b.path === path)) return;
+    const pinned = bookmarkOps.pin(current, path);
+    if (!pinned.ok) return;
+    const from = pinned.bookmarks.findIndex(b => b.path === path);
+    const moved = bookmarkOps.move(pinned.bookmarks, from, Math.min(index, pinned.bookmarks.length - 1));
+    if (moved.ok) updateSettings(s => ({ ...s, bookmarks: moved.bookmarks }));
+  }
+  const pathInPlace = (path: string, root: string) => inside(isArchivePath(path) ? archiveHostFolder(path) ?? path : path, root);
+  function isUnmountBusy() { const d = get().dialog; return d?.kind === "placeConfirm" && d.busy === true; }
+  async function unmountPlace(key: string, confirmed = false) {
+    const place = findPlace(key);
+    if (!place?.canUnmount || isUnmountBusy()) return;
+    const root = place.path;
+    dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "unmount", key, busy: true } });
+    try {
+      // Redacted GVfs paths stay in the backend; only indices into our own tabs return.
+      const tabPaths = get().windows.flatMap(w => w.tabs.map(t => t.path));
+      const membershipKey = place.mountKey ?? (root ? `path:${root}` : undefined);
+      const affectedPaths = membershipKey
+        ? (await api.placesMountAffected(membershipKey, tabPaths)).map(i => tabPaths[i]).filter((p): p is string => !!p)
+        : [];
+      if (!confirmed && affectedPaths.length) {
+        dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "unmount", key } }); return;
+      }
+      // Keep navigation behind a modal while the helper owns the mount. All current tabs
+      // were checked above; no new tab can enter the mount during this operation.
+      dispatch({ type: "dialog", dialog: { kind: "placeConfirm", action: "unmount", key, busy: true } });
+      if (root) unmounting.add(root);
+      if (place.mountKey) await api.placesMountUnmount(place.mountKey);
+      else if (place.profileId) await api.systemMountUnmount(place.profileId);
+      else if (root) await api.fstabUnmount(root);
+      const affected = (path: string) => affectedPaths.includes(path) || !!root && pathInPlace(path, root);
+      for (const w of [0, 1] as const) {
+        if (!get().windows[w].tabs.some(t => affected(t.path))) continue;
+        reqSeq[w]++;
+        dispatch({ type: "window", w, update: win => ({ ...win, tabs: win.tabs.map(t => affected(t.path) ? tabs.createTab(get().home, t.sort) : t) }) });
+        void reload(w);
+      }
+      await refreshConnections(); await refreshPlaces();
+    } catch (error) { placeFailure(error); }
+    finally {
+      if (root) unmounting.delete(root);
+      const dialog = get().dialog;
+      if (dialog?.kind === "placeConfirm" && dialog.busy) dispatch({ type: "dialog", dialog: null });
+    }
+  }
+  async function confirmPlaceAction() {
+    const dialog = get().dialog;
+    if (dialog?.kind !== "placeConfirm" || dialog.busy) return;
+    dispatch({ type: "dialog", dialog: null });
+    if (dialog.action === "unmount" && dialog.key) { await unmountPlace(dialog.key, true); return; }
+    try {
+      if (dialog.action !== "emptyTrash") return;
+      const id = await api.trashEmpty();
+      dispatch({ type: "jobKind", id, kind: "delete" });
+      await refreshPlaces();
+    } catch (error) { fail(error); }
+  }
+  async function savePlaceConnection(key: string) {
+    const place = findPlace(key);
+    if (!place) return;
+    try { await api.placesSaveConnection(place.mountKey ? `mount:${place.mountKey}` : key); await refreshConnections(); }
+    catch (error) { placeFailure(error); }
   }
   function focusFileList() { document.querySelector<HTMLElement>(`[data-pane="${get().active}"] [role="grid"]`)?.focus(); }
   function focusSidebar() {
@@ -470,19 +587,22 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
 
   // ---------------------------------------------------------------- Operationen
 
-  function openTransfer(kind: OperationKind, from: WinIdx = get().active): void {
+  function openTransfer(kind: OperationKind, from: WinIdx = get().active, destination = activeTabOf(get(), otherWindow(from)).path): void {
     // Archive sind schreibgeschützt: nicht hinein kopieren, nicht daraus verschieben (das würde die Quelle löschen).
-    if (inArchive(otherWindow(from)) || (kind === "move" && inArchive(from))) {
+    if (isArchivePath(destination) || readOnlyPlace(destination) || (kind === "move" && inArchive(from))) {
       toast(tr("error.readOnly"), "error");
       return;
     }
-    const plan = planOperation(kind, snapshot(from), snapshot(otherWindow(from)));
+    if (unmountedPlace(destination)) { toast(tr("sidebar.dropMount"), "error"); return; }
+    const plan = planOperation(kind, snapshot(from), { ...snapshot(otherWindow(from)), path: destination });
     if (plan) dispatch({ type: "dialog", dialog: { kind: "transfer", plan, from } });
   }
 
   async function confirmTransfer(plan: OperationPlan, destination: string): Promise<void> {
     const final = withDestination(plan, destination, parentPath(plan.sources[0] ?? "/"));
-    if (!final || final.sameFolder) return; // nie in den eigenen Ordner
+    if (!final || final.sameFolder) return;
+    if (unmountedPlace(final.destination)) { toast(tr("sidebar.dropMount"), "error"); return; }
+    if (isArchivePath(final.destination) || readOnlyPlace(final.destination)) { toast(tr("error.readOnly"), "error"); return; } // nie in den eigenen Ordner
     dispatch({ type: "dialog", dialog: null });
     try {
       const id = await (final.kind === "copy"
@@ -508,6 +628,10 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (refuseInArchive(w)) return;
     const paths = targetPaths(w);
     if (paths.length === 0) return;
+    await trashPaths(paths);
+  }
+
+  async function trashPaths(paths: string[]): Promise<void> {
     try {
       const id = await api.trash(paths);
       dispatch({ type: "jobKind", id, kind: "trash" });
@@ -1330,12 +1454,14 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     ...compareFeature,
     api,
     refreshConnections,
-    refreshPlaces, openPlace, toggleSidebar, toggleSidebarIcons, setSidebarWidth, collapseSidebarSection, hidePlace, focusSidebar, focusFileList,
+    refreshPlaces, openPlace, dropOnPlace, pinDraggedBookmark, unmountPlace, confirmPlaceAction, savePlaceConnection, toggleSidebar, toggleSidebarIcons, setSidebarWidth, collapseSidebarSection, hidePlace, focusSidebar, focusFileList,
     setSidebarFocus: (key: string | null) => dispatch({ type: "sidebarFocus", key }),
     openConnectionEditor,
     openSettings,
     disconnectConnection: async (profileId: string): Promise<void> => {
       try {
+        const entry = get().connections.find(e => e.profile.id === profileId);
+        if (entry?.profile.protocol === "system") return;
         await api.connectionDisconnect(profileId);
         await refreshConnections();
       } catch (error) { if (!disposed) fail(error); }
@@ -1371,6 +1497,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       if (get().outcome.kind !== "newerVersion") dispatch({ type: "dialog", dialog: { kind: "whatsNew", versions: [currentVersion] } });
     },
     closeDialog: (): void => {
+      if (isUnmountBusy()) return;
       if (get().dialog?.kind === "whatsNew" && get().outcome.kind !== "newerVersion") {
         dispatch({ type: "settings", update: s => ({ ...s, lastSeenVersion: seenVersionOnClose(currentVersion, s.lastSeenVersion) }) });
         void saveNow();
@@ -1406,6 +1533,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     deletePresetNamed,
     setRenamePresets,
     trashSelection,
+    confirmTrash: async () => {
+      const dialog = get().dialog;
+      if (dialog?.kind !== "trashConfirm") return;
+      dispatch({ type: "dialog", dialog: null });
+      await trashPaths(dialog.paths);
+    },
     copyPath,
     applyPattern,
     undo,

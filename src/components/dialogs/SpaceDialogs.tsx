@@ -105,6 +105,7 @@ export function Confirmation({
   size,
   name,
   similar = false,
+  names,
   confirm,
   cancel
 }: {
@@ -112,18 +113,19 @@ export function Confirmation({
   size: number;
   name?: string;
   similar?: boolean;
+  names?: string[];
   confirm: () => void;
   cancel: () => void;
 }) {
   const tr = useT(),
     language = useLanguage();
-  return <Modal role="alertdialog" title={tr("dialog.trash.title")} onClose={cancel} footer={<><button className="tb" data-autofocus onClick={cancel}>{tr("action.cancel")}</button><button className="tb danger" onClick={confirm}>{tr("dialog.trash.confirm")}</button></>}><p>{name ? tr("dialog.trash.body", {
-        name,
-        count: 1
+  return <Modal role="alertdialog" title={tr("dialog.trash.title")} onClose={cancel} footer={<><button className="tb" data-autofocus onClick={cancel}>{tr("action.cancel")}</button><button className="tb danger" onClick={confirm}>{tr("dialog.trash.confirm")}</button></>}><p>{name || names ? tr("dialog.trash.body", {
+        name: name ?? names?.[0] ?? "",
+        count: names ? count : 1
       }) : tr(similar ? "similar.selectionSummary" : "space.excess", {
         count,
         size: formatBytes(size, language)
-      })}</p><p>{tr("space.undoHint")}</p></Modal>;
+      })}</p>{names && <ul>{names.slice(0, 20).map(path => <li key={path}>{path}</li>)}{names.length > 20 && <li>{tr("dialog.trash.more", { count: names.length - 20 })}</li>}</ul>}<p>{tr("space.undoHint")}</p></Modal>;
 }
 export function UsageDialog({
   root,

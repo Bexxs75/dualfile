@@ -1,7 +1,7 @@
 //! Commands for comparing folders, synchronising and the text diff. Part of `AppState`;
 //! the stores and DTOs live in `crate::compare`.
 
-use super::AppState;
+use super::{AppState, JobPaths};
 use crate::compare::{
     check_filter, diff_dto, sync_plan_dto, sync_plan_page, CompareFilterDto, CompareOptionsDto,
     ComparePageDto, DiffDto, DiffOptionsDto, SyncModeDto, SyncOptionsDto, SyncPlanDto,
@@ -74,22 +74,26 @@ impl AppState {
         };
         let reservation = self.compares.reserve()?;
         let name = format!("Vergleichen: {} ↔ {}", name_of(&left), name_of(&right));
-        Ok(self.submit_job(name, Vec::new(), move |resolver| {
-            Box::new(move |job| {
-                let result =
-                    compare::compare_dirs(&*left_vfs, &left, &*right_vfs, &right, &opts, job);
-                let report = OpReport {
-                    cancelled: result.cancelled,
-                    ..OpReport::default()
-                };
-                // Delivered before the job counts as finished, so the UI can read it then.
-                match resolver.job.get() {
-                    Some(id) => reservation.finish(id, result),
-                    None => drop(reservation),
-                }
-                report
-            })
-        }))
+        self.submit_job(
+            name,
+            JobPaths::read(vec![vpath_text(&left), vpath_text(&right)]),
+            move |resolver| {
+                Box::new(move |job| {
+                    let result =
+                        compare::compare_dirs(&*left_vfs, &left, &*right_vfs, &right, &opts, job);
+                    let report = OpReport {
+                        cancelled: result.cancelled,
+                        ..OpReport::default()
+                    };
+                    // Delivered before the job counts as finished, so the UI can read it then.
+                    match resolver.job.get() {
+                        Some(id) => reservation.finish(id, result),
+                        None => drop(reservation),
+                    }
+                    report
+                })
+            },
+        )
     }
 
     pub fn compare_page(
@@ -176,9 +180,15 @@ impl AppState {
         )?;
         let source_vfs = self.vfs_for_job(&stored.plan.source)?;
         let name = format!("Synchronisieren: {}", name_of(&stored.plan.source));
-        let dirs: Vec<String> = vec![vpath_text(&stored.plan.target)];
+        let dirs = JobPaths {
+            dirs: vec![vpath_text(&stored.plan.target)],
+            touched: vec![
+                vpath_text(&stored.plan.target),
+                vpath_text(&stored.plan.source),
+            ],
+        };
         let title = JobTitleDto::new("sync", name_of(&stored.plan.source), 0);
-        Ok(self.submit_job_titled(name, title, dirs, move |resolver| {
+        self.submit_job_titled(name, title, dirs, move |resolver| {
             Box::new(move |job| {
                 let plan = &stored.plan;
                 compare::run_sync(
@@ -190,7 +200,7 @@ impl AppState {
                     job,
                 )
             })
-        }))
+        })
     }
 
     /// Line diff of two text files. The answer is limited (see `DIFF_MAX_BYTES`); binary or
@@ -575,16 +585,20 @@ mod tests {
         for _ in 0..2 {
             let release = Arc::clone(&release);
             let (tx, rx) = std::sync::mpsc::channel::<()>();
-            blockers.push(f.state.submit_job("block".into(), vec![], move |_| {
-                Box::new(move |_| {
-                    let _ = tx.send(());
-                    let _ = release
-                        .lock()
-                        .unwrap()
-                        .recv_timeout(Duration::from_secs(10));
-                    Default::default()
-                })
-            }));
+            blockers.push(
+                f.state
+                    .submit_job("block".into(), vec![], move |_| {
+                        Box::new(move |_| {
+                            let _ = tx.send(());
+                            let _ = release
+                                .lock()
+                                .unwrap()
+                                .recv_timeout(Duration::from_secs(10));
+                            Default::default()
+                        })
+                    })
+                    .unwrap(),
+            );
             rx.recv_timeout(Duration::from_secs(5)).unwrap();
         }
         let id = f

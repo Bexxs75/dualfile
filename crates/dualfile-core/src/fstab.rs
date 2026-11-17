@@ -5,6 +5,7 @@ use serde::Serialize;
 #[serde(rename_all = "camelCase")]
 pub struct FstabInfo {
     pub user_mountable: bool,
+    pub permission: Option<String>,
     pub automount: bool,
     pub noauto: bool,
 }
@@ -38,6 +39,10 @@ pub fn parse_fstab(text: &str) -> Vec<FstabEntry> {
         drive.source = "fstab".into();
         drive.mounted = false;
         drive.fstab = Some(FstabInfo {
+            permission: ["users", "user", "owner"]
+                .into_iter()
+                .find(|p| options.contains(p))
+                .map(str::to_owned),
             user_mountable: options
                 .iter()
                 .any(|v| ["user", "users", "owner"].contains(v)),
@@ -60,6 +65,21 @@ pub fn parse_fstab(text: &str) -> Vec<FstabEntry> {
     }
     out
 }
+/// Display and action authorization share this conservative permission matrix.
+/// The helper remains authoritative; account names never leave the caller.
+pub fn permitted(
+    permission: Option<&str>,
+    unmount: bool,
+    device_owned: bool,
+    mounted_by_user: bool,
+) -> bool {
+    match permission {
+        Some("users") => true,
+        Some("user") => !unmount || mounted_by_user,
+        Some("owner") => device_owned && (!unmount || mounted_by_user),
+        _ => false,
+    }
+}
 pub fn merge(mut drives: Vec<Drive>, entries: Vec<FstabEntry>) -> Vec<Drive> {
     for entry in entries {
         if entry.hidden {
@@ -78,6 +98,17 @@ pub fn merge(mut drives: Vec<Drive>, entries: Vec<FstabEntry>) -> Vec<Drive> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn permission_matrix_checks_device_owner_and_mounting_user() {
+        assert!(permitted(Some("users"), true, false, false));
+        assert!(permitted(Some("user"), false, false, false));
+        assert!(!permitted(Some("user"), true, false, false));
+        assert!(permitted(Some("user"), true, false, true));
+        assert!(!permitted(Some("owner"), false, false, true));
+        assert!(permitted(Some("owner"), false, true, false));
+        assert!(!permitted(Some("owner"), true, true, false));
+        assert!(permitted(Some("owner"), true, true, true));
+    }
     #[test]
     fn safe_bounded_display_and_merge() {
         let text = "host:/export /mnt/nfs nfs noauto,user 0 0\n//alice:secret@host/share /mnt/My\\040Disk cifs credentials=/root/secret,username=alice,password=secret,x-gvfs-name=Share 0 0\nUUID=abc /data ext4 x-systemd.automount,ro 0 0\n/dev/a /hide ext4 x-gvfs-hide 0 0\n/dev/a /bind none bind 0 0\n# comment\ngarbage";

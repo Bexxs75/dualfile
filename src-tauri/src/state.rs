@@ -72,6 +72,28 @@ const MAX_LOGGED_FAILURES: usize = 20;
 
 type JobWork = Box<dyn FnOnce(&JobHandle) -> OpReport + Send>;
 
+/// Filesystem admission is separate from notification/log metadata.
+struct JobPaths {
+    dirs: Vec<String>,
+    touched: Vec<String>,
+}
+impl From<Vec<String>> for JobPaths {
+    fn from(dirs: Vec<String>) -> Self {
+        Self {
+            touched: dirs.clone(),
+            dirs,
+        }
+    }
+}
+impl JobPaths {
+    fn read(touched: Vec<String>) -> Self {
+        Self {
+            dirs: Vec::new(),
+            touched,
+        }
+    }
+}
+
 struct JobMeta {
     name: String,
     title: Option<JobTitleDto>,
@@ -662,31 +684,46 @@ impl AppState {
     fn submit_job(
         &self,
         name: String,
-        dirs: Vec<String>,
+        paths: impl Into<JobPaths>,
         build: impl FnOnce(BridgeResolver) -> JobWork,
-    ) -> u64 {
-        self.submit_job_with_lane(name, None, dirs, None, build)
+    ) -> Result<u64, UiError> {
+        self.submit_job_with_lane(name, None, paths, None, build)
     }
 
     fn submit_job_titled(
         &self,
         name: String,
         title: JobTitleDto,
-        dirs: Vec<String>,
+        paths: impl Into<JobPaths>,
         build: impl FnOnce(BridgeResolver) -> JobWork,
-    ) -> u64 {
-        self.submit_job_with_lane(name, Some(title), dirs, None, build)
+    ) -> Result<u64, UiError> {
+        self.submit_job_with_lane(name, Some(title), paths, None, build)
     }
 
     fn submit_job_with_lane(
         &self,
         name: String,
         title: Option<JobTitleDto>,
-        dirs: Vec<String>,
+        paths: impl Into<JobPaths>,
         lane: Option<String>,
         build: impl FnOnce(BridgeResolver) -> JobWork,
-    ) -> u64 {
+    ) -> Result<u64, UiError> {
         // One submission at a time: the `Queued` event picks up exactly this job's metadata.
+        let mut paths = paths.into();
+        if name == "Rückgängig"
+            || title
+                .as_ref()
+                .is_some_and(|t| matches!(t.kind.as_str(), "trash" | "dupesTrash"))
+        {
+            paths.touched.push(
+                dualfile_core::system_places::DiscoveryPaths::system()
+                    .data
+                    .join("Trash")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+        let lease = crate::mount_guard::job(&paths.touched)?;
         let _guard = lock(&self.submit_lock);
         let cell = Arc::new(JobIdCell::default());
         *lock(&self.shared.pending) = Some(PendingJob {
@@ -694,7 +731,7 @@ impl AppState {
                 undo: name == "Rückgängig",
                 name: name.clone(),
                 title,
-                dirs,
+                dirs: paths.dirs,
             },
             cell: cell.clone(),
         });
@@ -703,7 +740,14 @@ impl AppState {
             bridge: self.shared.conflicts.clone(),
             sink: self.shared.sink.clone(),
         });
-        self.jobs.submit_with_lane(name, lane, work)
+        Ok(self.jobs.submit_with_lane(
+            name,
+            lane,
+            Box::new(move |job| {
+                let _lease = lease;
+                work(job)
+            }),
+        ))
     }
 
     // ---------------------------------------------------------------- Commands
@@ -869,8 +913,19 @@ impl AppState {
         let errors = self.shared.errors.clone();
         let policy = settings::load(&self.config_dir).0.verify_policy;
         let verify = crate::verification::mode(&destination, policy);
-        Ok(
-            self.submit_job_with_lane(name, Some(title), dirs, lane, move |resolver| {
+        self.submit_job_with_lane(
+            name,
+            Some(title),
+            JobPaths {
+                dirs,
+                touched: sources
+                    .iter()
+                    .map(vpath_text)
+                    .chain([vpath_text(&destination)])
+                    .collect(),
+            },
+            lane,
+            move |resolver| {
                 Box::new(move |job| {
                     let job = job.with_error_resolver(Some(Arc::new(
                         crate::item_error::BridgeErrorResolver {
@@ -913,7 +968,7 @@ impl AppState {
                     }
                     report
                 })
-            }),
+            },
         )
     }
 
@@ -964,15 +1019,22 @@ impl AppState {
         let title = title_of("pack", &sources);
         let dirs = vec![vpath_text(&destination)];
         let format = format.to_core();
-        Ok(self.submit_job_with_lane(
+        self.submit_job_with_lane(
             job_name,
             Some(title),
-            dirs,
+            JobPaths {
+                dirs,
+                touched: sources
+                    .iter()
+                    .map(vpath_text)
+                    .chain([vpath_text(&destination)])
+                    .collect(),
+            },
             crate::lanes::destination_lane(&destination),
             move |_| {
                 Box::new(move |job| archive::pack(&*source_vfs, &sources, &target, format, job))
             },
-        ))
+        )
     }
 
     pub fn copy(&self, sources: &[String], destination: &str) -> Result<u64, UiError> {
@@ -981,6 +1043,28 @@ impl AppState {
 
     pub fn move_items(&self, sources: &[String], destination: &str) -> Result<u64, UiError> {
         self.transfer(sources, destination, true)
+    }
+
+    pub fn trash_empty(&self) -> Result<u64, UiError> {
+        let table = std::fs::read_to_string("/proc/self/mountinfo")
+            .map_err(|_| UiError::new("timeout", "timeout"))?;
+        let dirs = dualfile_core::trash_empty::discover(
+            &table,
+            &dualfile_core::system_places::DiscoveryPaths::system().data,
+        )
+        .map_err(UiError::from)?;
+        let touched: Vec<_> = dirs
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        // This second lease is retained by isolated deletion workers even after a response timeout.
+        let lease = Arc::new(crate::mount_guard::job(&touched)?);
+        self.submit_job_titled(
+            "Empty trash".into(),
+            JobTitleDto::new("emptyTrash", "", 0),
+            JobPaths::read(touched),
+            move |_| Box::new(move |job| dualfile_core::trash_empty::empty(dirs, job, lease)),
+        )
     }
 
     pub fn trash(&self, items: &[String]) -> Result<u64, UiError> {
@@ -994,19 +1078,28 @@ impl AppState {
         let title = title_of("trash", &items);
         let dirs = parent_dirs(&items);
         let recorder = self.undo_recorder(dirs.clone());
-        Ok(self.submit_job_titled(name, title, dirs, move |_| {
+        self.submit_job_titled(name, title, dirs, move |_| {
             Box::new(move |job| {
                 let report = ops::trash_items(&LocalVfs, &items, job);
                 recorder.record(recorder.journal.record_trash(&report.done));
                 report
             })
-        }))
+        })
     }
 
     pub fn restore_from_trash(&self, items: &[String]) -> Result<(), UiError> {
         let items = self.paths(items)?;
         reject_archive_writes(&items)?;
         reject_remote(&items, MSG_NO_REMOTE_TRASH)?;
+        let mut touched: Vec<_> = items.iter().map(vpath_text).collect();
+        touched.push(
+            dualfile_core::system_places::DiscoveryPaths::system()
+                .data
+                .join("Trash")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let _lease = crate::mount_guard::job(&touched)?;
         let report = ops::restore_from_trash(&items)?;
         if report.done.len() < items.len() {
             return Err(UiError::new(
@@ -1077,11 +1170,9 @@ impl AppState {
                 self.router.vfs_for(&root).map_err(|_| mismatch())?
             }
         };
-        Ok(
-            self.submit_job_titled(stored.name, stored.title, stored.dirs, move |_| {
-                Box::new(move |job| ops::delete_permanent(&*vfs, &stored.plan, token, job))
-            }),
-        )
+        self.submit_job_titled(stored.name, stored.title, stored.dirs, move |_| {
+            Box::new(move |job| ops::delete_permanent(&*vfs, &stored.plan, token, job))
+        })
     }
 
     pub fn rename(&self, path: &str, new_name: &str) -> Result<RenameDto, UiError> {
@@ -1098,6 +1189,7 @@ impl AppState {
                 old_path,
             });
         }
+        let _lease = crate::mount_guard::job(&[vpath_text(&path)])?;
         let result = ops::rename_entry(&*vfs, &path, new_name)?;
         self.undo_recorder(parent_dirs(std::slice::from_ref(&path)))
             .record(self.undo.record_rename(&path, &result.new, false));
@@ -1139,7 +1231,7 @@ impl AppState {
         let title = title_of("rename", &old_paths);
         let dirs = vec![vpath_text(&folder)];
         let recorder = self.undo_recorder(dirs.clone());
-        Ok(self.submit_job_titled(name, title, dirs, move |_| {
+        self.submit_job_titled(name, title, dirs, move |_| {
             Box::new(
                 move |job| match multirename::rename_many(&*vfs, &folder, &pairs, job) {
                     Ok(report) => {
@@ -1157,7 +1249,7 @@ impl AppState {
                     },
                 },
             )
-        }))
+        })
     }
 
     pub fn make_dir(&self, parent: &str, name: &str) -> Result<String, UiError> {
@@ -1166,6 +1258,7 @@ impl AppState {
         self.require_writable(std::slice::from_ref(&parent))?;
         check_name(name)?;
         let vfs = self.vfs(&parent)?;
+        let _lease = crate::mount_guard::job(&[vpath_text(&parent)])?;
         let created = ops::make_dir(&*vfs, &parent, name)?;
         self.undo_recorder(vec![vpath_text(&parent)])
             .record(self.undo.record_make_dir(&created));
@@ -2140,6 +2233,28 @@ mod tests {
             .rename_many(&f.p("fehlt"), &[item("a", "b")])
             .unwrap();
         assert_eq!(f.finish(id).state, JobState::Failed);
+    }
+
+    #[test]
+    fn synchronous_writes_are_refused_while_mount_helper_holds_the_target() {
+        let f = fixture();
+        let parent = f.dir("mount");
+        let source = f.file("mount/file", "keep");
+        let lease = crate::mount_guard::registry()
+            .unmount(parent.clone().into())
+            .unwrap();
+        assert_eq!(f.state.make_dir(&parent, "new").unwrap_err().kind, "busy");
+        assert_eq!(f.state.rename(&source, "renamed").unwrap_err().kind, "busy");
+        assert_eq!(
+            f.state
+                .restore_from_trash(std::slice::from_ref(&source))
+                .unwrap_err()
+                .kind,
+            "busy"
+        );
+        assert_eq!(f.read("mount/file"), "keep");
+        drop(lease);
+        assert!(f.state.make_dir(&parent, "new").is_ok());
     }
 
     #[test]

@@ -611,3 +611,8 @@ html.editor-window-root body { padding: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 .sidebar-popover { width: 210px; max-height: 60vh; overflow: auto; }
 .sidebar-icons .sidebar-popover .sidebar-entry { justify-content: flex-start; }
+
+.sidebar-entry.drop-target { outline: 1px dashed color-mix(in srgb, currentColor 25%, transparent); outline-offset: -2px; }
+.sidebar .drop-over { background: var(--accent-soft); outline: 2px solid var(--accent); outline-offset: -2px; }
+.sidebar-bookmark-gap { height: 6px; min-height: 6px; }
+.sidebar-menu { max-height: calc(100vh - 16px); overflow-y: auto; }

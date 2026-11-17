@@ -912,7 +912,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       { name: "Sicherung", path: "/run/media/demo/Sicherung", kind: "removable", mounted: true, space: { available: 8e9, total: 100e9 } },
       { name: "NAS (fstab)", path: "/mnt/nas", kind: "network", fstype: "nfs", source: "fstab", mounted: false, fstab: { userMountable: true, noauto: true, automount: false } },
     ],
-    networkMounts: [{ name: "Shared", scheme: "smb", host: "nas", port: null, user: null, path: "/shared", url: "smb://nas/shared", sources: ["mounted"], mountedAt: "/run/user/1000/gvfs/smb-share:server=nas,share=shared" }],
+    networkMounts: [{ mountKey: "mock-shared", canUnmount: true, name: "Shared", scheme: "smb", host: "nas", port: null, user: null, path: "/shared", url: "smb://nas/shared", sources: ["mounted"], mountedAt: "/run/user/1000/gvfs/smb-share:server=nas,share=shared" }],
   };
   const scheduler = options.scheduler ?? defaultScheduler;
   const clock = options.now ?? (() => Date.now());
@@ -2225,6 +2225,37 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     async placesSpace() { return { available: 12e9, total: 32e9 }; },
     async placesSetVisible() {},
     async trashOpenSystem() {},
+    async trashEmpty() {
+      const job = newJob("Empty trash", 0, null, { kind: "emptyTrash", first: "", more: 0 });
+      job.timer = scheduler.setTimeout(() => { if (job.cancelled) return; trashed.clear(); places.trash.empty = true; publish(job.id, { state: "done" }); emit({ type: "placesChanged" }); }, 0);
+      return job.id;
+    },
+    async placesMountAffected(mountKey, paths) {
+      if (mountKey.startsWith("path:")) { const root = mountKey.slice(5); return paths.flatMap((path, i) => (path === root || path.startsWith(`${root}/`)) ? [i] : []); }
+      const root = places.networkMounts.find(m => m.mountKey === mountKey)?.mountedAt;
+      if (!root) throw new CoreError("not found", "notFound");
+      return paths.flatMap((p, i) => p === root || p.startsWith(root + "/") ? [i] : []);
+    },
+    async placesSaveConnection(key) {
+      const mount = places.networkMounts.find(m => `mount:${m.mountKey}` === key);
+      if (!mount) throw new CoreError("not found", "notFound");
+      await api.connectionSave(systemPlaceProfile(mount));
+    },
+    async fstabMount(mountPoint) {
+      const drive = places.drives.find(d => d.path === mountPoint && d.fstab?.userMountable);
+      if (!drive || drive.mounted !== false) throw new CoreError("not permitted", "notPermitted");
+      drive.mounted = true; emit({ type: "placesChanged" });
+    },
+    async fstabUnmount(mountPoint) {
+      const drive = places.drives.find(d => d.path === mountPoint && d.fstab?.userMountable);
+      if (!drive || drive.mounted === false) throw new CoreError("not found", "notFound");
+      drive.mounted = false; emit({ type: "placesChanged" });
+    },
+    async placesMountUnmount(mountKey) {
+      const mount = places.networkMounts.find(m => m.mountKey === mountKey && m.canUnmount);
+      if (!mount) throw new CoreError("not found", "notFound");
+      places.networkMounts = places.networkMounts.filter(m => m !== mount); emit({ type: "placesChanged" });
+    },
     async sidebarResizeWindow(delta) { return { actualDelta: delta, canGrow: true }; },
     devPlug(drive = { name: "TESTSTICK", path: "/run/media/demo/TESTSTICK", kind: "removable", mounted: true }) {
       places.drives = [...places.drives.filter(d => d.path !== drive.path), drive];

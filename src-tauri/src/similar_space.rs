@@ -414,16 +414,16 @@ mod tests {
     #[test]
     fn held_limit_counts_failures_and_close_cancels_late_results() {
         let store = crate::space::ScanStore::<SimilarResult>::default();
-        let a = store.start(|_| 1).unwrap();
+        let a = store.start(|_| Ok(1)).unwrap();
         let slot = store.get(a).unwrap();
         slot.lock().unwrap().error = Some(invalid());
-        store.start(|_| 2).unwrap();
-        assert!(store.start(|_| 3).is_err());
+        store.start(|_| Ok(2)).unwrap();
+        assert!(store.start(|_| Ok(3)).is_err());
         store.close(a).unwrap();
         assert!(slot.lock().unwrap().thumbnail_cancel.is_cancelled());
         slot.lock().unwrap().result = Some(SimilarResult::default());
         assert!(store.get(a).is_err());
-        assert!(store.start(|_| 3).is_ok());
+        assert!(store.start(|_| Ok(3)).is_ok());
     }
     #[test]
     fn snapshot_is_consumed_once_under_parallel_selection() {

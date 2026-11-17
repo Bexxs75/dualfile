@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-places-save-connection"
+description = "Enables the places_save_connection command without any pre-configured scope."
+commands.allow = ["places_save_connection"]
+
+[[permission]]
+identifier = "deny-places-save-connection"
+description = "Denies the places_save_connection command without any pre-configured scope."
+commands.deny = ["places_save_connection"]

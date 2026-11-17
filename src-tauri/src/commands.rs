@@ -1008,3 +1008,19 @@ mod tests {
         assert!(!is_safe_external_url(&long));
     }
 }
+
+#[tauri::command]
+pub async fn trash_empty(window: tauri::WebviewWindow, state: Shared<'_>) -> Result<u64, UiError> {
+    job_main_window(window.label())?;
+    run(state, |s| s.trash_empty()).await
+}
+
+#[tauri::command]
+pub async fn places_save_connection(
+    window: tauri::WebviewWindow,
+    state: Shared<'_>,
+    key: String,
+) -> Result<(), UiError> {
+    job_main_window(window.label())?;
+    run(state, move |s| s.places_save_connection(&key)).await
+}

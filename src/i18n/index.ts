@@ -47,6 +47,10 @@ export function createTranslator(language: Language): (key: TranslationKey, para
 /** Meldungstext zu einer Fehlerart des Kerns (`CoreError.kind`); unbekannte Arten → allgemeiner Text. */
 export function errorKey(kind: string): TranslationKey {
   switch (kind) {
+    case "busy": return "sidebar.errorBusy";
+    case "helperMissing": return "sidebar.errorHelper";
+    case "notPermitted": return "sidebar.errorPermission";
+    case "trashPurgeFailed": return "sidebar.errorTrash";
     case "smbSecurity": return "error.smbSecurity";
     case "smbUnreachable": return "error.smbUnreachable";
     case "smbShareMissing": return "error.smbShareMissing";

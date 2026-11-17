@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { HOME, DOCS, DOWNLOADS, setupApp } from "./test-utils";
-import { activeTabOf } from "./app/state";
+import { activeTabOf, visibleEntries } from "./app/state";
 import { newSshProfile } from "./components/dialogs/ConnectionProfileForm";
 import { CoreError } from "./ipc/api";
 const bookmark = { name: "Work", path: DOCS, color: "#123456", order: 0 };
@@ -54,9 +54,11 @@ test("sidebar keyboard tree navigation is isolated and explicit global commands 
 });
 test("collapse, hidden entries, unmounted explanation and rail focus tooltip", async () => {
   const app = await setupApp();
-  expect(item(/^NAS \(fstab\)/)).toHaveAttribute("aria-disabled", "true");
+  expect(item(/^NAS \(fstab\)/)).not.toHaveAttribute("aria-disabled", "true");
+  const mount = vi.spyOn(app.api, "fstabMount");
   await app.user.click(item(/^NAS \(fstab\)/));
-  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME);
+  await waitFor(() => expect(mount).toHaveBeenCalledWith("/mnt/nas"));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe("/mnt/nas"));
   fireEvent.contextMenu(item(/^USB-Stick/), { clientX: 40, clientY: 80 });
   await app.user.click(screen.getByRole("menuitem", { name: "Eintrag ausblenden" }));
   expect(app.runtime.store.getState().settings.sidebarHidden).toContain("drive:/run/media/demo/USB-Stick");
@@ -272,4 +274,245 @@ test("idle-expired automount preserves tabs/history and removal toast requires m
   snapshot.drives = snapshot.drives.filter(d => d.path !== "/run/media/demo/USB-Stick");
   await act(() => app.runtime.controller.refreshPlaces());
   expect(app.runtime.store.getState().toasts.some(t => t.text.includes("Betroffene Reiter"))).toBe(false);
+});
+
+function dragFocused(app: Awaited<ReturnType<typeof setupApp>>, name = "Dokumente") {
+  const entries = app.runtime.store.getState().listings[0].entries;
+  // The controller uses the visible/sorted listing, as the file list does.
+  const index = visibleEntries(app.runtime.store.getState(), 0).findIndex(e => e.name === name);
+  expect(entries.some(e => e.name === name)).toBe(true);
+  act(() => app.runtime.controller.dragStart(0, index));
+}
+
+test("sidebar and rail drops prefill copy/move and use the destination instead of the other pane", async () => {
+  const app = await setupApp({ settings: { bookmarks: [bookmark], sidebarMode: "icons" } });
+  dragFocused(app);
+  fireEvent.dragOver(item(/^Work/));
+  expect(item(/^Work/)).toHaveClass("drop-over");
+  fireEvent(item(/^Work/), new MouseEvent("drop", { bubbles: true, shiftKey: true }));
+  const dialog = app.runtime.store.getState().dialog;
+  expect(dialog?.kind).toBe("transfer");
+  if (dialog?.kind === "transfer") expect(dialog.plan).toMatchObject({ destination: DOCS, kind: "move", sources: [DOCS] });
+  act(() => app.runtime.controller.closeDialog());
+  // An archive in the opposite pane does not make a writable sidebar destination read-only.
+  act(() => app.runtime.store.dispatch({ type: "window", w: 1, update: w => ({ ...w, tabs: w.tabs.map(t => ({ ...t, path: `archive:${HOME}/test.zip!/` })) }) }));
+  dragFocused(app);
+  fireEvent.drop(item(/^Work/));
+  const copy = app.runtime.store.getState().dialog;
+  expect(copy?.kind === "transfer" && copy.plan.kind).toBe("copy");
+});
+
+test("drop refusal covers disconnected, unmounted, archive and read-only bookmark destinations", async () => {
+  const app = await setupApp({ settings: { bookmarks: [bookmark, { ...bookmark, name: "Archive", path: `archive:${HOME}/test.zip!/`, order: 1 }] } });
+  await act(async () => { await app.api.connectionSave({ ...newSshProfile(), name: "Offline", host: "host", user: "demo" }); await app.runtime.controller.refreshConnections(); });
+  for (const [name, message] of [[/^Offline/, "Bitte zuerst verbinden."], [/^NAS \(fstab\)/, "Bitte zuerst einhängen."], [/^Archive/, "schreibgeschützt"]] as const) {
+    dragFocused(app); fireEvent.drop(item(name));
+    expect(app.runtime.store.getState().dialog).toBeNull();
+    expect(app.runtime.store.getState().toasts.at(-1)?.text.toLowerCase()).toContain(message.toLowerCase());
+  }
+  act(() => app.base.devPlug({ path: DOCS, name: "Read only", kind: "partition", mounted: true, readOnly: true }));
+  await screen.findByRole("treeitem", { name: /^Read only/ });
+  dragFocused(app); fireEvent.drop(item(/^Work/));
+  expect(app.runtime.store.getState().dialog).toBeNull();
+  expect(app.runtime.store.getState().toasts.at(-1)?.text.toLowerCase()).toContain("schreibgeschützt");
+});
+
+test("trash drops capture the source pane, ask before trashing, and retain undo", async () => {
+  const app = await setupApp();
+  const trash = vi.spyOn(app.api, "trash");
+  dragFocused(app);
+  fireEvent.drop(item(/^Papierkorb/));
+  expect(trash).not.toHaveBeenCalled();
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("In den Papierkorb legen?");
+  await app.user.click(screen.getByRole("button", { name: "Abbrechen" }));
+  expect(trash).not.toHaveBeenCalled();
+  dragFocused(app); fireEvent.drop(item(/^Papierkorb/));
+  await app.user.click(screen.getByRole("button", { name: "Ja, Papierkorb" }));
+  expect(trash).toHaveBeenCalledWith([DOCS]);
+  await act(async () => { await app.scheduler.runAll(); });
+  expect((await app.api.undoList()).length).toBeGreaterThan(0);
+});
+
+test("single-folder drag-in and bookmark reorder work at gaps and in the rail", async () => {
+  const app = await setupApp({ settings: { bookmarks: [{ ...bookmark, name: "Downloads", path: DOWNLOADS }], sidebarMode: "icons" } });
+  dragFocused(app);
+  fireEvent.drop(sidebar().querySelector('.sidebar-bookmark-gap')!);
+  expect(app.runtime.store.getState().settings.bookmarks.map(b => b.path)).toEqual([DOCS, DOWNLOADS]);
+  fireEvent.dragStart(item(/^Dokumente/));
+  fireEvent.drop(sidebar().querySelector(`[data-place-key="bookmark:${DOWNLOADS}"]`)!);
+  expect(app.runtime.store.getState().settings.bookmarks.map(b => b.path)).toEqual([DOWNLOADS, DOCS]);
+  expect(app.runtime.store.getState().drag).toBeNull();
+});
+
+test("empty trash context action requires confirmation and properties do not stat on open", async () => {
+  const app = await setupApp();
+  const empty = vi.spyOn(app.api, "trashEmpty"), space = vi.spyOn(app.api, "placesSpace");
+  fireEvent.contextMenu(item(/^Papierkorb/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Papierkorb leeren …" }));
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("endgültig");
+  expect(empty).not.toHaveBeenCalled();
+  await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
+  expect(empty).toHaveBeenCalledOnce();
+  fireEvent.contextMenu(item(/^NAS \(fstab\)/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Eigenschaften" }));
+  expect(screen.getByRole("dialog", { name: "Eigenschaften" })).toHaveTextContent("nfs");
+  expect(space).not.toHaveBeenCalled();
+});
+
+test("unmount confirms inactive locked tabs, retains them on failure, and resets them only on success", async () => {
+  let reject = true;
+  const unmount = vi.fn(async () => { if (reject) throw new CoreError("busy", "busy"); });
+  const app = await setupApp({ wrap: api => ({ ...api, fstabUnmount: unmount }) });
+  act(() => app.base.devPlug({ name: "Mounted", path: DOCS, mounted: true, fstab: { userMountable: true, automount: false, noauto: true } }));
+  await screen.findByRole("treeitem", { name: /^Mounted/ });
+  act(() => app.runtime.store.dispatch({ type: "window", w: 1, update: w => ({ ...w, tabs: [...w.tabs, { ...w.tabs[0]!, path: DOCS, lockRoot: DOCS }] }) }));
+  fireEvent.contextMenu(item(/^Mounted/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Aushängen" }));
+  expect(unmount).not.toHaveBeenCalled();
+  await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
+  await waitFor(() => expect(unmount).toHaveBeenCalledOnce());
+  expect(app.runtime.store.getState().windows[1].tabs[1]?.path).toBe(DOCS);
+  reject = false;
+  fireEvent.contextMenu(item(/^Mounted/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Aushängen" }));
+  await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
+  await waitFor(() => expect(app.runtime.store.getState().windows[1].tabs[1]?.path).toBe(HOME));
+  expect(app.runtime.store.getState().windows[1].tabs[1]?.lockRoot).toBeUndefined();
+});
+
+test("profile-less GVfs menu saves a connection and validates unmount through the opaque key", async () => {
+  const app = await setupApp();
+  const save = vi.spyOn(app.api, "placesSaveConnection"), unmount = vi.spyOn(app.api, "placesMountUnmount");
+  fireEvent.contextMenu(item(/^Shared/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Als Verbindung speichern" }));
+  expect(save).toHaveBeenCalledWith("mount:mock-shared");
+  await waitFor(() => expect(app.runtime.store.getState().connections.length).toBe(1));
+  fireEvent.contextMenu(sidebar().querySelector('[data-place-key^="mount:"]')!);
+  await app.user.click(screen.getByRole("menuitem", { name: "Aushängen" }));
+  await waitFor(() => expect(unmount).toHaveBeenCalledWith("mock-shared"));
+});
+
+test("opaque GVfs unmount checks inactive and archive tabs without publishing its local path", async () => {
+  const secretRoot = "/run/user/1000/gvfs/smb-share:server=nas,user=private";
+  const archive = `archive:${secretRoot}/data.zip!/nested`;
+  const affected = vi.fn(async (_key: string, paths: string[]) => paths.flatMap((p, i) => p === archive ? [i] : []));
+  const unmount = vi.fn(async () => {});
+  const app = await setupApp({ wrap: api => ({ ...api,
+    placesSnapshot: async () => ({ ...await api.placesSnapshot(), networkMounts: [{ name: "nas/shared", host: "nas", path: "/shared", url: "smb://nas/shared", sources: ["mounted"], scheme: "smb", port: null, user: null, mountedAt: null, mountKey: "opaque-redacted", canUnmount: true }] }),
+    placesMountAffected: affected, placesMountUnmount: unmount,
+  }) });
+  act(() => app.runtime.store.dispatch({ type: "window", w: 0, update: w => ({ ...w, tabs: [...w.tabs, { ...w.tabs[0]!, path: archive }] }) }));
+  const mount = item(/^nas\/shared/);
+  expect(mount.getAttribute("aria-label")).not.toContain("private");
+  fireEvent.contextMenu(mount);
+  await app.user.click(screen.getByRole("menuitem", { name: "Aushängen" }));
+  expect(affected).toHaveBeenCalledWith("opaque-redacted", expect.arrayContaining([archive]));
+  expect(unmount).not.toHaveBeenCalled();
+  await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
+  await waitFor(() => expect(app.runtime.store.getState().windows[0].tabs[1]?.path).toBe(HOME));
+  expect(unmount).toHaveBeenCalledWith("opaque-redacted");
+});
+
+test("context navigation opens other pane and creates an unlocked new tab", async () => {
+  const app = await setupApp({ settings: { bookmarks: [bookmark] } });
+  fireEvent.contextMenu(item(/^Work/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Im anderen Fenster öffnen" }));
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toBe(DOCS));
+  act(() => app.runtime.store.dispatch({ type: "window", w: app.runtime.store.getState().active, update: w => ({ ...w, tabs: w.tabs.map(t => ({ ...t, lockRoot: t.path })) }) }));
+  const active = app.runtime.store.getState().active;
+  const before = app.runtime.store.getState().windows[active].tabs.length;
+  fireEvent.contextMenu(item(/^Home-Ordner/));
+  await app.user.click(screen.getByRole("menuitem", { name: "In neuem Tab öffnen" }));
+  await waitFor(() => expect(app.runtime.store.getState().windows[active].tabs).toHaveLength(before + 1));
+  expect(activeTabOf(app.runtime.store.getState(), active).path).toBe(HOME);
+  expect(activeTabOf(app.runtime.store.getState(), active).lockRoot).toBeUndefined();
+});
+
+test("saved system connections offer Unmount and never an unrelated Disconnect", async () => {
+  const app = await setupApp({ left: DOCS });
+  await act(async () => {
+    await app.api.connectionSave({ ...newSshProfile(), name: "Desktop share", protocol: "system", transport: "builtin", systemUrl: "smb://nas/team", host: "nas", port: 0, share: "", startFolder: "/team" });
+    await app.runtime.controller.refreshConnections();
+  });
+  const unmount = vi.spyOn(app.api, "systemMountUnmount");
+  fireEvent.contextMenu(item(/^Desktop share/));
+  expect(screen.getByRole("menuitem", { name: "Aushängen" })).toBeVisible();
+  expect(screen.queryByRole("menuitem", { name: "Trennen" })).toBeNull();
+  await act(async () => { await app.runtime.controller.disconnectConnection(app.runtime.store.getState().connections[0]!.profile.id); });
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS);
+  expect(unmount).not.toHaveBeenCalled();
+});
+
+test("Ribbon and sidebar never overlap while the compositor delays hiding", async () => {
+  const app = await setupApp({ settings: { bookmarks: [bookmark] } });
+  await waitFor(() => expect(sidebar()).toBeVisible());
+  let finish!: (value: { actualDelta: number; canGrow: boolean }) => void;
+  vi.spyOn(app.api, "sidebarResizeWindow").mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  act(() => app.runtime.controller.toggleSidebar());
+  expect(screen.queryByRole("navigation", { name: "Orte" })).toBeNull();
+  expect(screen.getByRole("toolbar", { name: "Lesezeichen" })).toBeVisible();
+  await waitFor(() => expect(finish).toBeDefined());
+  await act(async () => { finish({ actualDelta: -210, canGrow: true }); });
+});
+
+test.each([false, true])("mounting blocks navigation and writing shortcuts until completion (failure=%s)", async failure => {
+  let finish!: () => void;
+  const mount = vi.fn(() => new Promise<void>((resolve, reject) => { finish = () => failure ? reject(new CoreError("busy", "busy")) : resolve(); }));
+  const app = await setupApp({ wrap: api => ({ ...api, fstabMount: mount }) });
+  const before = activeTabOf(app.runtime.store.getState(), 0).path;
+  fireEvent.click(item(/^NAS \(fstab\)/));
+  expect(screen.getByRole("alertdialog")).toHaveTextContent("wird eingehängt");
+  expect(screen.getByRole("button", { name: "Abbrechen" })).toBeDisabled();
+  await app.user.keyboard("{Escape}{F7}");
+  act(() => app.runtime.controller.closeDialog());
+  await act(async () => { await app.runtime.controller.openPlace("xdg:documents"); });
+  expect(app.runtime.store.getState().dialog).toMatchObject({ kind: "placeConfirm", action: "mount", busy: true });
+  expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(before);
+  await act(async () => { finish(); });
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  if (failure) expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(before);
+});
+
+test("fstab unmount checks symlink tabs in the backend and moves only affected tabs", async () => {
+  const alias = `${HOME}/alias`;
+  const affected = vi.fn(async (_key: string, paths: string[]) => paths.flatMap((p, i) => p === alias ? [i] : []));
+  const unmount = vi.fn(async () => {});
+  const app = await setupApp({ wrap: api => ({ ...api, placesMountAffected: affected, fstabUnmount: unmount }) });
+  act(() => app.base.devPlug({ name: "Alias mount", path: "/media/disk", mounted: true, fstab: { userMountable: true, automount: false, noauto: true } }));
+  await screen.findByRole("treeitem", { name: /^Alias mount/ });
+  act(() => app.runtime.store.dispatch({ type: "window", w: 1, update: w => ({ ...w, tabs: [...w.tabs, { ...w.tabs[0]!, path: alias, lockRoot: alias }] }) }));
+  fireEvent.contextMenu(item(/^Alias mount/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Aushängen" }));
+  expect(affected).toHaveBeenCalledWith("path:/media/disk", expect.arrayContaining([alias]));
+  expect(unmount).not.toHaveBeenCalled();
+  await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
+  await waitFor(() => expect(app.runtime.store.getState().windows[1].tabs[1]?.path).toBe(HOME));
+});
+
+test("remote transfer destinations are never classified as unmounted local drives", async () => {
+  const remote = "sftp:test!/folder";
+  const app = await setupApp({ wrap: api => ({ ...api, copy: vi.fn(async () => 999) }) });
+  act(() => app.base.devPlug({ name: "Irrelevant", path: remote, mounted: false, fstab: { userMountable: true, automount: false, noauto: true } }));
+  await screen.findByRole("treeitem", { name: /^Irrelevant/ });
+  dragFocused(app);
+  act(() => { app.runtime.controller.dragEnd(); app.runtime.controller.openTransfer("copy", 0, DOWNLOADS); });
+  const dialog = app.runtime.store.getState().dialog;
+  expect(dialog?.kind).toBe("transfer");
+  if (dialog?.kind !== "transfer") throw new Error("transfer missing");
+  await act(async () => { await app.runtime.controller.confirmTransfer(dialog.plan, remote); });
+  expect(app.api.copy).toHaveBeenCalledWith(expect.any(Array), remote);
+});
+
+test.each(["de", "en"] as const)("trash confirmation caps displayed paths without changing the operation (%s)", async language => {
+  const trash = vi.fn(async () => 999);
+  const app = await setupApp({ settings: { language }, wrap: api => ({ ...api, trash }) });
+  const paths = Array.from({ length: 25 }, (_, i) => `${HOME}/selected-${i}`);
+  act(() => app.runtime.store.dispatch({ type: "dialog", dialog: { kind: "trashConfirm", paths } }));
+  const dialog = screen.getByRole("alertdialog");
+  expect(within(dialog).getAllByRole("listitem")).toHaveLength(21);
+  expect(within(dialog).getByText(paths[19]!)).toBeVisible();
+  expect(within(dialog).queryByText(paths[20]!)).toBeNull();
+  expect(within(dialog).getByText(language === "de" ? "+5 weitere" : "+5 more")).toBeVisible();
+  await app.user.click(within(dialog).getByRole("button", { name: language === "de" ? "Ja, Papierkorb" : "Yes, move to Trash" }));
+  expect(trash).toHaveBeenCalledWith(paths);
 });

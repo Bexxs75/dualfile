@@ -1,7 +1,7 @@
 //! Commands for the search over many files and archives. Part of `AppState`; the DTOs and
 //! the result store live in `crate::search`.
 
-use super::AppState;
+use super::{AppState, JobPaths};
 use crate::convert::{JobTitleDto, UiError};
 use crate::search::{page, SearchOptionsDto, SearchPageDto};
 use dualfile_core::ops::OpReport;
@@ -47,8 +47,11 @@ impl AppState {
                 .unwrap_or_else(|| start.path().to_string_lossy().into_owned()),
             0,
         );
-        Ok(
-            self.submit_job_titled(name, title, Vec::new(), move |resolver| {
+        self.submit_job_titled(
+            name,
+            title,
+            JobPaths::read(vec![crate::convert::vpath_text(&start)]),
+            move |resolver| {
                 Box::new(move |job| {
                     let mut report = OpReport::default();
                     match search::search(&router, &start, &opts, job) {
@@ -67,7 +70,7 @@ impl AppState {
                     }
                     report
                 })
-            }),
+            },
         )
     }
 
@@ -361,16 +364,20 @@ mod tests {
         for _ in 0..2 {
             let release = Arc::clone(&release);
             let (tx, rx) = std::sync::mpsc::channel::<()>();
-            blockers.push(f.state.submit_job("block".into(), vec![], move |_| {
-                Box::new(move |_| {
-                    let _ = tx.send(());
-                    let _ = release
-                        .lock()
-                        .unwrap()
-                        .recv_timeout(Duration::from_secs(10));
-                    Default::default()
-                })
-            }));
+            blockers.push(
+                f.state
+                    .submit_job("block".into(), vec![], move |_| {
+                        Box::new(move |_| {
+                            let _ = tx.send(());
+                            let _ = release
+                                .lock()
+                                .unwrap()
+                                .recv_timeout(Duration::from_secs(10));
+                            Default::default()
+                        })
+                    })
+                    .unwrap(),
+            );
             rx.recv_timeout(Duration::from_secs(5)).unwrap();
         }
         let id = f.state.search_start(&f.p("d"), &name("*.txt")).unwrap();

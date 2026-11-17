@@ -88,7 +88,7 @@ describe("Befehlspalette R3", () => {
     expect(spy).toHaveBeenCalledWith({ kind: "connections", entry: { action: "system" } });
   });
 
-  test("system import and mounted connection entry reuse real dialog flows without unmounting", async () => {
+  test("system import uses the existing dialog and mounted profiles offer guarded unmount", async () => {
     const app = await setupApp();
     open(); search("Aus System übernehmen");
     await app.user.keyboard("{Enter}");
@@ -102,9 +102,13 @@ describe("Befehlspalette R3", () => {
     });
     const navigate = vi.spyOn(app.runtime.controller, "navigateTo").mockResolvedValue(true);
     const unmount = vi.spyOn(app.api, "systemMountUnmount");
+    const guardedUnmount = vi.spyOn(app.runtime.controller, "unmountPlace").mockResolvedValue();
     open(); search("Trennen Team");
+    expect(screen.queryByRole("option", { name: /Trennen/ })).toBeNull();
+    search("Aushängen Team");
     await app.user.keyboard("{Enter}");
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(0, HOME));
+    expect(guardedUnmount).toHaveBeenCalledWith(`conn:${app.runtime.store.getState().connections[0]!.profile.id}`);
+    expect(navigate).not.toHaveBeenCalled();
     expect(unmount).not.toHaveBeenCalled();
   });
 

@@ -322,6 +322,19 @@ pub fn run_isolated(
         .unwrap_or(Err(HelperError::Timeout))
 }
 
+/// Retain an operation lease until the helper has exited, even after a response timeout.
+pub fn run_isolated_guarded(
+    mut command: std::process::Command,
+    timeout: std::time::Duration,
+    guard: impl Send + 'static,
+) -> Result<(), HelperError> {
+    crate::places_pool::helpers()
+        .run(timeout + std::time::Duration::from_millis(200), move || {
+            run_bounded_guarded(&mut command, timeout, Some(Box::new(guard)))
+        })
+        .unwrap_or(Err(HelperError::Timeout))
+}
+
 /// Only the short-lived intermediary is tracked/reaped. The desktop application runs
 /// in a separate session and never consumes a helper slot for its lifetime.
 pub fn launch_isolated(
@@ -368,6 +381,13 @@ pub fn run_bounded(
     command: &mut std::process::Command,
     timeout: std::time::Duration,
 ) -> Result<(), HelperError> {
+    run_bounded_guarded(command, timeout, None)
+}
+fn run_bounded_guarded(
+    command: &mut std::process::Command,
+    timeout: std::time::Duration,
+    guard: Option<Box<dyn Send>>,
+) -> Result<(), HelperError> {
     use std::{
         io::Read,
         process::{Child, Stdio},
@@ -378,10 +398,11 @@ pub fn run_bounded(
         time::{Duration, Instant},
     };
     static ACTIVE: AtomicUsize = AtomicUsize::new(0);
-    static REAP: Mutex<Vec<Child>> = Mutex::new(Vec::new());
+    type PendingChild = (Child, Option<Box<dyn Send>>);
+    static REAP: Mutex<Vec<PendingChild>> = Mutex::new(Vec::new());
     {
         let mut pending = REAP.lock().unwrap_or_else(|e| e.into_inner());
-        pending.retain_mut(|child| {
+        pending.retain_mut(|(child, _guard)| {
             if matches!(child.try_wait(), Ok(Some(_))) {
                 ACTIVE.fetch_sub(1, Ordering::SeqCst);
                 false
@@ -396,7 +417,7 @@ pub fn run_bounded(
             std::thread::sleep(Duration::from_millis(200));
             REAP.lock()
                 .unwrap_or_else(|e| e.into_inner())
-                .retain_mut(|child| {
+                .retain_mut(|(child, _guard)| {
                     if matches!(child.try_wait(), Ok(Some(_))) {
                         ACTIVE.fetch_sub(1, Ordering::SeqCst);
                         false
@@ -432,6 +453,7 @@ pub fn run_bounded(
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
     apply_clean_env(command);
+    apply_helper_locale(command);
     apply_external_current_dir(command);
     #[cfg(unix)]
     {
@@ -507,9 +529,46 @@ pub fn run_bounded(
         std::thread::sleep(Duration::from_millis(5));
     }
     slot.0 = false;
-    REAP.lock().unwrap_or_else(|e| e.into_inner()).push(child);
+    REAP.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push((child, guard));
     result
 }
+fn apply_helper_locale(command: &mut Command) {
+    if std::path::Path::new(command.get_program())
+        .file_name()
+        .is_some_and(|name| {
+            ["mount", "umount", "gio"]
+                .iter()
+                .any(|helper| name == *helper)
+        })
+    {
+        command.env("LC_ALL", "C").env_remove("LANGUAGE");
+    }
+}
+#[cfg(test)]
+#[test]
+fn helpers_use_predictable_diagnostics() {
+    for helper in ["mount", "umount", "/usr/bin/gio"] {
+        let mut command = Command::new(helper);
+        command.env("LC_ALL", "de_DE.UTF-8").env("LANGUAGE", "de");
+        apply_clean_env(&mut command);
+        apply_helper_locale(&mut command);
+        let env: std::collections::HashMap<_, _> = command.get_envs().collect();
+        assert_eq!(
+            env[std::ffi::OsStr::new("LC_ALL")],
+            Some(std::ffi::OsStr::new("C"))
+        );
+        assert_eq!(env[std::ffi::OsStr::new("LANGUAGE")], None);
+    }
+    let mut desktop = Command::new("xdg-open");
+    desktop.env("LC_ALL", "de_DE.UTF-8");
+    apply_helper_locale(&mut desktop);
+    assert!(desktop
+        .get_envs()
+        .any(|(key, value)| key == "LC_ALL" && value == Some(std::ffi::OsStr::new("de_DE.UTF-8"))));
+}
+
 fn safe_helper_error(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes).to_lowercase();
     // Only fixed diagnostic codes/text survive; never interpolate sources, usernames or paths.
@@ -526,11 +585,16 @@ fn safe_helper_error(bytes: &[u8]) -> String {
     }
     String::new()
 }
+// Helper integration tests share the process-wide worker pool and slot counter.
+#[cfg(test)]
+static HELPER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod bounded_helper_tests {
     use super::*;
     #[test]
     fn open_desktop_applications_do_not_consume_mount_helper_slots() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = tempfile::tempdir().unwrap();
         for i in 0..4 {
             let mut command = std::process::Command::new("sh");
@@ -577,6 +641,7 @@ mod bounded_helper_tests {
     }
     #[test]
     fn busy_launch_pool_reports_failure_and_never_starts_expired_work() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let pool = crate::places_pool::Pool::new(1);
         let (release, blocked) = std::sync::mpsc::channel();
         pool.run(std::time::Duration::from_millis(20), move || {
@@ -605,6 +670,7 @@ mod bounded_helper_tests {
     }
     #[test]
     fn desktop_launcher_timeout_does_not_kill_foreground_application() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let tmp = tempfile::tempdir().unwrap();
         let marker = tmp.path().join("finished");
         let mut command = std::process::Command::new("sh");
@@ -623,6 +689,7 @@ mod bounded_helper_tests {
     }
     #[test]
     fn final_stderr_before_exit_is_always_drained() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for _ in 0..20 {
             let mut command = std::process::Command::new("sh");
             command.args(["-c", "printf 'permission denied' >&2; exit 1"]);
@@ -644,6 +711,7 @@ mod bounded_helper_tests {
     }
     #[test]
     fn helper_timeout_has_a_response_deadline() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let start = std::time::Instant::now();
         assert_eq!(
             run_bounded(
@@ -653,5 +721,49 @@ mod bounded_helper_tests {
             Err(HelperError::Timeout)
         );
         assert!(start.elapsed() < std::time::Duration::from_secs(1));
+    }
+}
+
+#[cfg(test)]
+mod guarded_helper_tests {
+    use super::*;
+    use std::{
+        process::Command,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
+    struct Lease(Arc<AtomicBool>);
+    impl Drop for Lease {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    #[test]
+    fn response_timeout_keeps_the_lease_during_blocked_process_creation() {
+        let _serial = HELPER_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        use std::os::unix::process::CommandExt;
+        let released = Arc::new(AtomicBool::new(false));
+        let mut command = Command::new("sleep");
+        command.arg("10");
+        // SAFETY: sleep is async-signal-safe; no Rust allocation or mutex runs after fork.
+        unsafe {
+            command.pre_exec(|| {
+                libc::sleep(1);
+                Ok(())
+            });
+        }
+        assert_eq!(
+            run_isolated_guarded(command, Duration::from_millis(40), Lease(released.clone())),
+            Err(HelperError::Timeout)
+        );
+        assert!(!released.load(Ordering::SeqCst));
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while !released.load(Ordering::SeqCst) {
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 }

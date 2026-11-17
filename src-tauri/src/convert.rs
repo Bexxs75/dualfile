@@ -142,6 +142,7 @@ pub fn error_kind(error: &Error) -> &'static str {
         Error::DestinationInsideSource | Error::SameFile => "invalidTarget",
         Error::Disconnected => "disconnected",
         Error::Cancelled => "cancelled",
+        Error::Unsupported("trashPurgeFailed") => "trashPurgeFailed",
         Error::Unsupported(message)
             if *message == dualfile_core::archive::MSG_READ_ONLY
                 || *message == dualfile_core::plugins::MSG_PLUGIN_READ_ONLY =>

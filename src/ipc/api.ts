@@ -98,6 +98,12 @@ export interface DualfileApi extends SystemApi {
   placesSpace(path: string): Promise<{ available: number; total: number } | null>;
   placesSetVisible(visible: boolean): Promise<void>;
   trashOpenSystem(): Promise<void>;
+  placesMountAffected(mountKey: string, paths: string[]): Promise<number[]>;
+  placesSaveConnection(key: string): Promise<void>;
+  trashEmpty(): Promise<number>;
+  fstabMount(mountPoint: string): Promise<void>;
+  fstabUnmount(mountPoint: string): Promise<void>;
+  placesMountUnmount(mountKey: string): Promise<void>;
   sidebarResizeWindow(delta: number): Promise<{ actualDelta: number; canGrow: boolean; restoredWidth?: number }>;
   localDrives(): Promise<import("./types").Drive[]>;
   systemPlacesList(): Promise<import("./types").SystemPlace[]>;
