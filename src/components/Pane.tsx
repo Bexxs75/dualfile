@@ -2,9 +2,10 @@ import { useEffect, useState, useLayoutEffect, useRef, type KeyboardEvent as Rea
 import { useAppState, useController, useLanguage, useRuntime, useT } from "../app/context";
 import { activeTabOf, focusedEntry, otherWindow, visibleEntries, type WinIdx } from "../app/state";
 import { formatBytes } from "../i18n";
-import { baseName, crumbsOf, displayPath, joinPath, isArchivePath, parseRemotePath } from "../state/paths";
+import { baseName, crumbsOf, displayPath, joinPath, isArchivePath, isTrashPath, parseRemotePath } from "../state/paths";
 import { summary } from "../state/selection";
 import { FileList } from "./FileList";
+import { TrashView } from "./TrashView";
 import { QuickView } from "./lister/QuickView";
 
 import { HeaderMenu, type HeaderMenuItem } from "./HeaderMenu";
@@ -21,7 +22,8 @@ function Tabs({ w }: { w: WinIdx }) {
       {windowState.tabs.map((tab, index) => {
         const selected = index === windowState.activeTab;
         const remoteTab = parseRemotePath(tab.path);
-        const label = remoteTab?.inner === "/" ? crumbsOf(tab.path, connections)[0]!.label : baseName(tab.path);
+        const trashTab = isTrashPath(tab.path);
+        const label = trashTab ? tr("trash.title") : remoteTab?.inner === "/" ? crumbsOf(tab.path, connections)[0]!.label : baseName(tab.path);
         return (
           <span
             key={index}
@@ -33,11 +35,12 @@ function Tabs({ w }: { w: WinIdx }) {
               role="tab"
               aria-selected={selected}
               tabIndex={selected ? 0 : -1}
-              title={displayPath(tab.path, connections)}
+              title={trashTab ? label : displayPath(tab.path, connections)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => controller.selectTab(w, index)}
             >
               {remoteTab ? <Icon name="server" className="tab-remote" /> : null}
+              {trashTab ? <Icon name="trash" className="tab-remote" /> : null}
               {tab.lockRoot ? <Icon name="pin" className="tab-remote" /> : null}
               {label}
             </button>
@@ -279,6 +282,7 @@ export function Pane({ w }: { w: WinIdx }) {
   });
   const paneColor = useAppState((state) => (w === 0 ? state.settings.paneColorLeft : state.settings.paneColorRight));
   const preview = useAppState((state) => state.quickView && state.active !== w);
+  const trashView = useAppState(state => isTrashPath(activeTabOf(state, w).path));
   return (
     <section
       className={`pane${active ? " active" : ""}${dropTarget ? " drop" : ""}`}
@@ -297,8 +301,9 @@ export function Pane({ w }: { w: WinIdx }) {
       }}
     >
       <Tabs w={w} />
-      {preview ? <div className="crumbs quick-path" title={displayPath(previewPath)}>{displayPath(previewPath)}</div> : <PathBar w={w} />}
-      {preview ? (
+      {trashView ? <TrashView w={w} /> : null}
+      {trashView ? null : preview ? <div className="crumbs quick-path" title={displayPath(previewPath)}>{displayPath(previewPath)}</div> : <PathBar w={w} />}
+      {trashView ? null : preview ? (
         <QuickView source={otherWindow(w)} />
       ) : (
         <>

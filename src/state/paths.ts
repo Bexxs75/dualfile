@@ -87,7 +87,12 @@ function normalizeLocal(path: string): string {
 }
 
 /** Entfernt abschließende Schrägstriche und doppelte Trenner; "/" bleibt "/". Archivpfade: Archivdatei und Innenpfad je für sich. */
+/** Pseudo path of the trash view tab; never a real folder, never sent to the backend. */
+export const TRASH_PATH = "trash:";
+export const isTrashPath = (path: string): boolean => path === TRASH_PATH;
+
 export function normalizePath(path: string): string {
+  if (isTrashPath(path)) return path;
   const remote = parseRemotePath(path);
   if (remote) return `${remote.root}${normalizeLocal(remote.inner)}`;
   const parsed = parseArchivePath(path);

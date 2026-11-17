@@ -197,6 +197,12 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 .range input { flex: 1; }
 
 /* Kontextmenü und Ziehen */
+.trash-path { font-weight: 600; }
+.trash-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.trash-bar .tb.danger { color: var(--warn); }
+.trash-info { margin-left: auto; color: var(--muted); font-size: 12px; }
+.trash-empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--muted); padding: 24px; }
+.trash-empty b { display: block; color: var(--fg); font-size: 15px; margin: 8px 0 4px; }
 .menu-backdrop { position: fixed; inset: 0; z-index: 35; }
 .ctx { position: fixed; min-width: 190px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 32px #000a; padding: 4px; display: flex; flex-direction: column; }
 .ctx button { text-align: left; padding: 6px 10px; border-radius: 5px; }

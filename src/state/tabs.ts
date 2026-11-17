@@ -141,7 +141,7 @@ export const setSelection = (w: WindowState, selection: SelectionState): WindowS
 
 // Direct server addresses may carry user and host names and are refused by the core when
 // saving; saved connections (`conn:`) and local folders are kept.
-const UNSAVED_PATH = /^(ftp|sftp|smb|webdav|plugin):/;
+const UNSAVED_PATH = /^(ftp|sftp|smb|webdav|plugin|trash):/;
 
 export function toSession(w: WindowState): WindowSession {
   const kept = w.tabs.filter((tab) => !UNSAVED_PATH.test(tab.path));

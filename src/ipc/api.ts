@@ -106,6 +106,12 @@ export interface DualfileApi extends SystemApi {
   placesMountAffected(mountKey: string, paths: string[]): Promise<number[]>;
   placesSaveConnection(key: string): Promise<void>;
   trashEmpty(): Promise<number>;
+  /** Trash view: items of the local trash (newest first, capped). */
+  trashList(): Promise<import("./types").TrashList>;
+  /** Restores by id to the original locations (`exists` if occupied); returns the restored original paths. */
+  trashRestore(ids: string[]): Promise<string[]>;
+  /** Deletes by id for good; call only after the user confirmed. Returns the number of deleted items. */
+  trashPurge(ids: string[]): Promise<number>;
   deviceList(): Promise<import("./types").Drive[]>;
   deviceMount(deviceKey: string): Promise<string>;
   deviceUnmount(deviceKey: string): Promise<void>;

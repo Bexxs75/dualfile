@@ -188,6 +188,10 @@ describe("Sitzung", () => {
     });
     expect(toSession(fromSession(session, "/h"))).toEqual(session);
   });
+  it("speichert den Papierkorb-Tab nicht", () => {
+    const w = navigate(newTab(createWindow("/a")), "trash:");
+    expect(toSession(w).tabs).toEqual([{ path: "/a", sort: "name", filter: "" }]);
+  });
   it("speichert keine direkten Serveradressen, gespeicherte Verbindungen schon", () => {
     let w = navigate(newTab(createWindow("/a")), "sftp://otto@server/home");
     w = navigate(newTab(w), "conn:abc/docs");

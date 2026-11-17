@@ -248,7 +248,10 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
           <button role="menuitem" onClick={() => { void controller.unmountPlace(menuEntry.key, false, "powerOff"); setMenu(null); }}>{tr("sidebar.powerOff")}</button></>}
         {menuEntry.canUnmount && <button role="menuitem" onClick={() => { void controller.unmountPlace(menuEntry.key); setMenu(null); }}>{tr("sidebar.unmount")}</button>}
         {menuEntry.canSave && <button role="menuitem" onClick={() => { void controller.savePlaceConnection(menuEntry.key); setMenu(null); }}>{tr("sidebar.saveConnection")}</button>}
-        {menuEntry.key.startsWith("trash:") && <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" }); setMenu(null); }}>{tr("sidebar.emptyTrash")}</button>}
+        {menuEntry.key.startsWith("trash:") && <>
+          <button role="menuitem" onClick={() => { void controller.openSystemTrash(); setMenu(null); }}>{tr("sidebar.openSystemTrash")}</button>
+          <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" }); setMenu(null); }}>{tr("sidebar.emptyTrash")}</button>
+        </>}
         {menuEntry.path && <button role="menuitem" onClick={() => { void navigator.clipboard.writeText(menuEntry.path!).catch(() => controller.toast(tr("error.io"), "error")); setMenu(null); }}>{tr("sidebar.copyPath")}</button>}
         <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeProperties", key: menuEntry.key }); setMenu(null); }}>{tr("context.properties")}</button>
       </>}

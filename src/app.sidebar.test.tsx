@@ -86,12 +86,17 @@ test("live plug is announced and unplug sends all affected tabs home", async () 
   await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(HOME));
   expect(sidebar().querySelector('[aria-live="polite"]')).toHaveTextContent("TESTSTICK entfernt");
 });
-test("disconnected profile opens connect dialog; trash uses system trash", async () => {
+test("disconnected profile opens connect dialog; trash opens in-app, system trash via context menu", async () => {
   const app = await setupApp();
   const trash = vi.spyOn(app.api, "trashOpenSystem");
-  await app.user.click(item(/^Papierkorb/)); expect(trash).toHaveBeenCalledOnce();
-  trash.mockRejectedValueOnce(new Error("helper failed"));
   await app.user.click(item(/^Papierkorb/));
+  expect(trash).not.toHaveBeenCalled();
+  expect(await screen.findByRole("grid", { name: "Papierkorb" }).catch(() => screen.findByText("Der Papierkorb ist leer"))).toBeInTheDocument();
+  fireEvent.contextMenu(item(/^Papierkorb/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Im Systemdateimanager öffnen" })); expect(trash).toHaveBeenCalledOnce();
+  trash.mockRejectedValueOnce(new Error("helper failed"));
+  fireEvent.contextMenu(item(/^Papierkorb/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Im Systemdateimanager öffnen" }));
   expect(screen.getByText("Der System-Papierkorb konnte nicht geöffnet werden.")).toBeInTheDocument();
   await act(async () => { await app.api.connectionSave(newSshProfile("offline")); await app.runtime.controller.refreshConnections(); });
   vi.spyOn(app.api, "connectionConnect").mockRejectedValue(new CoreError("password", "needsPassword"));

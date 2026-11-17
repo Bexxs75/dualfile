@@ -2244,6 +2244,39 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       job.timer = scheduler.setTimeout(() => { if (job.cancelled) return; trashed.clear(); places.trash.empty = true; publish(job.id, { state: "done" }); emit({ type: "placesChanged" }); }, 0);
       return job.id;
     },
+    async trashList() {
+      const entries = [...trashed].map(([id, { originalPath, node }]) => ({
+        id, name: basename(originalPath), originalParent: parentOf(originalPath), deletedAt: Math.floor(clock() / 1000),
+        size: node.children ? null : node.entry.size, isDir: Boolean(node.children),
+      }));
+      return { entries, truncated: false };
+    },
+    async trashRestore(ids) {
+      const paths: string[] = [];
+      for (const id of ids) {
+        const found = trashed.get(id);
+        if (!found) throw new CoreError(`Nicht im Papierkorb: ${id}`, "notFound");
+        const parent = find(parentOf(found.originalPath));
+        if (!parent?.children) throw new CoreError(`Ursprünglicher Ordner fehlt: ${parentOf(found.originalPath)}`, "notFound");
+        const name = basename(found.originalPath);
+        if (parent.children.has(name)) throw new CoreError(`Der Name ist bereits vorhanden: ${name}`, "exists");
+        parent.children.set(name, found.node);
+        trashed.delete(id);
+        changed(parentOf(found.originalPath));
+        paths.push(found.originalPath);
+      }
+      places.trash.empty = trashed.size === 0;
+      emit({ type: "placesChanged" });
+      return paths;
+    },
+    async trashPurge(ids) {
+      const known = ids.filter(id => trashed.has(id));
+      if (known.length !== ids.length) throw new CoreError("Nicht im Papierkorb", "notFound");
+      for (const id of ids) trashed.delete(id);
+      places.trash.empty = trashed.size === 0;
+      emit({ type: "placesChanged" });
+      return ids.length;
+    },
     async deviceList() { return structuredClone(places.drives.filter(d => d.deviceActions)); },
     async deviceMount(deviceKey) {
       const drive = places.drives.find(d => d.deviceActions?.key === deviceKey);

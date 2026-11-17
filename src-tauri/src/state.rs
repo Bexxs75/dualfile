@@ -1089,6 +1089,29 @@ impl AppState {
         })
     }
 
+    pub fn trash_list(&self) -> Result<dualfile_core::trash_view::TrashList, UiError> {
+        let _lease = crate::mount_guard::job(&[trash_data_dir()])?;
+        Ok(dualfile_core::trash_view::list()?)
+    }
+
+    /// Restores trash items by id; returns the restored original paths.
+    pub fn trash_restore(&self, ids: &[String]) -> Result<Vec<String>, UiError> {
+        let _lease = crate::mount_guard::job(&[trash_data_dir()])?;
+        let paths = dualfile_core::trash_view::restore(ids)?;
+        for path in &paths {
+            if let Some(parent) = std::path::Path::new(path).parent() {
+                self.announce_dir(&parent.to_string_lossy());
+            }
+        }
+        Ok(paths)
+    }
+
+    /// Deletes trash items for good by id; the UI asks for confirmation first.
+    pub fn trash_purge(&self, ids: &[String]) -> Result<usize, UiError> {
+        let _lease = crate::mount_guard::job(&[trash_data_dir()])?;
+        Ok(dualfile_core::trash_view::purge(ids)?)
+    }
+
     pub fn restore_from_trash(&self, items: &[String]) -> Result<(), UiError> {
         let items = self.paths(items)?;
         reject_archive_writes(&items)?;
@@ -1481,6 +1504,14 @@ pub(crate) fn active_job(state: JobState) -> bool {
         state,
         JobState::Queued | JobState::Running | JobState::Paused
     )
+}
+
+fn trash_data_dir() -> String {
+    dualfile_core::system_places::DiscoveryPaths::system()
+        .data
+        .join("Trash")
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(test)]

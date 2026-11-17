@@ -7,6 +7,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Added
 
+- The Trash opens inside Dualfile (as a tab in the active pane) instead of the system file manager: list with original location, deletion date and size; restore, delete permanently (always confirmed) and empty. A context-menu entry on the sidebar Trash still opens the system file manager. Writing into the Trash view (copy, move, rename, new folder) is refused.
 - Right-click a folder in the file list and choose "Add to Places" (or "Remove from Places") to pin it to the sidebar. Requested by a tester.
 - Drop files from outside (Dolphin, the desktop) onto a Dualfile pane or onto a folder row: the target is highlighted and the copy dialog opens with the dropped paths. Dropping always copies (the native drop carries no Shift modifier); read-only, archive and unmounted destinations are refused as usual. Requested by a tester.
 

@@ -5,7 +5,7 @@ import { formatJobPresentation } from "../state/jobPresentation";
 // Verbindet Zustand, Zustandsmodule und die API: alle Abläufe, die etwas anstoßen (Laden, Kopieren,
 // Löschen …). Komponenten rufen nur diese Methoden und lesen den Zustand.
 import { CoreError, type DualfileApi, type NativeDropEvent } from "../ipc/api";
-import type { ConflictInfo, CoreEvent, Entry, JobStatus, PackFormat, RenameItem, Resolution, Settings } from "../ipc/types";
+import type { ConflictInfo, CoreEvent, Entry, JobStatus, PackFormat, RenameItem, Resolution, Settings, TrashEntry } from "../ipc/types";
 import { createTranslator, errorKey, resolveLanguage, type Language, type TranslationKey, type TranslationParams } from "../i18n";
 import type { Command } from "../state/keymap";
 import { bookmarkNumber } from "../state/keymap";
@@ -23,7 +23,7 @@ import {
   type OperationPlan,
   type PaneSnapshot,
 } from "../state/operations";
-import { currentRemotePath, parseRemotePath, archiveHostFolder, archiveRootOf, baseName, isArchiveName, isArchivePath, joinPath, normalizePath, parentPath } from "../state/paths";
+import { currentRemotePath, parseRemotePath, archiveHostFolder, archiveRootOf, baseName, isArchiveName, isArchivePath, isTrashPath, TRASH_PATH, joinPath, normalizePath, parentPath } from "../state/paths";
 import { suggestPackBase } from "../state/pack";
 import * as sel from "../state/selection";
 import { formatSort, toggleSort, parseSort, type SortKey } from "../state/sort";
@@ -202,7 +202,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       catch (error) { placeFailure(error); return; }
       finally { dispatch({ type: "dialog", dialog: null }); }
     }
-    if (key.startsWith("trash:")) { try { await api.trashOpenSystem(); } catch { toast(tr("sidebar.trashUnavailable"), "error"); } return; }
+    if (key.startsWith("trash:")) { openTrash(target === "other" ? otherWindow(state.active) : state.active); return; }
     const w = target === "other" ? otherWindow(state.active) : state.active;
     if (target === "tab") {
       newTab(w);
@@ -218,6 +218,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     return buildPlaces(s.places, s.connections, s.settings, s.home, true).flatMap(section => section.entries).find(e => e.key === key);
   }
   function readOnlyPlace(path: string) {
+    if (isTrashPath(path)) return true;
     return get().places?.drives.filter(d => inside(path, d.path)).sort((a, b) => b.path.length - a.path.length)[0]?.readOnly === true;
   }
   function unmountedPlace(path: string) {
@@ -422,6 +423,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
 
   async function reload(w: WinIdx, then?: { focusName?: string }): Promise<void> {
     const startPath = activeTabOf(get(), w).path;
+    if (isTrashPath(startPath)) { dispatch({ type: "listing", w, path: startPath, entries: [] }); return; }
     const removing = () => [...unmounting].some(root => pathInPlace(startPath, root));
     if (removing()) return;
     const seq = ++reqSeq[w];
@@ -519,7 +521,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   };
 
   /** Liegt der aktuelle Ordner des Fensters in einem Archiv? Dann ist es schreibgeschützt. */
-  const inArchive = (w: WinIdx): boolean => isArchivePath(activeTabOf(get(), w).path);
+  const inArchive = (w: WinIdx): boolean => isArchivePath(activeTabOf(get(), w).path) || isTrashPath(activeTabOf(get(), w).path);
 
   /** Meldet „Archiv ist schreibgeschützt“ und liefert true, wenn das Fenster in einem Archiv steht. */
   function refuseInArchive(w: WinIdx): boolean {
@@ -640,7 +642,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
 
   async function goUp(w: WinIdx): Promise<void> {
     const path = activeTabOf(get(), w).path;
-    if (path === "/") return;
+    if (path === "/" || isTrashPath(path)) return;
     await navigateTo(w, parentPath(path), baseName(path));
   }
 
@@ -1099,6 +1101,50 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     updateSettings((s) => ({ ...s, bookmarks }));
     return null;
   }
+  // ---------------------------------------------------------------- Papierkorb-Ansicht
+
+  /** Tells open trash views to reload their list. */
+  const trashChanged = (): void => { document.dispatchEvent(new CustomEvent("dualfile:trash-changed")); };
+  /** Opens (or selects) the trash view tab in window `w`. */
+  function openTrash(w: WinIdx): void {
+    dispatch({ type: "active", w });
+    const index = get().windows[w].tabs.findIndex(t => isTrashPath(t.path));
+    if (index >= 0) return selectTab(w, index);
+    dispatch({
+      type: "window", w, listing: { path: TRASH_PATH, entries: [] },
+      update: win => { const opened = tabs.newTab(win); return { ...opened, tabs: opened.tabs.map((t, i) => i === opened.activeTab ? tabs.createTab(TRASH_PATH) : t) }; },
+    });
+  }
+  async function openSystemTrash(): Promise<void> {
+    try { await api.trashOpenSystem(); } catch { toast(tr("sidebar.trashUnavailable"), "error"); }
+  }
+  async function trashRestore(items: readonly TrashEntry[]): Promise<void> {
+    if (!items.length) return;
+    try {
+      await api.trashRestore(items.map(item => item.id));
+      toast(items.length === 1 ? tr("trash.restoredOne", { name: items[0]!.name, where: items[0]!.originalParent }) : tr("trash.restoredMany", { count: items.length }));
+    } catch (error) {
+      if (error instanceof CoreError && error.kind === "exists") toast(tr("trash.restoreExists", { count: items.length, name: items[0]!.name }), "error");
+      else fail(error);
+    }
+    trashChanged();
+    void refreshPlaces();
+  }
+  function askTrashPurge(items: readonly TrashEntry[]): void {
+    if (items.length) dispatch({ type: "dialog", dialog: { kind: "trashPurge", items: items.map(({ id, name }) => ({ id, name })) } });
+  }
+  async function confirmTrashPurge(): Promise<void> {
+    const dialog = get().dialog;
+    if (dialog?.kind !== "trashPurge") return;
+    dispatch({ type: "dialog", dialog: null });
+    try {
+      toast(tr("trash.purged", { count: await api.trashPurge(dialog.items.map(item => item.id)) }));
+    } catch (error) { fail(error); }
+    trashChanged();
+    void refreshPlaces();
+  }
+  /** Shows the original folder of a trashed item in the other pane. */
+  const openTrashOriginal = (w: WinIdx, item: TrashEntry): void => void navigateTo(otherWindow(w), item.originalParent, item.name);
   const unpinBookmark = (path: string): void =>
     updateSettings((s) => ({ ...s, bookmarks: bookmarkOps.unpin(s.bookmarks, path) }));
   function moveBookmark(from: number, to: number): void {
@@ -1359,7 +1405,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (disposed) return;
     switch (event.type) {
       case "discoveryChanged": void refreshDiscovery(); return;
-      case "placesChanged": void refreshPlaces(); return;
+      case "placesChanged": void refreshPlaces(); trashChanged(); return;
       case "job": {
         // 9b exposes the job ID through events before undoRun resolves.
         if (event.status.name === "Rückgängig") {
@@ -1370,7 +1416,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         compareFeature.onJobEvent(event.status);
         const status = event.status;
         if (["done", "failed", "cancelled"].includes(status.state)) rememberedErrors.delete(status.id);
-        if (status.state === "done") void refreshPlaces();
+        if (status.state === "done") { void refreshPlaces(); trashChanged(); }
         if (status.state === "done" && status.failed.length === 0) {
           later(() => dispatch({ type: "closeJob", id: status.id }), jobDismissMs);
         }
@@ -1499,7 +1545,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   function syncWatch(): void {
     const state = get();
     if (state.phase !== "ready") return;
-    const paths = [...new Set(([0, 1] as const).map((w) => activeTabOf(state, w).path))].filter((p) => p !== "").sort();
+    const paths = [...new Set(([0, 1] as const).map((w) => activeTabOf(state, w).path))].filter((p) => p !== "" && !isTrashPath(p)).sort();
     const key = JSON.stringify(paths);
     if (key === watchedKey) return;
     watchedKey = key;
@@ -1687,6 +1733,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     editBookmark,
     unpinBookmark,
     moveBookmark,
+    openTrash,
+    openSystemTrash,
+    trashRestore,
+    askTrashPurge,
+    confirmTrashPurge,
+    openTrashOriginal,
     dragStart,
     dragOver,
     dragEnd,

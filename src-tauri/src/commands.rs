@@ -121,6 +121,23 @@ pub async fn trash(state: Shared<'_>, items: Vec<String>) -> Result<u64, UiError
 }
 
 #[tauri::command]
+pub async fn trash_list(
+    state: Shared<'_>,
+) -> Result<dualfile_core::trash_view::TrashList, UiError> {
+    run(state, |s| s.trash_list()).await
+}
+
+#[tauri::command]
+pub async fn trash_restore(state: Shared<'_>, ids: Vec<String>) -> Result<Vec<String>, UiError> {
+    run(state, move |s| s.trash_restore(&ids)).await
+}
+
+#[tauri::command]
+pub async fn trash_purge(state: Shared<'_>, ids: Vec<String>) -> Result<usize, UiError> {
+    run(state, move |s| s.trash_purge(&ids)).await
+}
+
+#[tauri::command]
 pub async fn restore_from_trash(state: Shared<'_>, items: Vec<String>) -> Result<(), UiError> {
     run(state, move |s| s.restore_from_trash(&items)).await
 }

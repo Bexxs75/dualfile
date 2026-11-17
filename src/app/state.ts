@@ -32,6 +32,7 @@ export type JobKind = "copy" | "move" | "trash" | "delete" | "rename" | "extract
 export type Dialog =
   | { kind: "placeConfirm"; action: "mount" | "unmount" | "eject" | "powerOff" | "emptyTrash"; busy?: boolean; key?: string }
   | { kind: "trashConfirm"; paths: string[] }
+  | { kind: "trashPurge"; items: { id: string; name: string }[] }
   | { kind: "placeProperties"; key: string }
   | { kind: "whatsNew"; versions: readonly string[] }
   | { kind: "history" }

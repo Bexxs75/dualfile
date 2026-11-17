@@ -12,6 +12,7 @@ import { createRuntime, type AppRuntime } from "./app/runtime";
 import type { ControllerOptions } from "./app/controller";
 import { ConflictDialog } from "./components/dialogs/ConflictDialog";
 import { ConfirmTransferDialog } from "./components/dialogs/ConfirmTransferDialog";
+import { TrashPurgeDialog } from "./components/dialogs/TrashPurgeDialog";
 import { BookmarkDialog } from "./components/dialogs/BookmarkDialog";
 import { DeleteDialog } from "./components/dialogs/DeleteDialog";
 import { PackDialog } from "./components/dialogs/PackDialog";
@@ -53,6 +54,7 @@ function Dialogs({ api }: { api: DualfileApi }) {
   return (
     <>
       {dialog?.kind === "trashConfirm" ? <Confirmation count={dialog.paths.length} size={0} names={dialog.paths} confirmDefault confirm={() => void controller.confirmTrash()} cancel={() => controller.closeDialog()} /> : null}
+      {dialog?.kind === "trashPurge" ? <TrashPurgeDialog names={dialog.items.map(item => item.name)} /> : null}
       {dialog?.kind === "placeConfirm" ? <PlaceConfirmDialog dialog={dialog} /> : null}
       {dialog?.kind === "placeProperties" ? <PlacePropertiesDialog placeKey={dialog.key} /> : null}
       {dialog?.kind === "transfer" ? <ConfirmTransferDialog plan={dialog.plan} /> : null}

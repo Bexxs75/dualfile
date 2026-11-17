@@ -748,3 +748,21 @@ export interface SettingsWindowSnapshot {
 }
 export type SettingsWindowDelivery = { kind: "session"; session: string } |
   { kind: "close"; session: string } | { kind: "timeout"; session: string } | { kind: "error"; session: string; message: string } | { kind: "snapshot"; snapshot: SettingsWindowSnapshot };
+
+/** One item in the trash view (`trashList`); `id` is the stable identifier used for restore and purge. */
+export interface TrashEntry {
+  id: string;
+  name: string;
+  originalParent: string;
+  /** Unix seconds, null if unknown. */
+  deletedAt: number | null;
+  /** Bytes of a file; null for folders and when unknown. */
+  size: number | null;
+  isDir: boolean;
+}
+
+export interface TrashList {
+  entries: TrashEntry[];
+  /** More items exist than the cap; only the newest are listed. */
+  truncated: boolean;
+}
