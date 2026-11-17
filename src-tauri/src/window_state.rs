@@ -28,11 +28,11 @@ fn is_wayland() -> bool {
 }
 
 /// VISIBLE stays out of the flags: the tray-start logic decides whether the window shows.
-/// The editor window is skipped so it does not overwrite the main window's size.
+/// Only the main window is tracked, so editor or settings windows never overwrite its size.
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_window_state::Builder::default()
         .with_state_flags(flags(is_wayland()))
-        .with_denylist(&["connection-editor"])
+        .with_filter(|label| label == "main")
         .build()
 }
 
