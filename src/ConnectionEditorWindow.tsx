@@ -10,11 +10,37 @@ import { applyTheme } from "./themes/tokens";
 export interface EditorParams {
   profileId: string | null;
   appearance: EditorAppearance;
+  draft?: ConnectionProfile;
 }
 
 /** Reads the query the main window built (`connection_editor_open`); anything odd falls back to defaults. */
 export function parseEditorParams(search: string): EditorParams {
-  return { profileId: new URLSearchParams(search).get("profile") || null, appearance: parseAppearance(search) };
+  const q = new URLSearchParams(search);
+  const profileId = q.get("profile") || null;
+  const draft = profileId ? undefined : discoveredDraft(q.get("discovered"));
+  return { profileId, appearance: parseAppearance(search), ...(draft ? { draft } : {}) };
+}
+
+/** The native editor supplies a validated cache record; still bound query data in browser previews. */
+function discoveredDraft(raw: string | null): ConnectionProfile | undefined {
+  if (!raw || raw.length > 4096) return;
+  try {
+    const d = JSON.parse(raw) as Record<string, unknown>;
+    const text = (v: unknown, limit: number): v is string => typeof v === "string" && v.length <= limit && !/[\p{Cc}\p{Cf}\u034f]/u.test(v);
+    if (!text(d.name, 63) || !d.name.trim() || !text(d.host, 254) || !d.host || !/^[a-zA-Z0-9.:%_-]+$/.test(d.host)
+      || typeof d.port !== "number" || !Number.isInteger(d.port) || d.port < 1 || d.port > 65535
+      || !["smb", "nfs", "sftp", "webdav", "webdavs"].includes(String(d.protocol))
+      || (d.path != null && (!text(d.path, 256) || /[\\?#@%:]/.test(d.path) || d.path.split("/").some(p => p === "." || p === "..")))) return;
+    const path = typeof d.path === "string" ? d.path : undefined;
+    const [share, ...folder] = (path ?? "").split("/");
+    return { ...newSshProfile(d.host), name: d.name, transport: "builtin", port: d.port,
+      protocol: (d.protocol === "webdavs" ? "webdav" : d.protocol) as ConnectionProfile["protocol"],
+      tls: d.protocol === "webdavs" ? "explicit" : "none",
+      ...(d.protocol === "smb" || d.protocol === "webdav" || d.protocol === "webdavs" ? { share: d.protocol === "smb" ? share : path } : {}),
+      ...(d.protocol === "nfs" ? { export: path } : {}),
+      startFolder: d.protocol === "sftp" ? path ?? null : d.protocol === "smb" && folder.length ? `/${folder.join("/")}` : null,
+    };
+  } catch { return; }
 }
 
 export function parseAppearance(search: string): EditorAppearance {
@@ -48,14 +74,14 @@ function Editor({ api, params }: { api: DualfileApi; params: EditorParams }) {
 
   useEffect(() => {
     let active = true;
-    if (!params.profileId) { setLoad({ status: "ready", profile: newSshProfile() }); return; }
+    if (!params.profileId) { setLoad({ status: "ready", profile: params.draft ?? newSshProfile() }); return; }
     api.connectionsList().then((entries) => {
       if (!active) return;
       const found = entries.find((e) => e.profile.id === params.profileId);
       setLoad(found ? { status: "ready", profile: found.profile } : { status: "missing" });
     }).catch(() => { if (active) setLoad({ status: "missing" }); });
     return () => { active = false; };
-  }, [api, params.profileId]);
+  }, [api, params.profileId, params.draft]);
 
   // The form mounts only after the profile is loaded, so focus has to wait for that.
   useEffect(() => {

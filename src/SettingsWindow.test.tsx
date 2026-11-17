@@ -150,3 +150,18 @@ test("sidebar preferences appear and synchronize in the separate settings window
   expect(screen.getByRole("spinbutton", { name: "Sidebar width" })).toHaveValue(260);
   expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
 });
+
+test("LAN discovery is opt-in and synchronized through the settings window relay", async () => {
+  const b = setup();
+  b.snapshot();
+  const label = "Discover services on the local network";
+  const checkbox = await screen.findByRole("checkbox", { name: label });
+  expect(checkbox).not.toBeChecked();
+  await b.user.click(checkbox);
+  await waitFor(() => expect(b.send).toHaveBeenCalledWith(expect.objectContaining({ kind: "patch", patch: { sidebarDiscovery: true } })));
+  b.snapshot({ ack: 1, settings: { ...testSnapshot().settings, sidebarDiscovery: true } });
+  expect(checkbox).toBeChecked();
+  b.snapshot({ ack: 1, settings: { ...testSnapshot().settings, sidebarDiscovery: false, language: "de" } });
+  expect(screen.getByRole("checkbox", { name: "Dienste im lokalen Netzwerk suchen" })).not.toBeChecked();
+  expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
+});

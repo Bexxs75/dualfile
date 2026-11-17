@@ -434,6 +434,7 @@ export interface Settings {
   sidebarWidth?: number;
   sidebarCollapsed?: string[];
   sidebarHidden?: string[];
+  sidebarDiscovery?: boolean;
   verifyPolicy: VerifyPolicy;
   version: number;
   theme: "schiefer" | "papier" | "werkstatt";
@@ -701,7 +702,12 @@ export interface Drive {
   space?: { available: number; total: number } | null;
 }
 export interface UserDir { kind: "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos"; path: string }
+export interface DiscoveredService {
+  key: string; name: string; protocol: "smb" | "nfs" | "sftp" | "webdav" | "webdavs";
+  host: string; port: number; path: string | null;
+}
 export interface PlacesSnapshot {
+  discoveredServices?: DiscoveredService[];
   home: string;
   userDirs: UserDir[];
   trash: { path: string; empty: boolean };
@@ -724,7 +730,7 @@ export interface SystemPlace {
 }
 
 export type SettingsTab = "appearance" | "system" | "info" | "keyboard";
-export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |

@@ -647,6 +647,8 @@ pub struct SettingsDto {
     pub sidebar_collapsed: Vec<String>,
     #[serde(default = "default_sidebar_hidden")]
     pub sidebar_hidden: Vec<String>,
+    #[serde(default)]
+    pub sidebar_discovery: bool,
     pub density: String,
     pub font_size: u8,
     pub language: String,
@@ -727,6 +729,7 @@ impl From<&settings::Settings> for SettingsDto {
             sidebar_width: s.sidebar_width,
             sidebar_collapsed: s.sidebar_collapsed.clone(),
             sidebar_hidden: s.sidebar_hidden.clone(),
+            sidebar_discovery: s.sidebar_discovery,
             density: s.density.clone(),
             font_size: s.font_size,
             language: s.language.clone(),
@@ -795,6 +798,7 @@ impl From<&SettingsDto> for settings::Settings {
             sidebar_width: s.sidebar_width,
             sidebar_collapsed: s.sidebar_collapsed.clone(),
             sidebar_hidden: s.sidebar_hidden.clone(),
+            sidebar_discovery: s.sidebar_discovery,
             density: s.density.clone(),
             font_size: s.font_size,
             language: s.language.clone(),
@@ -1405,6 +1409,7 @@ mod tests {
     #[test]
     fn settings_round_trip_through_the_ui_shape() {
         let mut core = settings::Settings {
+            sidebar_discovery: true,
             font_size: 15,
             show_parent_entry: false,
             terminal_height: 420,
@@ -1428,6 +1433,18 @@ mod tests {
         }];
         let dto = SettingsDto::from(&core);
         let value = serde_json::to_value(&dto).unwrap();
+        assert_eq!(value["sidebarDiscovery"], true);
+        assert!(settings::Settings::from(&dto).sidebar_discovery);
+        let mut legacy_discovery = value.clone();
+        legacy_discovery
+            .as_object_mut()
+            .unwrap()
+            .remove("sidebarDiscovery");
+        assert!(
+            !serde_json::from_value::<SettingsDto>(legacy_discovery)
+                .unwrap()
+                .sidebar_discovery
+        );
         assert_eq!(value["fontSize"], 15);
         assert_eq!(value["showParentEntry"], false);
         assert_eq!(value["terminalHeight"], 420);

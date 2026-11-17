@@ -49,6 +49,7 @@ pub struct Settings {
     pub sidebar_width: u16,
     pub sidebar_collapsed: Vec<String>,
     pub sidebar_hidden: Vec<String>,
+    pub sidebar_discovery: bool,
     pub density: String,
     pub font_size: u8,
     pub language: String,
@@ -105,6 +106,7 @@ impl Default for Settings {
             sidebar_width: 210,
             sidebar_collapsed: Vec::new(),
             sidebar_hidden: Vec::new(),
+            sidebar_discovery: false,
             density: "normal".into(),
             font_size: 14,
             language: "auto".into(),
@@ -399,6 +401,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         sidebar_width: field(&mut obj, "sidebar_width", 210, &mut fixes),
         sidebar_collapsed: field(&mut obj, "sidebar_collapsed", Vec::new(), &mut fixes),
         sidebar_hidden: field(&mut obj, "sidebar_hidden", Vec::new(), &mut fixes),
+        sidebar_discovery: field(&mut obj, "sidebar_discovery", false, &mut fixes),
         density: field(&mut obj, "density", d.density.clone(), &mut fixes),
         font_size: field(&mut obj, "font_size", d.font_size, &mut fixes),
         language: field(&mut obj, "language", d.language.clone(), &mut fixes),
@@ -1450,6 +1453,29 @@ pub fn valid_sidebar_key(key: &str) -> bool {
 #[cfg(test)]
 mod sidebar_tests {
     use super::*;
+    #[test]
+    fn discovery_is_opt_in_and_round_trips_without_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!Settings::default().sidebar_discovery);
+        fs::write(dir.path().join("settings.json"), r#"{"version":6}"#).unwrap();
+        let (mut settings, outcome) = load(dir.path());
+        assert_eq!(outcome, LoadOutcome::Loaded);
+        assert!(!settings.sidebar_discovery);
+        settings.sidebar_discovery = true;
+        save(dir.path(), &settings, false).unwrap();
+        assert!(load(dir.path()).0.sidebar_discovery);
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"version":6,"sidebar_discovery":"yes"}"#,
+        )
+        .unwrap();
+        let (settings, outcome) = load(dir.path());
+        assert!(!settings.sidebar_discovery);
+        assert_eq!(
+            outcome,
+            LoadOutcome::Repaired(vec!["sidebar_discovery".into()])
+        );
+    }
     #[test]
     fn old_files_default_silently_and_bad_fields_repair() {
         let dir = tempfile::tempdir().unwrap();

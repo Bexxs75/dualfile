@@ -230,7 +230,7 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
       {menuEntry && <>
         {!menuEntry.disabled && <>
           <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key); setMenu(null); }}>{tr("context.open")}</button>
-          {!menuEntry.key.startsWith("trash:") && <>
+          {!menuEntry.key.startsWith("trash:") && !menuEntry.discoveryKey && <>
             <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key, "other"); setMenu(null); }}>{tr("sidebar.openOther")}</button>
             <button role="menuitem" onClick={() => { void controller.openPlace(menuEntry.key, "tab"); setMenu(null); }}>{tr("sidebar.openTab")}</button>
           </>}

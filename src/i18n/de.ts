@@ -2,6 +2,10 @@
 // ein Test prüft es zusätzlich zur Laufzeit). Mehrzahl: `schlüssel.one` / `schlüssel.other`,
 // abgerufen über `t("schlüssel", { count })`. Platzhalter stehen in `{geschweiften Klammern}`.
 const de = {
+  "sidebar.network": "Im Netzwerk gefunden",
+  "sidebar.discovery": "Dienste im lokalen Netzwerk suchen",
+  "sidebar.discoveryHelp": "Standardmäßig aus. Benötigt Avahi. Ein Klick öffnet nur den vorbelegten Verbindungseditor; verbinde dich erst nach Prüfung des Ziels.",
+  "sidebar.discoveredHelp": "Verbindungseditor öffnen und Ziel prüfen",
   "sidebar.openOther": "Im anderen Fenster öffnen",
   "sidebar.openTab": "In neuem Tab öffnen",
   "sidebar.connect": "Verbinden",

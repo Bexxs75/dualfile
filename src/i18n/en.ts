@@ -2,6 +2,10 @@ import type de from "./de";
 
 // Englische Texte. Der Typ erzwingt dieselben Schlüssel wie in `de.ts`.
 const en: Record<keyof typeof de, string> = {
+  "sidebar.network": "Found on the network",
+  "sidebar.discovery": "Discover services on the local network",
+  "sidebar.discoveryHelp": "Off by default. Requires Avahi. Clicking only opens a prefilled connection editor; check the destination before connecting.",
+  "sidebar.discoveredHelp": "Open connection editor and check destination",
   "sidebar.openOther": "Open in other pane",
   "sidebar.openTab": "Open in new tab",
   "sidebar.connect": "Connect",

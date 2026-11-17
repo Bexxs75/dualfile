@@ -116,6 +116,8 @@ export interface MockOptions {
 
 /** Die Mock-API plus Schalter für Tests und den Entwurf. */
 export interface MockApi extends DualfileApi {
+  devDiscover(service: import("./types").DiscoveredService): void;
+  devForget(key?: string): void;
   devPlug(drive?: import("./types").Drive): void;
   devUnplug(path?: string): void;
   requestClose(): void;
@@ -914,6 +916,11 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     ],
     networkMounts: [{ mountKey: "mock-shared", canUnmount: true, name: "Shared", scheme: "smb", host: "nas", port: null, user: null, path: "/shared", url: "smb://nas/shared", sources: ["mounted"], mountedAt: "/run/user/1000/gvfs/smb-share:server=nas,share=shared" }],
   };
+  const discoverySamples: import("./types").DiscoveredService[] = options.samples ? [
+    { key: "demo-office", name: "Office NAS", protocol: "smb", host: "office.local", port: 445, path: "documents" },
+    { key: "demo-backup", name: "Backup NAS", protocol: "smb", host: "backup.local", port: 445, path: "backups" },
+  ] : [];
+  if (options.initialSettings?.sidebarDiscovery) places.discoveredServices = structuredClone(discoverySamples);
   const scheduler = options.scheduler ?? defaultScheduler;
   const clock = options.now ?? (() => Date.now());
   const root = sampleTree(home, clock(), options.samples ?? false, options.compareDemo ?? options.samples ?? false);
@@ -2221,7 +2228,13 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       pendingErrors.delete(jobId); answer(decision);
     },
     ...createMockSshPrompts(scheduler),
-    async placesSnapshot() { return structuredClone(places); },
+    async placesSnapshot() { return structuredClone({ ...places, discoveredServices: settings?.sidebarDiscovery ? places.discoveredServices ?? [] : [] }); },
+    devDiscover(service) {
+      if (!settings?.sidebarDiscovery) return;
+      places.discoveredServices = [...(places.discoveredServices ?? []).filter(s => s.key !== service.key), structuredClone(service)].slice(0, 64);
+      emit({ type: "placesChanged" });
+    },
+    devForget(key) { places.discoveredServices = key ? (places.discoveredServices ?? []).filter(s => s.key !== key) : []; emit({ type: "placesChanged" }); },
     async placesSpace() { return { available: 12e9, total: 32e9 }; },
     async placesSetVisible() {},
     async trashOpenSystem() {},
@@ -2731,7 +2744,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     async loadSettings() {
       if (!settings) {
         const fresh: Settings = {
-          sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [],
+          sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [], sidebarDiscovery: false,
           lastSeenVersion: null,
           version: 6,
           verifyPolicy: "auto",
@@ -2759,7 +2772,9 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       if (paths.some((path) => /^s?ftp:/.test(path))) {
         throw new CoreError("Serverorte dürfen nicht in den Einstellungen stehen", "invalidSettings");
       }
+      const discoveryChanged = !!settings?.sidebarDiscovery !== !!next.sidebarDiscovery;
       settings = structuredClone(next);
+      if (discoveryChanged) { places.discoveredServices = next.sidebarDiscovery ? structuredClone(discoverySamples) : []; emit({ type: "placesChanged" }); }
     },
 
     // Der Mock meldet Änderungen selbst über `dirChanged`; eine Ordnerbeobachtung gibt es nicht.

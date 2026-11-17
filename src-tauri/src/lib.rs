@@ -13,6 +13,7 @@ mod convert;
 mod desktop_entry;
 mod devices;
 mod diagnostics;
+mod discovery;
 mod item_error;
 mod keychain;
 mod lanes;
@@ -117,6 +118,13 @@ pub fn run() {
             };
             #[cfg(not(unix))]
             let state = AppState::new(sink, home_dir(), dualfile_core::settings::config_dir());
+            state.discovery.set_enabled(
+                state.load_settings().settings.sidebar_discovery,
+                &TauriSink(app.handle().clone()),
+            );
+            state
+                .discovery
+                .start(Arc::new(TauriSink(app.handle().clone())));
             app.manage(Arc::new(state));
             app.manage(Arc::new(terminal::TerminalManager::default()));
             #[cfg(target_os = "linux")]

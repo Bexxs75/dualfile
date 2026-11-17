@@ -193,7 +193,7 @@ export function createTauriApi(): DualfileApi {
     connectionSave: (profile) => call("connection_save", { profile }),
     connectionDelete: (profileId) => call("connection_delete", { profileId }),
     connectionConnect: (profileId, secret, expected) => call("connection_connect", { profileId, secret: secret ?? null, expected: expected ?? null }),
-    connectionEditorOpen: (profileId, title, appearance) => call("connection_editor_open", { profileId, title, appearance }),
+    connectionEditorOpen: (profileId, title, appearance, discoveryKey) => call("connection_editor_open", { profileId, title, appearance, ...(discoveryKey ? { discoveryKey } : {}) }),
     connectionEditorClose: () => call("connection_editor_close"),
     connectionTrust: (profileId, decision, fingerprint) => call("connection_trust", { profileId, decision, fingerprint }),
     connectionResetTrust: (profileId) => call("connection_reset_trust", { profileId }),

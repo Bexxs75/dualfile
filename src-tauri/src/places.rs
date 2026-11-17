@@ -53,6 +53,7 @@ pub struct Snapshot {
     trash: Trash,
     drives: Vec<drives::Drive>,
     network_mounts: Vec<NetworkMount>,
+    discovered_services: Vec<crate::discovery::Service>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -198,6 +199,7 @@ fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
         },
         drives,
         network_mounts,
+        discovered_services: vec![],
     })
 }
 /// Reading the kernel table is isolated from all probes that can enter a remote mount.
@@ -322,11 +324,13 @@ impl Places {
 }
 #[tauri::command]
 pub async fn places_snapshot(
+    app_state: tauri::State<'_, Arc<crate::state::AppState>>,
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Places>>,
 ) -> Result<Snapshot, UiError> {
     main_only(window.label())?;
     let state = state.inner().clone();
+    let discovery = app_state.discovery.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let mut snapshot = state
             .refresh()
@@ -340,6 +344,7 @@ pub async fn places_snapshot(
             Duration::from_millis(1500),
             Duration::from_millis(300),
         );
+        snapshot.discovered_services = discovery.snapshot();
         Ok(snapshot)
     })
     .await
@@ -1389,6 +1394,7 @@ mod watcher_tests {
             },
             drives: drives::parse_mountinfo(table, None),
             network_mounts: vec![],
+            discovered_services: vec![],
         }
     }
     #[test]

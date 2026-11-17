@@ -164,6 +164,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const state = get();
     const place = buildPlaces(state.places, state.connections, state.settings, state.home, true).flatMap(s => s.entries).find(e => e.key === key);
     if (!place || place.disabled || isUnmountBusy()) return;
+    if (place.discoveryKey) { await openConnectionEditor(undefined, place.discoveryKey); return; }
     let destination = place.path;
     if (place.state === "unmounted") {
       if (!place.canMount) return;
@@ -978,7 +979,14 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   // ---------------------------------------------------------------- Lesezeichen und Einstellungen
 
   function updateSettings(update: (settings: Settings) => Settings): void {
+    const before = get().settings.sidebarDiscovery ?? false;
     dispatch({ type: "settings", update });
+    if (before !== (get().settings.sidebarDiscovery ?? false)) {
+      const snapshot = get().places;
+      if (snapshot) dispatch({ type: "places", snapshot: { ...snapshot, discoveredServices: [] }, announcement: "" });
+      // Discovery changes bypass the ordinary autosave debounce, including in the settings window.
+      void saveNow().then(() => refreshPlaces());
+    }
   }
 
   function togglePin(w: WinIdx = get().active): void {
@@ -1285,10 +1293,10 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     } catch (error) { fail(error); }
   }
 
-  async function openConnectionEditor(profile?: import("../ipc/types").ConnectionProfile): Promise<void> {
+  async function openConnectionEditor(profile?: import("../ipc/types").ConnectionProfile, discoveryKey?: string): Promise<void> {
     const { theme, accent, accentAutomatic, density, fontSize } = get().settings;
     try {
-      const opened = await api.connectionEditorOpen(profile?.id ?? null, tr("ssh.profile"), { theme, accent, accentAutomatic: accentAutomatic ?? false, density, fontSize, lang: language() });
+      const opened = await api.connectionEditorOpen(profile?.id ?? null, tr("ssh.profile"), { theme, accent, accentAutomatic: accentAutomatic ?? false, density, fontSize, lang: language() }, ...(discoveryKey ? [discoveryKey] as const : []));
       // A second editor is never opened: the first one is brought forward, and the user is told why.
       if (!opened) toast(tr("ssh.editorOpen"));
     } catch (error) { fail(error); }
