@@ -3,6 +3,12 @@
 Notable changes follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) structure.
 This reconstruction groups local history and package reports; `0.1.0` is a pre-release development baseline, not a published-release claim.
 
+## [Unreleased]
+
+### Changed
+
+- **The embedded terminal closes when its shell ends.** Ctrl+D (or `exit`) at the shell prompt now closes the terminal panel, as in Konsole; programs inside the terminal such as `python3` keep their own Ctrl+D. If the shell fails right at the start (non-zero exit within 2 seconds, e.g. a wrong shell path), the panel stays open so the message remains readable.
+
 ## [0.3.4] - 2026-11-16
 
 ### Changed

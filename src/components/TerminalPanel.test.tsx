@@ -82,7 +82,7 @@ test("toggle-off while opening closes the late session", async () => {
   view.unmount();
 });
 
-test("buffers early binary output and exit, filters other IDs and stops input", async () => {
+test("buffers early binary output and a failed start, filters other IDs and stops input", async () => {
   const api = createMockApi();
   let output!: (event: TerminalOutput) => void;
   let exit!: (event: TerminalExit) => void;
@@ -92,13 +92,15 @@ test("buffers early binary output and exit, filters other IDs and stops input", 
   vi.spyOn(api, "terminalOpen").mockImplementation(async () => {
     output({ id: 42, data: btoa("\xff\x00") });
     output({ id: 999, data: btoa("wrong") });
-    exit({ id: 42, code: 0 });
+    exit({ id: 42, code: 1 });
     return 42;
   });
   const { write, view } = setup("/tmp", api);
   fireEvent.click(screen.getByText("toggle"));
   await waitFor(() => expect(xterm.writeln).toHaveBeenCalled());
   expect(xterm.write).toHaveBeenCalledExactlyOnceWith(new Uint8Array([255, 0]));
+  expect(xterm.writeln).toHaveBeenCalledWith(expect.stringContaining("(1)"));
+  expect(screen.getByRole("region", { name: "Terminal" })).toBeVisible();
   act(() => xterm.input?.("ignored"));
   expect(write).not.toHaveBeenCalled();
   view.unmount();
@@ -154,4 +156,44 @@ test("terminal colors come from the setting and change live for open terminals",
   expect(xterm.last!.options.theme).toMatchObject({ background: "#fbfaf6", foreground: "#1f2328", green: "#1a7f37" });
   act(() => rt.controller.updateSettings(s => ({ ...s, terminalColors: "theme", theme: "papier" })));
   expect(xterm.last!.options.theme).toMatchObject({ background: "#f6f3ec", foreground: "#2a2824" });
+});
+
+async function openAndExit(code: number | null, id = 1, afterMs = 0) {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const api = createMockApi();
+  let exit!: (event: TerminalExit) => void;
+  vi.spyOn(api, "onTerminalExit").mockImplementation(handler => { exit = handler; return () => {}; });
+  const { view } = setup("/tmp", api);
+  fireEvent.click(screen.getByText("toggle"));
+  await waitFor(() => expect(xterm.last).toBeDefined());
+  await act(async () => {});
+  vi.setSystemTime(Date.now() + afterMs);
+  act(() => exit({ id, code }));
+  vi.useRealTimers();
+  return view;
+}
+
+test("shell exit after the start window closes the panel, whatever the code", async () => {
+  const view = await openAndExit(130, 1, 2500);
+  expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
+  view.unmount();
+});
+
+test("clean shell exit right away closes the panel", async () => {
+  const view = await openAndExit(0);
+  expect(screen.queryByRole("region", { name: "Terminal" })).toBeNull();
+  view.unmount();
+});
+
+test("non-zero exit within 2 s keeps the message readable", async () => {
+  const view = await openAndExit(127, 1, 1500);
+  expect(screen.getByRole("region", { name: "Terminal" })).toBeVisible();
+  expect(xterm.writeln).toHaveBeenCalledWith(expect.stringContaining("(127)"));
+  view.unmount();
+});
+
+test("exit of another terminal is ignored", async () => {
+  const view = await openAndExit(0, 99, 5000);
+  expect(screen.getByRole("region", { name: "Terminal" })).toBeVisible();
+  view.unmount();
 });

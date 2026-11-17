@@ -8,6 +8,8 @@ import { mapKey } from "../state/keymap";
 import { terminalColorsFor, xtermTheme } from "../themes/terminal";
 import { isArchivePath, parseRemotePath } from "../state/paths";
 
+const START_FAILURE_MS = 2000;
+
 export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
   const host = useRef<HTMLDivElement>(null);
   // Navigation does not restart or cd an already running shell.
@@ -58,6 +60,7 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
     term.open(element);
     let disposed = false;
     let exited = false;
+    const openedAt = Date.now();
     let id: number | undefined;
     // Output (including immediate exit) can arrive before the open command resolves.
     const pending: Array<TerminalOutput | TerminalExit> = [];
@@ -71,8 +74,11 @@ export function TerminalPanel({ api, cwd }: { api: DualfileApi; cwd: string }) {
       if ("data" in event) term.write(Uint8Array.from(atob(event.data), char => char.charCodeAt(0)));
       else {
         exited = true;
+        // The shell ending (Ctrl+D, `exit`) closes the panel. A failed start (wrong shell, broken rc file)
+        // exits non-zero right away and stays readable; the code alone cannot tell, as bash exits with the last status on Ctrl+D.
+        if (event.code === 0 || Date.now() - openedAt > START_FAILURE_MS) { controller.command("terminal"); return; }
         term.options.disableStdin = true;
-        term.writeln(`\r\n\x1b[2m${exitedText.current}\x1b[0m`);
+        term.writeln(`\r\n\x1b[2m${exitedText.current}${event.code === null ? "" : ` (${event.code})`}\x1b[0m`);
       }
     };
     const stopOutput = api.onTerminalOutput(receive);
