@@ -205,7 +205,7 @@ export function confirmDelete(model: DeleteDialogModel, token: string): string |
 type Translate = (key: TranslationKey, params?: TranslationParams) => string;
 
 const TITLE_KINDS = new Set([
-  "copy", "move", "extract", "pack", "download", "upload", "trash", "delete", "rename", "search", "sync", "space", "similar", "dupes", "dupesTrash",
+  "emptyTrash", "copy", "move", "extract", "pack", "download", "upload", "trash", "delete", "rename", "search", "sync", "space", "similar", "dupes", "dupesTrash",
 ]);
 
 /**
@@ -222,6 +222,7 @@ export function jobDisplayName(job: Pick<JobStatus, "name" | "title">, tr: Trans
 /** Grund eines fehlgeschlagenen Eintrags: bei fester Fehlerart aus i18n, sonst der Text des Kerns. */
 export function failureReason(failure: { path: string; message: string; kind?: string }, tr: Translate): string {
   switch (failure.kind) {
+    case "trashPurgeFailed": return tr("sidebar.errorTrash");
     case "disconnected":
       return tr("itemError.disconnected");
     case "permission":

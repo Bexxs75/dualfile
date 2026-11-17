@@ -31,7 +31,12 @@ impl AppState {
             self.submit_job_titled(
                 "Ähnliche Bilder".into(),
                 JobTitleDto::new("similar", "", 0),
-                vec![],
+                JobPaths::read(
+                    roots
+                        .iter()
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .collect(),
+                ),
                 move |_| {
                     Box::new(move |job| {
                         let result = similar::find_similar_images(
@@ -181,7 +186,7 @@ impl AppState {
                     report
                 })
             },
-        );
+        )?;
         Ok(TrashResultDto { job_id, skipped })
     }
 }
@@ -230,7 +235,7 @@ mod tests {
             .similar
             .start(|slot| {
                 slot.lock().unwrap().result = Some(result);
-                9000
+                Ok(9000)
             })
             .unwrap();
         let c = TrashChoice {

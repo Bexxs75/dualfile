@@ -78,8 +78,8 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
   const disconnect = async (profile: ConnectionProfile) => {
     setBusy(true);
     try {
-      if (profile.protocol === "system") await controller.navigateTo(active, await api.homeDir());
-      else await api.connectionDisconnect(profile.id);
+      if (profile.protocol === "system") return;
+      await api.connectionDisconnect(profile.id);
       await refresh();
     } catch (e) { fail(e); } finally { setBusy(false); }
   };
@@ -155,8 +155,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
       {connected && profile.protocol !== "system" ? <button className="tb" disabled={busy} onClick={() => { void disconnect(profile); }}>{tr("ssh.disconnect")}</button>
         : <button className="tb" disabled={busy} onClick={() => { if (profile.protocol === "system" || profile.transport === "openssh" || (profile.protocol === "smb" && profile.guest) || profile.protocol === "nfs") void connect(profile); else { setAttemptError(null); setPassword(profile); } }}>{tr("ssh.connect")}</button>}
       {profile.protocol === "system" && connected && <>
-        <button className="tb" disabled={busy} onClick={() => { void disconnect(profile); }}>{tr("ssh.disconnect")}</button>
-        <button className="tb" disabled={busy} onClick={() => { setBusy(true); void api.systemMountUnmount(profile.id).then(refresh).catch(fail).finally(() => setBusy(false)); }}>{tr("system.unmount")}</button>
+        <button className="tb" disabled={busy} onClick={() => { setBusy(true); void controller.unmountPlace(`conn:${profile.id}`).then(refresh).catch(fail).finally(() => setBusy(false)); }}>{tr("system.unmount")}</button>
       </>}
       <button className="tb" disabled={busy} onClick={() => { setAttemptError(null); setError(""); setDeleting(profile); }}>{tr("ssh.delete")}</button>
       {attemptError?.id === profile.id && <p className="ssh-attempt-error" role="alert">{attemptError.text}</p>}

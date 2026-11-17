@@ -577,11 +577,8 @@ pub fn mounted_path_bounded(place: &SystemPlace, paths: &DiscoveryPaths) -> Opti
         .unwrap_or(false)
     })
 }
-fn match_mount(
-    place: &SystemPlace,
-    mounted: &[SystemPlace],
-    is_dir: &impl Fn(&Path) -> bool,
-) -> Option<PathBuf> {
+/// Compare parsed authorities using the same rules as mounted-path discovery.
+fn same_server(p: &SystemPlace, place: &SystemPlace) -> bool {
     let scheme = |p: &SystemPlace| match p.scheme.as_str() {
         "webdav" | "dav" => "dav",
         "webdavs" | "davs" => "davs",
@@ -593,17 +590,42 @@ fn match_mount(
             "sftp" | "ssh" | "fish" => 22,
             "dav" | "webdav" => 80,
             "davs" | "webdavs" => 443,
+            "smb" => 445,
+            "ftp" | "ftps" => 21,
             _ => 0,
         })
     };
+    (p.scheme == place.scheme || (scheme(p) != "other" && scheme(p) == scheme(place)))
+        && p.host.eq_ignore_ascii_case(&place.host)
+        && p.user == place.user
+        && port(p) == port(place)
+}
+/// Locate the mount containing a profile path, without touching that filesystem.
+pub fn matching_mount<'a>(
+    place: &SystemPlace,
+    mounted: &'a [SystemPlace],
+) -> Option<&'a SystemPlace> {
     mounted
         .iter()
+        .filter(|p| same_server(p, place))
         .filter(|p| {
-            (p.scheme == place.scheme || (scheme(p) != "other" && scheme(p) == scheme(place)))
-                && p.host == place.host
-                && p.user == place.user
-                && port(p) == port(place)
+            let root = p.path.trim_end_matches('/');
+            place
+                .path
+                .strip_prefix(root)
+                .is_some_and(|s| s.is_empty() || s.starts_with('/'))
         })
+        .max_by_key(|p| p.path.len())
+}
+
+fn match_mount(
+    place: &SystemPlace,
+    mounted: &[SystemPlace],
+    is_dir: &impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    mounted
+        .iter()
+        .filter(|p| same_server(p, place))
         .filter_map(|p| {
             let root = p.path.trim_end_matches('/');
             let suffix = place.path.strip_prefix(root)?;
@@ -635,6 +657,36 @@ mod tests {
             fs::create_dir_all(dir).unwrap();
         }
         (tmp, p)
+    }
+    #[test]
+    fn profile_mount_matching_normalizes_authority_and_path() {
+        let mounted = vec![parse_url("sftp://alice@HOST/share/", "", "").unwrap()];
+        for url in [
+            "ssh://alice@host:22/share",
+            "sftp://alice:password@Host/share/",
+            "sftp://alice@host/share/sub",
+        ] {
+            assert!(matching_mount(&parse_url(url, "", "").unwrap(), &mounted).is_some());
+        }
+        for (scheme, port) in [
+            ("smb", 445),
+            ("dav", 80),
+            ("davs", 443),
+            ("ftp", 21),
+            ("ftps", 21),
+        ] {
+            let mounted = vec![parse_url(&format!("{scheme}://alice@host/share"), "", "").unwrap()];
+            let profile =
+                parse_url(&format!("{scheme}://alice@HOST:{port}/share/"), "", "").unwrap();
+            assert!(matching_mount(&profile, &mounted).is_some());
+        }
+        for url in [
+            "sftp://other@host/share",
+            "sftp://alice@host:23/share",
+            "sftp://alice@host/shares",
+        ] {
+            assert!(matching_mount(&parse_url(url, "", "").unwrap(), &mounted).is_none());
+        }
     }
     #[test]
     fn blocked_gvfs_probe_does_not_hide_kio_and_recovers_after_answer() {

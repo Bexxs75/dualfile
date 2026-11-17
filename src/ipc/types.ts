@@ -696,7 +696,7 @@ export interface Drive {
   readOnly?: boolean;
   source?: "mount" | "fstab";
   mounted?: boolean;
-  fstab?: { userMountable: boolean; automount: boolean; noauto: boolean } | null;
+  fstab?: { permission?: "user" | "users" | "owner" | null; userMountable: boolean; automount: boolean; noauto: boolean } | null;
   space?: { available: number; total: number } | null;
 }
 export interface UserDir { kind: "desktop" | "documents" | "downloads" | "music" | "pictures" | "videos"; path: string }
@@ -709,6 +709,8 @@ export interface PlacesSnapshot {
 }
 
 export interface SystemPlace {
+  mountKey?: string;
+  canUnmount?: boolean;
   sources: string[];
   name: string;
   scheme: string;

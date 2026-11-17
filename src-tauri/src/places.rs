@@ -1,4 +1,4 @@
-//! Read-only places discovery; all filesystem access runs in fixed isolated pools.
+//! Places discovery and interactions; all filesystem access runs in fixed isolated pools.
 use crate::convert::{CoreEventDto, UiError};
 use dualfile_core::{
     drives, fstab, places_pool, system_places, user_dirs,
@@ -22,7 +22,32 @@ pub struct Snapshot {
     user_dirs: Vec<user_dirs::UserDir>,
     trash: Trash,
     drives: Vec<drives::Drive>,
-    network_mounts: Vec<system_places::SystemPlace>,
+    network_mounts: Vec<NetworkMount>,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkMount {
+    #[serde(flatten)]
+    place: system_places::SystemPlace,
+    mount_key: String,
+    can_unmount: bool,
+}
+impl std::ops::Deref for NetworkMount {
+    type Target = system_places::SystemPlace;
+    fn deref(&self) -> &Self::Target {
+        &self.place
+    }
+}
+fn mount_key(mount: &system_places::SystemPlace) -> String {
+    crate::lanes::opaque(&format!(
+        "{}:{}",
+        mount
+            .mounted_at
+            .as_ref()
+            .map(|p| p.to_string_lossy())
+            .unwrap_or_default(),
+        mount.url
+    ))
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Trash {
@@ -36,7 +61,7 @@ fn read(path: impl AsRef<std::path::Path>, cap: u64) -> String {
     }
     text
 }
-fn bounded_read(path: std::path::PathBuf, cap: u64) -> Option<String> {
+pub(crate) fn bounded_read(path: std::path::PathBuf, cap: u64) -> Option<String> {
     // Kernel control files do not enter the probed mount. Concurrent pane listings may
     // read them together; per-path exclusion here would spuriously reject the second pane.
     if path.starts_with("/proc") {
@@ -92,10 +117,21 @@ fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
     } else {
         drives::parse_mountinfo(&table, appdir.as_deref())
     };
-    let drives = fstab::merge(
+    let mut drives = fstab::merge(
         mounts,
         fstab::parse_fstab(&bounded_read("/etc/fstab".into(), 256 * 1024).unwrap_or_default()),
     );
+    let user_mounts = current_user_mounts();
+    for drive in &mut drives {
+        if let Some(info) = &mut drive.fstab {
+            info.user_mountable = fstab::permitted(
+                info.permission.as_deref(),
+                drive.mounted,
+                info.permission.as_deref() == Some("owner") && device_owned(&drive.device),
+                user_mounts.contains(&drive.path),
+            );
+        }
+    }
     let (mounts, complete) =
         system_places::probe_mounts(&paths, places_pool::paths(), Duration::from_millis(500));
     let mut network_mounts: Vec<_> = mounts.into_iter().filter_map(public_mount).collect();
@@ -133,7 +169,11 @@ pub async fn navigation_mount(path: String) -> Option<String> {
     .flatten()
 }
 
-fn public_mount(mut mount: system_places::SystemPlace) -> Option<system_places::SystemPlace> {
+fn public_mount(mut mount: system_places::SystemPlace) -> Option<NetworkMount> {
+    let mount_key = mount_key(&mount);
+    let can_unmount = mount.mounted_at.as_ref().is_some_and(|p| {
+        p.starts_with(system_places::DiscoveryPaths::system().runtime.join("gvfs"))
+    });
     // Authentication-bearing local paths cannot be navigated by the current IPC contract.
     // Keep a redacted display-only row until opaque navigation is supported.
     let local = mount.mounted_at.as_ref()?.to_str()?;
@@ -145,12 +185,12 @@ fn public_mount(mut mount: system_places::SystemPlace) -> Option<system_places::
         mount.mounted_at = None;
     }
     mount.name = format!("{}{}", mount.host, mount.path);
-    mount.user = None;
-    if let Some((scheme, rest)) = mount.url.split_once("://") {
-        let rest = rest.split_once('@').map_or(rest, |(_, host)| host);
-        mount.url = format!("{scheme}://{rest}");
-    }
-    Some(mount)
+    strip_account(&mut mount);
+    Some(NetworkMount {
+        place: mount,
+        mount_key,
+        can_unmount,
+    })
 }
 trait SpaceProbe: Send + Sync {
     fn measure(&self, path: &str) -> Option<SpaceFree>;
@@ -613,6 +653,384 @@ async fn resize_geometry(
         credit,
     ))
 }
+fn mount_error(code: &str) -> UiError {
+    UiError::new(code, code)
+}
+fn helper_error(error: dualfile_core::appenv::HelperError) -> UiError {
+    use dualfile_core::appenv::HelperError;
+    match error {
+        HelperError::Unavailable => mount_error("helperMissing"),
+        HelperError::Timeout => mount_error("timeout"),
+        HelperError::Failed(code) => mount_error(match code.as_str() {
+            "busy" => "busy",
+            "not found" => "notFound",
+            _ => "notPermitted",
+        }),
+    }
+}
+fn reconcile_mount_result(
+    result: Result<(), dualfile_core::appenv::HelperError>,
+    unmount: bool,
+    read_mounted: impl FnOnce() -> Result<bool, UiError>,
+) -> Result<(), UiError> {
+    if result.is_ok() || matches!(result, Err(dualfile_core::appenv::HelperError::Timeout)) {
+        if read_mounted()? != unmount {
+            return Ok(());
+        }
+        if result.is_ok() {
+            return Err(mount_error("busy"));
+        }
+    }
+    result.map_err(helper_error)
+}
+fn fresh_table() -> Result<String, UiError> {
+    bounded_read("/proc/self/mountinfo".into(), 4 * 1024 * 1024)
+        .filter(|s| !s.is_empty() && s.len() < 4 * 1024 * 1024)
+        .ok_or_else(|| mount_error("timeout"))
+}
+fn mounted(table: &str, point: &str) -> bool {
+    table.lines().any(|line| {
+        let fields: Vec<_> = line.split_whitespace().collect();
+        fields.get(4).is_some_and(|v| drives::unescape(v) == point)
+            && line
+                .split_once(" - ")
+                .is_some_and(|(_, tail)| !tail.starts_with("autofs "))
+    })
+}
+fn authorize_fstab(text: &str, table: &str, point: &str, unmount: bool) -> Result<String, UiError> {
+    use std::path::{Component, Path};
+    let protected = [
+        "/boot", "/efi", "/usr", "/etc", "/proc", "/sys", "/dev", "/bin", "/sbin", "/lib", "/lib64",
+    ]
+    .iter()
+    .any(|root| Path::new(point).starts_with(root))
+        || ["/", "/run", "/var"].contains(&point);
+    if protected
+        || !Path::new(point).is_absolute()
+        || Path::new(point)
+            .components()
+            .any(|p| matches!(p, Component::ParentDir | Component::CurDir))
+    {
+        return Err(mount_error("notPermitted"));
+    }
+    let entry = fstab::parse_fstab(text)
+        .into_iter()
+        .find(|e| e.drive.path == point)
+        .ok_or_else(|| mount_error("notFound"))?;
+    if !entry.drive.fstab.is_some_and(|f| f.user_mountable) {
+        return Err(mount_error("notPermitted"));
+    }
+    if mounted(table, point) != unmount {
+        return Err(mount_error(if unmount { "notFound" } else { "busy" }));
+    }
+    Ok(entry.drive.path)
+}
+fn device_owned(device: &str) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let path = if device.starts_with("/dev/") {
+        std::path::PathBuf::from(device)
+    } else if let Some(id) = device.strip_prefix("UUID=") {
+        std::path::Path::new("/dev/disk/by-uuid").join(id)
+    } else if let Some(id) = device.strip_prefix("LABEL=") {
+        std::path::Path::new("/dev/disk/by-label").join(id)
+    } else {
+        return false;
+    };
+    if path
+        .components()
+        .any(|p| matches!(p, std::path::Component::ParentDir))
+    {
+        return false;
+    }
+    static POOL: OnceLock<places_pool::Pool> = OnceLock::new();
+    POOL.get_or_init(|| places_pool::Pool::new(2))
+        .run_keyed(
+            path.to_string_lossy().into_owned(),
+            Duration::from_millis(100),
+            move || std::fs::metadata(path).is_ok_and(|m| m.uid() == unsafe { libc::geteuid() }),
+        )
+        .unwrap_or(false)
+}
+fn mounting_user_targets(table: &str, user: &str) -> Vec<String> {
+    table
+        .lines()
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            let target = fields.iter().find_map(|f| f.strip_prefix("TARGET="))?;
+            let options = fields.iter().find_map(|f| f.strip_prefix("OPTS="))?;
+            options
+                .split(',')
+                .any(|o| {
+                    o.strip_prefix("user=")
+                        .is_some_and(|u| drives::unescape(u) == user)
+                })
+                .then(|| drives::unescape(target))
+        })
+        .collect()
+}
+fn current_user_mounts() -> Vec<String> {
+    static POOL: OnceLock<places_pool::Pool> = OnceLock::new();
+    POOL.get_or_init(|| places_pool::Pool::new(1))
+        .run_keyed(
+            "mount-user".into(),
+            Duration::from_millis(100),
+            current_user_mounts_inner,
+        )
+        .unwrap_or_default()
+}
+fn current_user_mounts_inner() -> Vec<String> {
+    // util-linux stores mounting-user ownership in utab (not kernel mountinfo).
+    // Resolve the account locally without trusting USER or emitting it in diagnostics.
+    let mut record: libc::passwd = unsafe { std::mem::zeroed() };
+    let mut result = std::ptr::null_mut();
+    let mut buffer = vec![0u8; 16384];
+    let status = unsafe {
+        libc::getpwuid_r(
+            libc::geteuid(),
+            &mut record,
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if status != 0 || result.is_null() || record.pw_name.is_null() {
+        return Vec::new();
+    }
+    let user = unsafe { std::ffi::CStr::from_ptr(record.pw_name) }.to_string_lossy();
+    mounting_user_targets(
+        &bounded_read("/run/mount/utab".into(), 256 * 1024).unwrap_or_default(),
+        &user,
+    )
+}
+fn authorize_current_user(text: &str, point: &str, unmount: bool) -> Result<(), UiError> {
+    let drive = fstab::parse_fstab(text)
+        .into_iter()
+        .find(|e| e.drive.path == point)
+        .ok_or_else(|| mount_error("notFound"))?
+        .drive;
+    let allowed = fstab::permitted(
+        drive.fstab.as_ref().and_then(|f| f.permission.as_deref()),
+        unmount,
+        drive.fstab.as_ref().and_then(|f| f.permission.as_deref()) == Some("owner")
+            && device_owned(&drive.device),
+        current_user_mounts().iter().any(|p| p == point),
+    );
+    if allowed {
+        Ok(())
+    } else {
+        Err(mount_error("notPermitted"))
+    }
+}
+fn fstab_action(point: &str, unmount: bool) -> Result<(), UiError> {
+    let table = fresh_table()?;
+    let fstab =
+        bounded_read("/etc/fstab".into(), 256 * 1024).ok_or_else(|| mount_error("timeout"))?;
+    let point = authorize_fstab(&fstab, &table, point, unmount)?;
+    authorize_current_user(&fstab, &point, unmount)?;
+    // Hold admission across validation, the helper, and timeout reconciliation.
+    let lease = Arc::new(crate::mount_guard::registry().unmount(point.clone().into())?);
+    let table = fresh_table()?;
+    let fstab =
+        bounded_read("/etc/fstab".into(), 256 * 1024).ok_or_else(|| mount_error("timeout"))?;
+    let point = authorize_fstab(&fstab, &table, &point, unmount)?;
+    authorize_current_user(&fstab, &point, unmount)?;
+    let mut command = std::process::Command::new(if unmount { "umount" } else { "mount" });
+    command.arg("--").arg(&point);
+    let result = dualfile_core::appenv::run_isolated_guarded(
+        command,
+        Duration::from_secs(60),
+        lease.clone(),
+    );
+    reconcile_mount_result(result, unmount, || Ok(mounted(&fresh_table()?, &point)))
+}
+#[tauri::command]
+pub async fn fstab_mount(window: tauri::WebviewWindow, mount_point: String) -> Result<(), UiError> {
+    main_only(window.label())?;
+    tauri::async_runtime::spawn_blocking(move || fstab_action(&mount_point, false))
+        .await
+        .map_err(|_| UiError::internal())?
+}
+#[tauri::command]
+pub async fn fstab_unmount(
+    window: tauri::WebviewWindow,
+    mount_point: String,
+) -> Result<(), UiError> {
+    main_only(window.label())?;
+    tauri::async_runtime::spawn_blocking(move || fstab_action(&mount_point, true))
+        .await
+        .map_err(|_| UiError::internal())?
+}
+fn fresh_mounts() -> Result<Vec<system_places::SystemPlace>, UiError> {
+    let (mounts, complete) = system_places::probe_mounts(
+        &system_places::DiscoveryPaths::system(),
+        places_pool::mount_checks(),
+        Duration::from_millis(750),
+    );
+    if !complete {
+        return Err(mount_error("timeout"));
+    }
+    Ok(mounts)
+}
+fn unmount_gvfs(mount: system_places::SystemPlace) -> Result<(), UiError> {
+    let point = mount
+        .mounted_at
+        .as_ref()
+        .ok_or_else(|| mount_error("notFound"))?;
+    let runtime = system_places::DiscoveryPaths::system().runtime;
+    if !point.is_absolute() || !point.starts_with(runtime.join("gvfs")) {
+        return Err(mount_error("notPermitted"));
+    }
+    let lease = Arc::new(crate::mount_guard::registry().unmount(point.clone())?);
+    // Revalidate the opaque identity after taking the lease.
+    if !fresh_mounts()?
+        .iter()
+        .any(|m| mount_key(m) == mount_key(&mount))
+    {
+        return Err(mount_error("notFound"));
+    }
+    let mut command = std::process::Command::new("gio");
+    command.args(["mount", "-u", "--", &mount.url]);
+    let result = dualfile_core::appenv::run_isolated_guarded(
+        command,
+        Duration::from_secs(30),
+        lease.clone(),
+    );
+    reconcile_mount_result(result, true, || {
+        Ok(fresh_mounts()?
+            .iter()
+            .any(|m| mount_key(m) == mount_key(&mount)))
+    })
+}
+
+pub fn unmount_profile(url: &str) -> Result<(), UiError> {
+    let profile = system_places::parse_url(url, "", "").ok_or_else(|| mount_error("notFound"))?;
+    let mounts = fresh_mounts()?;
+    let mount =
+        system_places::matching_mount(&profile, &mounts).ok_or_else(|| mount_error("notFound"))?;
+    unmount_gvfs(mount.clone())
+}
+#[tauri::command]
+pub async fn places_mount_unmount(
+    window: tauri::WebviewWindow,
+    mount_key: String,
+) -> Result<(), UiError> {
+    main_only(window.label())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mount = fresh_mounts()?
+            .into_iter()
+            .find(|m| self::mount_key(m) == mount_key)
+            .ok_or_else(|| mount_error("notFound"))?;
+        unmount_gvfs(mount)
+    })
+    .await
+    .map_err(|_| UiError::internal())?
+}
+
+fn strip_account(place: &mut system_places::SystemPlace) {
+    place.user = None;
+    if let Some((scheme, rest)) = place.url.split_once("://") {
+        let boundary = rest.find('/').unwrap_or(rest.len());
+        let (authority, path) = rest.split_at(boundary);
+        let host = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, host)| host);
+        place.url = format!("{scheme}://{host}{path}");
+    }
+}
+fn import_source(source: &str, fstype: &str) -> Option<system_places::SystemPlace> {
+    let url = match fstype {
+        "cifs" | "smb3" => format!("smb:{}", source),
+        "nfs" | "nfs4" => {
+            let (host, path) = source.rsplit_once(":/")?;
+            format!("nfs://{host}/{path}")
+        }
+        "fuse.sshfs" => {
+            let (host, path) = source.rsplit_once(":/")?;
+            format!("sftp://{host}/{path}")
+        }
+        "davfs" | "davfs2" => source
+            .replacen("https://", "davs://", 1)
+            .replacen("http://", "dav://", 1),
+        _ => return None,
+    };
+    let mut place = system_places::parse_url(&url, "mounted", "")?;
+    strip_account(&mut place);
+    Some(place)
+}
+/// Resolve saved connection data internally; credentials never reach the request or response.
+pub fn importable_place(key: &str) -> Result<system_places::SystemPlace, UiError> {
+    let mut place = if let Some(key) = key.strip_prefix("mount:") {
+        fresh_mounts()?
+            .into_iter()
+            .find(|m| mount_key(m) == key)
+            .ok_or_else(|| mount_error("notFound"))?
+    } else {
+        let (kind, point) = key.split_once(':').ok_or_else(|| mount_error("notFound"))?;
+        let mut found = None;
+        if kind == "drive" {
+            for line in fresh_table()?.lines() {
+                let Some((head, tail)) = line.split_once(" - ") else {
+                    continue;
+                };
+                let head: Vec<_> = head.split_whitespace().collect();
+                let tail: Vec<_> = tail.split_whitespace().collect();
+                if head.get(4).is_some_and(|p| drives::unescape(p) == point) && tail.len() >= 2 {
+                    found = import_source(&drives::unescape(tail[1]), tail[0]);
+                }
+            }
+        } else if kind == "fstab" {
+            let text = bounded_read("/etc/fstab".into(), 256 * 1024)
+                .ok_or_else(|| mount_error("timeout"))?;
+            for line in text.lines() {
+                let f: Vec<_> = line.split_whitespace().collect();
+                if f.len() >= 4 && !f[0].starts_with('#') && drives::unescape(f[1]) == point {
+                    found = import_source(&drives::unescape(f[0]), f[2]);
+                }
+            }
+        }
+        found.ok_or_else(|| mount_error("notFound"))?
+    };
+    strip_account(&mut place);
+    place.name = format!("{}{}", place.host, place.path);
+    place.mounted_at = None;
+    Ok(place)
+}
+
+#[tauri::command]
+pub async fn places_mount_affected(
+    window: tauri::WebviewWindow,
+    mount_key: String,
+    paths: Vec<String>,
+) -> Result<Vec<usize>, UiError> {
+    main_only(window.label())?;
+    if paths.len() > 1000 || paths.iter().any(|p| p.len() > 16384) {
+        return Err(mount_error("notPermitted"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let point = if let Some(point) = mount_key.strip_prefix("path:") {
+            if mounted(&fresh_table()?, point) {
+                std::path::PathBuf::from(point)
+            } else {
+                fresh_mounts()?
+                    .into_iter()
+                    .filter_map(|m| m.mounted_at)
+                    .filter(|p| std::path::Path::new(point).starts_with(p))
+                    .max_by_key(|p| p.components().count())
+                    .ok_or_else(|| mount_error("notFound"))?
+            }
+        } else {
+            fresh_mounts()?
+                .into_iter()
+                .find(|m| self::mount_key(m) == mount_key)
+                .and_then(|m| m.mounted_at)
+                .ok_or_else(|| mount_error("notFound"))?
+        };
+        crate::mount_guard::affected_paths(&point, &paths)
+    })
+    .await
+    .map_err(|_| UiError::internal())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -887,10 +1305,131 @@ mod watcher_tests {
         assert!(diff.publish(s.clone()));
         let mut mount = system_places::parse_url("smb://host/share", "mounted", "Share").unwrap();
         mount.mounted_at = Some("/run/user/1000/gvfs/smb-share:server=host,share=share".into());
-        s.network_mounts.push(mount);
+        s.network_mounts.push(public_mount(mount).unwrap());
         assert!(diff.publish(s.clone()));
         assert!(!diff.publish(s.clone()));
         s.network_mounts.clear();
         assert!(diff.publish(s));
+    }
+}
+
+#[cfg(test)]
+mod interaction_tests {
+    use super::*;
+    #[test]
+    fn account_redaction_preserves_at_signs_in_url_paths() {
+        for authority in ["host", "alice@host", "alice:p@ss@host"] {
+            let raw = format!("davs://{authority}/remote.php/dav/files/me@mail.de/");
+            let mut place = system_places::parse_url(&raw, "mounted", "").unwrap();
+            // GVfs discovery may return literal @ characters, not URL-encoded ones.
+            place.url = raw;
+            place.mounted_at = Some("/run/user/1000/gvfs/dav:host=host".into());
+            let public = public_mount(place.clone()).unwrap();
+            strip_account(&mut place);
+            assert_eq!(place.url, "davs://host/remote.php/dav/files/me@mail.de/");
+            assert_eq!(public.url, place.url);
+            assert_eq!(public.host, "host");
+            assert_eq!(public.user, None);
+            assert!(!format!("{public:?}").contains("alice"));
+        }
+    }
+    #[test]
+    fn utab_user_ownership_is_exact_and_stays_private() {
+        let text = "SRC=/dev/a TARGET=/mnt/one ROOT=/ OPTS=rw,user=alice\nSRC=/dev/b TARGET=/mnt/two ROOT=/ OPTS=rw,user=bob\n";
+        assert_eq!(mounting_user_targets(text, "alice"), vec!["/mnt/one"]);
+        assert!(mounting_user_targets(text, "ali").is_empty());
+        assert!(!device_owned("//alice:secret@host/share"));
+    }
+    #[test]
+    fn timeout_rechecks_actual_state_and_never_assumes_success() {
+        use dualfile_core::appenv::HelperError;
+        for unmount in [false, true] {
+            let mut read = false;
+            assert!(
+                reconcile_mount_result(Err(HelperError::Timeout), unmount, || {
+                    read = true;
+                    Ok(!unmount)
+                })
+                .is_ok()
+            );
+            assert!(read);
+            assert_eq!(
+                reconcile_mount_result(Err(HelperError::Timeout), unmount, || Ok(unmount))
+                    .unwrap_err()
+                    .kind,
+                "timeout"
+            );
+            assert_eq!(
+                reconcile_mount_result(Ok(()), unmount, || Ok(unmount))
+                    .unwrap_err()
+                    .kind,
+                "busy"
+            );
+            assert_eq!(
+                reconcile_mount_result(Err(HelperError::Unavailable), unmount, || panic!(
+                    "missing helper did not run"
+                ))
+                .unwrap_err()
+                .kind,
+                "helperMissing"
+            );
+        }
+    }
+    #[test]
+    fn import_strips_all_userinfo_from_davfs_and_sshfs() {
+        for (source, fs, url) in [
+            (
+                "https://alice:p@ss@host/folder",
+                "davfs",
+                "davs://host/folder",
+            ),
+            (
+                "alice:p@ss@host:/folder",
+                "fuse.sshfs",
+                "sftp://host/folder",
+            ),
+        ] {
+            let place = import_source(source, fs).unwrap();
+            assert_eq!(place.url, url);
+            assert_eq!(place.user, None);
+            let public = format!("{place:?} {}", serde_json::to_string(&place).unwrap());
+            assert!(!public.contains("alice") && !public.contains("p@ss"));
+        }
+    }
+    #[test]
+    fn network_sources_are_resolved_without_fstab_options() {
+        for (source, fs, url) in [
+            ("//host/share", "cifs", "smb://host/share"),
+            ("host:/export", "nfs4", "nfs://host/export"),
+            ("host:/data", "fuse.sshfs", "sftp://host/data"),
+        ] {
+            assert_eq!(import_source(source, fs).unwrap().url, url);
+        }
+        assert!(import_source("/dev/sda1", "ext4").is_none());
+    }
+    #[test]
+    fn fstab_authorization_matrix_and_safe_errors() {
+        let table = "1 0 0:1 / /mnt/share rw - nfs host:/private rw\n";
+        for permission in ["user", "users", "owner"] {
+            let text = format!("//alice:secret@host/share /mnt/share cifs {permission},credentials=/secret,username=alice");
+            assert!(authorize_fstab(&text, "", "/mnt/share", false).is_ok());
+            assert!(authorize_fstab(&text, table, "/mnt/share", true).is_ok());
+            assert!(authorize_fstab(&text, table, "/mnt/share", false).is_err());
+            assert!(authorize_fstab(&text, "", "/mnt/share", true).is_err());
+        }
+        for (text, point) in [
+            ("a / ext4 user", "/"),
+            ("a /boot ext4 user", "/boot"),
+            ("a /mnt/share nfs defaults", "/mnt/share"),
+            ("a /mnt/share nfs user", "/forged"),
+            ("a /a/../b nfs user", "/a/../b"),
+        ] {
+            assert!(authorize_fstab(text, table, point, false).is_err());
+        }
+        let error = helper_error(dualfile_core::appenv::HelperError::Failed(
+            "credentials=/secret username=alice smb://alice:secret@host".into(),
+        ));
+        let public = serde_json::to_string(&error).unwrap();
+        assert!(!public.contains("alice") && !public.contains("secret"));
     }
 }

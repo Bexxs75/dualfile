@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 import { CoreError } from "../../ipc/api";
@@ -32,7 +32,7 @@ test("empty profiles hint, source labels, multi-selection and duplicate imports"
   expect(screen.getAllByText(/schon vorhanden/)).toHaveLength(2);
   expect(screen.getByRole("button", { name: "Übernehmen" })).toBeDisabled();
 });
-test("system connect navigates locally without asking for a password; disconnect never unmounts", async () => {
+test("system connect navigates locally without asking for a password; only unmount is offered", async () => {
   const api = createMockApi();
   await api.connectionSave({ ...systemPlaceProfile(mockSystemPlaces[1]!), protocol: "system", systemUrl: "smb://nas/team", share: "", port: 0, startFolder: "/team" });
   const mount = vi.spyOn(api, "systemMountConnect");
@@ -44,8 +44,8 @@ test("system connect navigates locally without asking for a password; disconnect
   await waitFor(() => expect(navigate).toHaveBeenCalledWith(0, "/home/demo"));
   expect(mount).toHaveBeenCalledOnce(); expect(native).not.toHaveBeenCalled();
   expect(screen.queryByLabelText("Antwort")).toBeNull();
-  await user.click(screen.getByRole("button", { name: "Trennen" }));
-  await waitFor(() => expect(navigate).toHaveBeenCalledTimes(2));
+  expect(screen.queryByRole("button", { name: "Trennen" })).toBeNull();
+  expect(navigate).toHaveBeenCalledOnce();
   expect(unmount).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Aushängen" }));
   await waitFor(() => expect(unmount).toHaveBeenCalledOnce());
@@ -65,14 +65,16 @@ test("unmounted system profiles offer only edit, connect and delete actions", as
   const api = createMockApi();
   const entry = await api.connectionSave({ ...systemPlaceProfile(mockSystemPlaces[1]!), protocol: "system", systemUrl: "smb://nas/team", share: "", port: 0, startFolder: "/team" });
   await api.systemMountUnmount(entry!.profile.id);
-  const { user } = setup(api);
+  const { user, runtime } = setup(api);
   await screen.findByRole("button", { name: "Verbinden" });
   expect(screen.queryByRole("button", { name: "Trennen" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Aushängen" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Verbinden" }));
   expect(await screen.findByRole("button", { name: "Aushängen" })).toBeVisible();
-  expect(screen.getAllByRole("button", { name: "Trennen" })).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Trennen" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Aushängen" }));
+  expect(runtime.store.getState().dialog).toMatchObject({ kind: "placeConfirm", action: "unmount" });
+  await act(async () => { await runtime.controller.confirmPlaceAction(); });
   await waitFor(() => expect(screen.queryByRole("button", { name: "Aushängen" })).toBeNull());
   expect(screen.queryByRole("button", { name: "Trennen" })).toBeNull();
 });

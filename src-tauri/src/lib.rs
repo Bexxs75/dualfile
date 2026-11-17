@@ -15,6 +15,7 @@ mod diagnostics;
 mod item_error;
 mod keychain;
 mod lanes;
+mod mount_guard;
 mod places;
 mod plans;
 mod plugins;
@@ -183,6 +184,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             places::places_snapshot,
+            places::places_mount_affected,
+            commands::places_save_connection,
+            places::fstab_mount,
+            places::fstab_unmount,
+            places::places_mount_unmount,
+            commands::trash_empty,
             places::places_space,
             places::places_set_visible,
             places::trash_open_system,

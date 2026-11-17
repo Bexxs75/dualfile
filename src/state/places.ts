@@ -2,6 +2,8 @@ import type { ConnectionEntry, PlacesSnapshot, Settings } from "../ipc/types";
 import type { IconName } from "../components/Icon";
 import type { TranslationKey } from "../i18n";
 export interface Place {
+  canSave?: boolean;
+  readOnly?: boolean; canMount?: boolean; canUnmount?: boolean; mountKey?: string;
   key: string; name: string; path?: string; icon: IconName; label?: TranslationKey;
   state?: "mounted" | "disconnected" | "connecting" | "unmounted" | "automount";
   reason?: TranslationKey; profileId?: string; color?: string; hint?: number; hidden?: boolean; disabled?: boolean;
@@ -30,11 +32,11 @@ export function buildPlaces(snapshot: PlacesSnapshot | null, connections: readon
   for (const d of snapshot?.userDirs ?? []) if (d.path !== home) places.push({ key: `xdg:${d.kind}`, name: d.kind, label: `sidebar.${d.kind}` as TranslationKey, path: d.path, icon: icons[d.kind]! });
   for (const [i, b] of [...settings.bookmarks].sort((a, b) => a.order - b.order).entries()) places.push({ key: `bookmark:${b.path}`, name: b.name, path: b.path, icon: "pin", color: b.color, hint: i < 9 ? i + 1 : undefined });
   places.push({ key: "trash:home", name: "Trash", label: snapshot?.trash.empty === false ? "sidebar.trashFull" : "sidebar.trash", icon: "trash" });
-  const remote: Place[] = connections.map(e => ({ key: `conn:${e.profile.id}`, profileId: e.profile.id, name: `${e.profile.name} · ${e.profile.protocol.toUpperCase()}`, path: e.connected ? e.root ?? undefined : undefined, icon: "server", state: e.connected ? "mounted" : "disconnected" }));
+  const remote: Place[] = connections.map(e => ({ key: `conn:${e.profile.id}`, profileId: e.profile.id, canUnmount: e.connected && e.profile.protocol === "system", name: `${e.profile.name} · ${e.profile.protocol.toUpperCase()}`, path: e.connected ? e.root ?? undefined : undefined, icon: "server", state: e.connected ? "mounted" : "disconnected" }));
   const devices: Place[] = [];
   for (const d of snapshot?.drives ?? []) {
     const automount = !d.mounted && d.fstab?.automount;
-    const e: Place = { key: `${d.fstab || d.source === "fstab" ? "fstab" : "drive"}:${d.path}`, name: d.name, path: d.path, icon: d.kind === "removable" ? "usb" : d.kind === "network" ? "network" : "disk", state: automount ? "automount" : d.mounted === false ? "unmounted" : "mounted", space: d.space,
+    const e: Place = { key: `${d.fstab || d.source === "fstab" ? "fstab" : "drive"}:${d.path}`, name: d.name, path: d.path, icon: d.kind === "removable" ? "usb" : d.kind === "network" ? "network" : "disk", canSave: ["cifs", "smb3", "nfs", "nfs4", "fuse.sshfs", "davfs", "davfs2"].includes(d.fstype ?? ""), readOnly: d.readOnly, canMount: !!d.fstab?.userMountable && d.mounted === false, canUnmount: !!d.fstab?.userMountable && d.mounted !== false, state: automount ? "automount" : d.mounted === false ? "unmounted" : "mounted", space: d.space,
       reason: d.mounted === false ? automount ? "sidebar.automountHelp" : d.fstab?.userMountable ? "sidebar.unmountedHelp" : "sidebar.adminHelp" : undefined };
     (d.kind === "network" ? remote : devices).push(e);
   }
@@ -42,7 +44,7 @@ export function buildPlaces(snapshot: PlacesSnapshot | null, connections: readon
     if (connections.some(e => (m.mountedAt && e.root === m.mountedAt) || (e.profile.protocol === "system" && e.profile.systemUrl === m.url))) continue;
     const key = `mount:${m.mountedAt ?? m.url}`;
     if (remote.some(e => e.key === key)) continue;
-    remote.push({ key, name: `${m.name} · ${m.scheme.toUpperCase()}`, path: m.mountedAt ?? undefined, icon: "network", state: "mounted", disabled: !m.mountedAt, reason: m.mountedAt ? undefined : "sidebar.redactedMount" });
+    remote.push({ key, canSave: !!m.mountKey, mountKey: m.mountKey, canUnmount: m.canUnmount, name: `${m.name} · ${m.scheme.toUpperCase()}`, path: m.mountedAt ?? undefined, icon: "network", state: "mounted", disabled: !m.mountedAt, reason: m.mountedAt ? undefined : "sidebar.redactedMount" });
   }
   return ([{ id: "places", label: "sidebar.places", entries: places }, { id: "remote", label: "sidebar.remote", entries: remote }, { id: "devices", label: "places.drives", entries: devices }] as PlaceSection[]).map(section => ({ ...section, entries: badges(section.entries.map(e => ({ ...e, hidden: (settings.sidebarHidden ?? []).includes(e.key) })).filter(e => showHidden || !e.hidden)) }));
 }

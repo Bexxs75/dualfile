@@ -31,12 +31,12 @@ export function Toolbar() {
   const entry = (action: "import" | "connect", profile?: typeof connections[number]["profile"]) => controller.openDialog({ kind: "connections", entry: { action, profile } });
   const connectionItems: HeaderMenuItem[] = connections.map(({ profile, connected }): HeaderMenuItem => {
     const state = tr(connected ? "header.connected" : "ssh.disconnected");
-    const toggle = tr(connected ? "ssh.disconnect" : "ssh.connect");
+    const toggle = tr(connected ? profile.protocol === "system" ? "system.unmount" : "ssh.disconnect" : "ssh.connect");
     return {
       label: profile.name, detail: `${profile.protocol.toUpperCase()} · ${state}`, connected,
       ariaLabel: `${profile.name} · ${profile.protocol.toUpperCase()} · ${state}`,
       submenu: [
-        { label: toggle, ariaLabel: `${profile.name} — ${toggle}`, icon: connected ? "disconnect" : "connect", action: () => { if (connected) void controller.disconnectConnection(profile.id); else entry("connect", profile); } },
+        { label: toggle, ariaLabel: `${profile.name} — ${toggle}`, icon: connected ? "disconnect" : "connect", action: () => { if (connected && profile.protocol === "system") void controller.unmountPlace(`conn:${profile.id}`); else if (connected) void controller.disconnectConnection(profile.id); else entry("connect", profile); } },
         { label: `${tr("ssh.edit")} …`, ariaLabel: `${profile.name} — ${tr("ssh.edit")} …`, icon: "edit", action: () => { void controller.openConnectionEditor(profile); } },
       ],
     };

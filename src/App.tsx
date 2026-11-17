@@ -1,3 +1,5 @@
+import { Confirmation } from "./components/dialogs/SpaceDialogs";
+import { PlaceConfirmDialog, PlacePropertiesDialog } from "./components/dialogs/PlaceDialogs";
 import { SidebarLayout } from "./components/Sidebar";
 import { SystemUpdates } from "./components/dialogs/SystemDialogs";
 import { JobDialogs } from "./components/dialogs/JobDialogs";
@@ -50,6 +52,9 @@ function Dialogs({ api }: { api: DualfileApi }) {
   const diff = useAppState((state) => state.diff);
   return (
     <>
+      {dialog?.kind === "trashConfirm" ? <Confirmation count={dialog.paths.length} size={0} names={dialog.paths} confirm={() => void controller.confirmTrash()} cancel={() => controller.closeDialog()} /> : null}
+      {dialog?.kind === "placeConfirm" ? <PlaceConfirmDialog dialog={dialog} /> : null}
+      {dialog?.kind === "placeProperties" ? <PlacePropertiesDialog placeKey={dialog.key} /> : null}
       {dialog?.kind === "transfer" ? <ConfirmTransferDialog plan={dialog.plan} /> : null}
       {dialog?.kind === "delete" ? <DeleteDialog model={dialog.model} reason={dialog.reason} /> : null}
       {dialog?.kind === "rename" ? <RenameDialog name={dialog.name} existing={dialog.existing} /> : null}

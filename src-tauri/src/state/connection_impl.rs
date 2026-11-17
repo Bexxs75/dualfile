@@ -121,7 +121,7 @@ impl AppState {
                 .as_deref()
                 .and_then(|url| dualfile_core::system_places::parse_url(url, "", ""))
                 .and_then(|place| {
-                    dualfile_core::system_places::mounted_path(
+                    dualfile_core::system_places::mounted_path_bounded(
                         &place,
                         &dualfile_core::system_places::DiscoveryPaths::system(),
                     )
@@ -805,6 +805,18 @@ impl AppState {
     ) -> Result<Vec<ConnectionEntryDto>, UiError> {
         use dualfile_core::system_places::{discover, DiscoveryPaths};
         let discovered = discover(&DiscoveryPaths::system());
+        self.import_discovered_places(discovered, urls)
+    }
+    pub fn places_save_connection(&self, key: &str) -> Result<(), UiError> {
+        let place = crate::places::importable_place(key)?;
+        let urls = vec![place.url.clone()];
+        self.import_discovered_places(vec![place], urls).map(|_| ())
+    }
+    fn import_discovered_places(
+        &self,
+        discovered: Vec<dualfile_core::system_places::SystemPlace>,
+        urls: Vec<String>,
+    ) -> Result<Vec<ConnectionEntryDto>, UiError> {
         let _guard = lock(&self.connections.settings_lock);
         let mut settings = self.load_for_update()?;
         settings.connections =
@@ -839,13 +851,12 @@ impl AppState {
         if profile.protocol != ConnectionProtocol::System {
             return Err(invalid("Keine System-Einbindung"));
         }
-        dualfile_remote::system_mount::unmount(
+        crate::places::unmount_profile(
             profile
                 .system_url
                 .as_deref()
                 .ok_or_else(|| invalid("System-URL fehlt"))?,
         )
-        .map_err(crate::convert::system_mount_error)
     }
 }
 

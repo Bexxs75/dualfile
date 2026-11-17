@@ -13,6 +13,13 @@
     "allow-ssh-prompt-answer",
     "allow-local-drives",
     "allow-places-snapshot",
+    "allow-places-mount-affected",
+    "allow-places-save-connection",
+    "allow-fstab-mount",
+    "allow-fstab-unmount",
+    "allow-places-mount-unmount",
+    "allow-trash-empty",
+
     "allow-places-space",
     "allow-places-set-visible",
     "allow-trash-open-system",

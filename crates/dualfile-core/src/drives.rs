@@ -58,7 +58,7 @@ pub struct Drive {
 }
 
 /// `/proc/mounts` escapes space, tab, newline and backslash as octal; undo that for the path.
-pub(crate) fn unescape(field: &str) -> String {
+pub fn unescape(field: &str) -> String {
     let mut out = Vec::new();
     let bytes = field.as_bytes();
     let mut i = 0;
@@ -102,6 +102,7 @@ pub fn network_type(fs: &str) -> bool {
 pub fn local_space_type(fs: &str) -> bool {
     [
         "ext2", "ext3", "ext4", "btrfs", "xfs", "vfat", "exfat", "ntfs3", "f2fs", "zfs", "tmpfs",
+        "bcachefs", "jfs", "overlay",
     ]
     .contains(&fs)
 }

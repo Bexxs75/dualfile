@@ -66,8 +66,8 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
     execute: () => { void controller.openBookmark(bookmark.path); },
   });
   for (const { profile, connected } of state.connections) result.push({
-    id: `connection:${profile.id}:${connected}`, title: `${tr(connected ? "ssh.disconnect" : "ssh.connect")}: ${profile.name}`, icon: connected ? "disconnect" : "connect", shortcut: "", group: "connections", enabled: () => true,
-    execute: () => controller.openDialog({ kind: "connections", entry: { action: connected ? "disconnect" : "connect", profile } }),
+    id: `connection:${profile.id}:${connected}`, title: `${tr(connected ? profile.protocol === "system" ? "system.unmount" : "ssh.disconnect" : "ssh.connect")}: ${profile.name}`, icon: connected ? "disconnect" : "connect", shortcut: "", group: "connections", enabled: () => true,
+    execute: () => { if (connected && profile.protocol === "system") void controller.unmountPlace(`conn:${profile.id}`); else controller.openDialog({ kind: "connections", entry: { action: connected ? "disconnect" : "connect", profile } }); },
   });
   for (const w of [0, 1] as const) state.windows[w].tabs.forEach((tab, index) => result.push({
     id: `tab:${w}:${index}:${tab.path}`, title: `${tr("palette.tab")}: ${tab.path} (${w + 1} · ${index + 1})`, icon: "dir", shortcut: "", group: "tabs", enabled: () => true,
