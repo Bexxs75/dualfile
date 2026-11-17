@@ -530,6 +530,7 @@ mod tests {
             sidebar_width: 210,
             sidebar_collapsed: vec![],
             sidebar_hidden: vec![],
+            sidebar_discovery: false,
             version: 1,
             verify_policy: Default::default(),
             theme: "schiefer".into(),

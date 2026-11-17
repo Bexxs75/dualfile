@@ -23,7 +23,7 @@ dualfile-remote = { path = "../crates/dualfile-remote" }
 dualfile-plugin = { path = "../crates/dualfile-plugin", default-features = false }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-updater = "2"
-tokio = { version = "1", features = ["sync", "macros"] }
+tokio = { version = "1", features = ["sync", "macros", "rt", "time"] }
 tauri-plugin-process = "2"
 tauri-plugin-window-state = "2"
 tempfile = "3"
@@ -43,6 +43,9 @@ tauri-plugin-log = "2"
 # needed. Other platforms use the session memory only until their keychain back end is added.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+# zbus 5.19 is shared with tauri-plugin-single-instance, which keeps its async-io executor; the tokio feature only lets it run inside the browse runtime.
+zbus = { version = "5.19", default-features = false, features = ["tokio"] }
+futures-util = "0.3"
 keyring = { version = "3.6", default-features = false, features = ["async-secret-service", "crypto-rust"] }
 
 [dev-dependencies]

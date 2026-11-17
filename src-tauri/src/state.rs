@@ -498,6 +498,7 @@ mod space_impl;
 mod undo_impl;
 
 pub struct AppState {
+    pub(crate) discovery: Arc<crate::discovery::Discovery>,
     undo: Arc<dualfile_core::undo::UndoJournal>,
     undo_dirs: Arc<Mutex<HashMap<u64, Vec<String>>>>,
     home: PathBuf,
@@ -570,6 +571,7 @@ impl AppState {
         let _ = shared.manager.set(Arc::downgrade(&jobs));
         let router = Arc::new(VfsRouter::new());
         let state = Self {
+            discovery: Arc::default(),
             undo: Arc::default(),
             undo_dirs: Arc::default(),
             home,
@@ -1401,13 +1403,20 @@ impl AppState {
     /// pins) are kept as they are, and the file is written as the current version.
     pub fn save_settings(&self, new: &SettingsDto) -> Result<(), UiError> {
         validate_settings(new)?;
+        // Revoking network activity must not wait for settings IO or depend on a successful save.
+        if !new.sidebar_discovery {
+            self.discovery.set_enabled(false, self.shared.sink.as_ref());
+        }
         let _guard = lock(&self.connections.settings_lock);
         let (current, _) = settings::load(&self.config_dir);
         let mut updated = settings::Settings::from(new);
         updated.connections = current.connections;
         updated.plugins = current.plugins;
         updated.version = settings::SETTINGS_VERSION;
-        Ok(settings::save(&self.config_dir, &updated, false)?)
+        settings::save(&self.config_dir, &updated, false)?;
+        self.discovery
+            .set_enabled(updated.sidebar_discovery, self.shared.sink.as_ref());
+        Ok(())
     }
 
     /// Replaces the set of watched folders. An empty list stops watching.
@@ -1438,6 +1447,7 @@ impl AppState {
     /// App exit: cancel all jobs (open questions count as `Cancel`) and wait until they have
     /// cleaned up their temporary files.
     pub fn shutdown(&self) {
+        self.discovery.stop();
         self.shared.conflicts.cancel_all();
         self.shared.errors.close();
         let active: Vec<u64> = self

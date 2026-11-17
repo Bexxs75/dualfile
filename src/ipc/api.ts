@@ -94,6 +94,7 @@ export interface DualfileApi extends SystemApi {
   /** Runs a cancellable job; its ID arrives through onEvent before this resolves. */
   undoRun(id: number): Promise<UndoResult>;
   onUndoChanged(handler: () => void): () => void;
+  discoverySnapshot(): Promise<import("./types").DiscoveredService[]>;
   placesSnapshot(): Promise<import("./types").PlacesSnapshot>;
   placesSpace(path: string): Promise<{ available: number; total: number } | null>;
   placesSetVisible(visible: boolean): Promise<void>;
@@ -299,7 +300,7 @@ export interface DualfileApi extends SystemApi {
    * Öffnet das Editor-Fenster für ein Verbindungsprofil (`null` = neues). `false`, wenn schon eins offen ist
    * (es kommt dann nach vorn). Nur vom Hauptfenster aus.
    */
-  connectionEditorOpen(profileId: string | null, title: string, appearance: EditorAppearance): Promise<boolean>;
+  connectionEditorOpen(profileId: string | null, title: string, appearance: EditorAppearance, discoveryKey?: string): Promise<boolean>;
   /** Schließt das Editor-Fenster, aus dem der Aufruf kommt. */
   connectionEditorClose(): Promise<void>;
   settingsWindowOpen(tab: SettingsTab | null, title: string, appearance: EditorAppearance): Promise<"opened" | "focused" | "inline">;

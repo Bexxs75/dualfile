@@ -561,6 +561,7 @@ test("step-one places commands have main-only capabilities and invoke the regist
   const secondary = import.meta.glob("../../src-tauri/capabilities/*.json", { eager: true, query: "?raw", import: "default" });
   const api = createTauriApi();
   for (const [command, call, args] of [
+    ["discovery_snapshot", () => api.discoverySnapshot(), undefined],
     ["places_snapshot", () => api.placesSnapshot(), undefined],
     ["places_space", () => api.placesSpace("/mnt/share"), { path: "/mnt/share" }],
     ["places_set_visible", () => api.placesSetVisible(true), { visible: true }],

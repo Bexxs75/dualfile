@@ -176,6 +176,8 @@ export function SettingsPanel({ startTab }: { startTab?: import("../../ipc/types
           <Segmented label={tr("sidebar.mode")} value={settings.sidebarMode ?? "full"} options={(["hidden", "icons", "full"] as const).map(value => ({ value, text: tr(`sidebar.${value}`) }))} onChange={sidebarMode => set({ sidebarMode })} />
           <label className="fld"><span>{tr("sidebar.width")}</span><input type="number" min={160} max={400} value={settings.sidebarWidth ?? 210} onChange={e => { const n = Number(e.target.value); if (n >= 160 && n <= 400) set({ sidebarWidth: Math.round(n) }); }} /></label>
           {(["places", "remote", "devices"] as const).map(id => <label className="fld" key={id}><span>{tr(id === "devices" ? "places.drives" : `sidebar.${id}`)}</span><input type="checkbox" checked={!(settings.sidebarCollapsed ?? []).includes(id)} onChange={e => set({ sidebarCollapsed: e.target.checked ? (settings.sidebarCollapsed ?? []).filter(v => v !== id) : [...(settings.sidebarCollapsed ?? []), id] })} /></label>)}
+          <label className="fld"><span>{tr("sidebar.discovery")}</span><input type="checkbox" checked={settings.sidebarDiscovery ?? false} onChange={e => set({ sidebarDiscovery: e.target.checked })} /></label>
+          <p className="muted">{tr("sidebar.discoveryHelp")}</p>
           <button className="tb" disabled={!settings.sidebarHidden?.length} onClick={() => set({ sidebarHidden: [] })}>{tr("sidebar.resetHidden")}</button>
           <p className="muted">{tr("sidebar.desktopHelp")}</p>
         </section>

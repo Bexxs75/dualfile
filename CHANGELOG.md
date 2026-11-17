@@ -5,7 +5,13 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- LAN discovery updates its cached sidebar section without triggering filesystem or device refreshes. Invalid individual TXT records no longer hide services, advertised paths are trimmed, and non-DNS host names fall back to validated resolved addresses.
+
 ### Added
+
+- Opt-in LAN service discovery through Avahi over D-Bus. The sidebar shows up to 64 discovered SMB, NFS, SFTP and WebDAV endpoints; clicking opens a validated, prefilled connection editor without connecting or sending credentials. The setting defaults off and synchronizes with the settings window. Browsing is isolated, bounded and cancelled when disabled; unavailable Avahi stays silent, and removed/restarted services clear stale results.
 
 - Removable-device sidebar actions: bounded `lsblk` discovery and live device watches show unmounted USB/hotplug media, with udisks mounting, unmounting and whole-drive safe removal. All partitions and bind aliases participate in job protection and tab confirmation. Local non-user fstab entries use polkit; encrypted media point to the system file manager. Safe helper errors include cancelled authentication, and timeout results are checked against fresh state. Optical media eject through the `eject` helper; USB Eject deliberately unmounts and powers off. Safe removal locks unlocked LUKS containers first. Concurrent discovery and device operations wait within bounded deadlines; internal SATA/NVMe hotplug flags do not enable removal. Device watches rearm only after loss.
 

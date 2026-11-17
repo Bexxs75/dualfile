@@ -139,9 +139,23 @@ pub async fn connection_editor_open(
     profile_id: Option<String>,
     title: String,
     appearance: Appearance,
+    discovery_key: Option<String>,
 ) -> Result<bool, UiError> {
     only_label(window.label(), "main")?;
-    let page = editor_query(profile_id.as_deref(), &appearance)?;
+    let mut page = editor_query(profile_id.as_deref(), &appearance)?;
+    if let Some(key) = discovery_key {
+        if profile_id.is_some() {
+            return Err(invalid("Invalid editor target"));
+        }
+        let state = app.state::<std::sync::Arc<crate::state::AppState>>();
+        let service = state
+            .discovery
+            .snapshot()
+            .into_iter()
+            .find(|service| service.key == key)
+            .ok_or_else(|| UiError::new("notFound", "Network service no longer available"))?;
+        page = discovered_query(&page, &service)?;
+    }
     open_child(
         &app,
         &window,
@@ -151,6 +165,17 @@ pub async fn connection_editor_open(
         (520.0, 640.0),
         (400.0, 320.0),
     )
+}
+
+// Only the validated discovery cache supplies this draft. It contains no profile ID or secrets.
+fn discovered_query(page: &str, service: &crate::discovery::Service) -> Result<String, UiError> {
+    let mut url =
+        Url::parse(&format!("http://localhost/{page}")).map_err(|_| UiError::internal())?;
+    url.query_pairs_mut().append_pair(
+        "discovered",
+        &serde_json::to_string(service).map_err(|_| UiError::internal())?,
+    );
+    Ok(format!("index.html?{}", url.query().unwrap_or_default()))
 }
 
 pub(crate) fn open_child(

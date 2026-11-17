@@ -2,6 +2,7 @@ import type { ConnectionEntry, PlacesSnapshot, Settings } from "../ipc/types";
 import type { IconName } from "../components/Icon";
 import type { TranslationKey } from "../i18n";
 export interface Place {
+  discoveryKey?: string;
   deviceKey?: string; canRemove?: boolean;
   canSave?: boolean;
   readOnly?: boolean; canMount?: boolean; canUnmount?: boolean; mountKey?: string;
@@ -10,7 +11,7 @@ export interface Place {
   reason?: TranslationKey; profileId?: string; color?: string; hint?: number; hidden?: boolean; disabled?: boolean;
   space?: { available: number; total: number } | null; badge?: string;
 }
-export interface PlaceSection { id: "places" | "remote" | "devices"; label: TranslationKey; entries: Place[] }
+export interface PlaceSection { id: "places" | "remote" | "devices" | "network"; label: TranslationKey; entries: Place[] }
 export const inside = (path: string, root: string) => !!root && (path === root || path.startsWith(root === "/" ? "/" : `${root.replace(/\/$/, "")}/`));
 export function activePlace(entries: Place[], path: string): string | null {
   return entries.filter(e => e.path && inside(path, e.path)).sort((a, b) => b.path!.length - a.path!.length)[0]?.key ?? null;
@@ -50,5 +51,9 @@ export function buildPlaces(snapshot: PlacesSnapshot | null, connections: readon
     if (remote.some(e => e.key === key)) continue;
     remote.push({ key, canSave: !!m.mountKey, mountKey: m.mountKey, canUnmount: m.canUnmount, name: `${m.name} · ${m.scheme.toUpperCase()}`, path: m.mountedAt ?? undefined, icon: "network", state: "mounted", disabled: !m.mountedAt, reason: m.mountedAt ? undefined : "sidebar.redactedMount" });
   }
-  return ([{ id: "places", label: "sidebar.places", entries: places }, { id: "remote", label: "sidebar.remote", entries: remote }, { id: "devices", label: "places.drives", entries: devices }] as PlaceSection[]).map(section => ({ ...section, entries: badges(section.entries.map(e => ({ ...e, hidden: (settings.sidebarHidden ?? []).includes(e.key) })).filter(e => showHidden || !e.hidden)) }));
+  const network: Place[] = settings.sidebarDiscovery ? (snapshot?.discoveredServices ?? []).map(service => ({
+    key: `net:${service.key}`, discoveryKey: service.key, name: `${service.name} · ${service.protocol.toUpperCase()} · ${service.host.includes(":") ? `[${service.host}]` : service.host}:${service.port}`,
+    icon: "network", reason: "sidebar.discoveredHelp",
+  })) : [];
+  return ([{ id: "places", label: "sidebar.places", entries: places }, { id: "remote", label: "sidebar.remote", entries: remote }, { id: "devices", label: "places.drives", entries: devices }, ...(network.length ? [{ id: "network", label: "sidebar.network", entries: network }] : [])] as PlaceSection[]).map(section => ({ ...section, entries: badges(section.entries.map(e => ({ ...e, hidden: (settings.sidebarHidden ?? []).includes(e.key) })).filter(e => showHidden || !e.hidden)) }));
 }

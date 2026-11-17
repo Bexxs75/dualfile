@@ -1376,6 +1376,7 @@ dependencies = [
  "dualfile-core",
  "dualfile-plugin",
  "dualfile-remote",
+ "futures-util",
  "gtk",
  "keyring",
  "libc",
@@ -1394,6 +1395,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tempfile",
  "tokio",
+ "zbus 5.19.0",
 ]
 
 [[package]]
@@ -6328,8 +6330,10 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
+ "tracing",
  "windows-sys 0.61.2",
 ]
 
@@ -7587,6 +7591,7 @@ dependencies = [
  "rustix",
  "serde",
  "serde_repr",
+ "tokio",
  "tracing",
  "uds_windows",
  "uuid",

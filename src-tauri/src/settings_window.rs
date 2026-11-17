@@ -243,6 +243,8 @@ struct SettingsProjection {
     sidebar_collapsed: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sidebar_hidden: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_discovery: Option<bool>,
 
     last_update_check: Option<String>,
 }
@@ -293,6 +295,8 @@ pub struct SettingsPatch {
     sidebar_collapsed: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sidebar_hidden: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sidebar_discovery: Option<bool>,
 }
 impl SettingsPatch {
     fn validate(&self) -> Result<(), UiError> {
@@ -357,6 +361,9 @@ impl SettingsPatch {
         }
         if let Some(value) = &self.sidebar_collapsed {
             settings.sidebar_collapsed = value.clone();
+        }
+        if let Some(value) = self.sidebar_discovery {
+            settings.sidebar_discovery = value;
         }
         if let Some(value) = &self.sidebar_hidden {
             settings.sidebar_hidden = value.clone();
@@ -929,6 +936,7 @@ mod tests {
             "sidebarWidth",
             "sidebarCollapsed",
             "sidebarHidden",
+            "sidebarDiscovery",
             "keybindings",
         ];
         let mut projection = json!({});

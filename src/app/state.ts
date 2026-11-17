@@ -126,7 +126,7 @@ export interface AppState {
 }
 
 export const defaultSettings: Settings = {
-  sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [],
+  sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [], sidebarDiscovery: false,
   version: 5,
   verifyPolicy: "auto",
   theme: "schiefer",

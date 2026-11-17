@@ -84,3 +84,37 @@ test("Cancel and Escape close; Escape does not when something already handled it
   act(() => { document.dispatchEvent(handled); });
   expect(close).toHaveBeenCalledTimes(2);
 });
+
+test.each([
+  ["smb", "Share (empty: list shares)", "documents", 445],
+  ["nfs", "Export", "/srv/export", 2049],
+  ["sftp", "Start folder", "/home/shared", 2222],
+  ["webdav", "Base path on the server", "/dav", 8080],
+  ["webdavs", "Base path on the server", "/secure-dav", 8443],
+])("discovered %s prefills the existing editor without connecting or credentials", async (protocol, field, path, port) => {
+  const api = createMockApi();
+  const connect = vi.spyOn(api, "connectionConnect"), save = vi.spyOn(api, "connectionSave"), secret = vi.spyOn(api, "secretSet"), resolve = vi.spyOn(api, "sshHostResolve");
+  const data = { key: "test", name: "Office NAS", protocol, host: "nas.local", port, path, user: "ignored", saveSecret: true };
+  render(<ConnectionEditorWindow api={api} search={query(`&discovered=${encodeURIComponent(JSON.stringify(data))}`)} />);
+  expect(await screen.findByLabelText("Name")).toHaveValue("Office NAS");
+  expect(screen.getByLabelText(protocol === "sftp" ? "Server / SSH alias" : "Server")).toHaveValue("nas.local");
+  expect(screen.getByLabelText("Port")).toHaveValue(port);
+  expect(screen.getByLabelText(field)).toHaveValue(path);
+  if (protocol.startsWith("webdav")) expect(screen.getByLabelText("Use HTTPS")).toHaveProperty("checked", protocol === "webdavs");
+  expect([connect, save, secret, resolve].map(s => s.mock.calls.length)).toEqual([0, 0, 0, 0]);
+  const draft = parseEditorParams(query(`&discovered=${encodeURIComponent(JSON.stringify(data))}`)).draft;
+  expect(draft).toMatchObject({ id: "", user: "", saveSecret: false, allowPlaintext: false, auth: { kind: "password" } });
+});
+
+test("discovery query is bounded and never replaces an existing profile", () => {
+  const data = { name: "NAS", protocol: "smb", host: "nas.local", port: 445, path: "documents" };
+  const draft = (patch: object) => parseEditorParams(`?discovered=${encodeURIComponent(JSON.stringify({ ...data, ...patch }))}`).draft;
+  for (const patch of [{ host: "user@host" }, { port: 0 }, { port: 65536 }, { name: "a\u202eb" }, { path: "x\u200by" }, { path: "../secret" }, { protocol: "ftp" }, { name: "x".repeat(64) }]) expect(draft(patch)).toBeUndefined();
+  expect(parseEditorParams("?discovered=%7Bbad").draft).toBeUndefined();
+  expect(parseEditorParams(`?profile=existing&discovered=${encodeURIComponent(JSON.stringify(data))}`).draft).toBeUndefined();
+});
+
+test("SMB TXT paths separate share and start folder", () => {
+  const service = { name: "NAS", host: "nas.local", port: 445, protocol: "smb", path: "documents/photos" };
+  expect(parseEditorParams(`?discovered=${encodeURIComponent(JSON.stringify(service))}`).draft).toMatchObject({ share: "documents", startFolder: "/photos" });
+});
