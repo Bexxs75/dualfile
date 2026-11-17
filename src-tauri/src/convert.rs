@@ -892,6 +892,7 @@ pub struct ItemErrorInfoDto {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum CoreEventDto {
     PlacesChanged,
+    DiscoveryChanged,
     CloseRequested {
         count: usize,
     },

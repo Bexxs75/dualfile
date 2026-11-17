@@ -351,6 +351,14 @@ pub async fn places_snapshot(
     .map_err(|_| UiError::internal())?
 }
 #[tauri::command]
+pub fn discovery_snapshot(
+    app_state: tauri::State<'_, Arc<crate::state::AppState>>,
+    window: tauri::WebviewWindow,
+) -> Result<Vec<crate::discovery::Service>, UiError> {
+    main_only(window.label())?;
+    Ok(app_state.discovery.snapshot())
+}
+#[tauri::command]
 pub fn places_set_visible(
     window: tauri::WebviewWindow,
     state: tauri::State<'_, Arc<Places>>,

@@ -21,6 +21,7 @@ const COMMANDS: &[&str] = &[
     "ssh_prompt_answer",
     "local_drives",
     "places_snapshot",
+    "discovery_snapshot",
     "places_mount_affected",
     "places_save_connection",
     "device_list",

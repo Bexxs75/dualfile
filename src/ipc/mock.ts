@@ -2228,13 +2228,14 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       pendingErrors.delete(jobId); answer(decision);
     },
     ...createMockSshPrompts(scheduler),
+    async discoverySnapshot() { return structuredClone(settings?.sidebarDiscovery ? places.discoveredServices ?? [] : []); },
     async placesSnapshot() { return structuredClone({ ...places, discoveredServices: settings?.sidebarDiscovery ? places.discoveredServices ?? [] : [] }); },
     devDiscover(service) {
       if (!settings?.sidebarDiscovery) return;
       places.discoveredServices = [...(places.discoveredServices ?? []).filter(s => s.key !== service.key), structuredClone(service)].slice(0, 64);
-      emit({ type: "placesChanged" });
+      emit({ type: "discoveryChanged" });
     },
-    devForget(key) { places.discoveredServices = key ? (places.discoveredServices ?? []).filter(s => s.key !== key) : []; emit({ type: "placesChanged" }); },
+    devForget(key) { places.discoveredServices = key ? (places.discoveredServices ?? []).filter(s => s.key !== key) : []; emit({ type: "discoveryChanged" }); },
     async placesSpace() { return { available: 12e9, total: 32e9 }; },
     async placesSetVisible() {},
     async trashOpenSystem() {},
@@ -2774,7 +2775,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       }
       const discoveryChanged = !!settings?.sidebarDiscovery !== !!next.sidebarDiscovery;
       settings = structuredClone(next);
-      if (discoveryChanged) { places.discoveredServices = next.sidebarDiscovery ? structuredClone(discoverySamples) : []; emit({ type: "placesChanged" }); }
+      if (discoveryChanged) { places.discoveredServices = next.sidebarDiscovery ? structuredClone(discoverySamples) : []; emit({ type: "discoveryChanged" }); }
     },
 
     // Der Mock meldet Änderungen selbst über `dirChanged`; eine Ordnerbeobachtung gibt es nicht.

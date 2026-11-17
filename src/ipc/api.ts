@@ -94,6 +94,7 @@ export interface DualfileApi extends SystemApi {
   /** Runs a cancellable job; its ID arrives through onEvent before this resolves. */
   undoRun(id: number): Promise<UndoResult>;
   onUndoChanged(handler: () => void): () => void;
+  discoverySnapshot(): Promise<import("./types").DiscoveredService[]>;
   placesSnapshot(): Promise<import("./types").PlacesSnapshot>;
   placesSpace(path: string): Promise<{ available: number; total: number } | null>;
   placesSetVisible(visible: boolean): Promise<void>;

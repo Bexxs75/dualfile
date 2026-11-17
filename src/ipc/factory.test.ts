@@ -26,9 +26,9 @@ describe("Auswahl der API", () => {
 test("browser discovery preview has two opt-in NAS hosts and opens a prefilled editor", async () => {
   const api = createApi({});
   const settings = (await api.loadSettings()).settings;
-  expect((await api.placesSnapshot()).discoveredServices).toEqual([]);
+  expect((await api.discoverySnapshot())).toEqual([]);
   await api.saveSettings({ ...settings, sidebarDiscovery: true });
-  const services = (await api.placesSnapshot()).discoveredServices!;
+  const services = (await api.discoverySnapshot())!;
   expect(services).toHaveLength(2);
   const open = vi.spyOn(window, "open").mockReturnValue({ closed: false, focus: vi.fn() } as unknown as Window);
   try {
@@ -38,6 +38,6 @@ test("browser discovery preview has two opt-in NAS hosts and opens a prefilled e
     expect(JSON.parse(q.get("discovered")!)).toEqual(services[0]);
     expect(await api.connectionsList()).toEqual([]);
     await api.saveSettings(settings);
-    expect((await api.placesSnapshot()).discoveredServices).toEqual([]);
+    expect((await api.discoverySnapshot())).toEqual([]);
   } finally { open.mockRestore(); }
 });

@@ -71,3 +71,51 @@ test("network rows work in the icon rail, retain hide/collapse settings and reje
   await app.user.click(network()!);
   expect(within(screen.getByRole("navigation", { name: "Orte" })).getByRole("treeitem", { name: /^Office NAS/ })).toBeVisible();
 });
+
+test("discovery publications only read the discovery cache, never refresh places", async () => {
+  const app = await setupApp({ settings: { sidebarDiscovery: true } });
+  const places = vi.spyOn(app.api, "placesSnapshot");
+  const discovery = vi.spyOn(app.api, "discoverySnapshot");
+  const before = app.runtime.store.getState();
+  act(() => {
+    for (let n = 0; n < 40; n++) app.base.devDiscover({ ...service, key: `nas-${n}`, name: `NAS ${n}` });
+  });
+  await screen.findByRole("treeitem", { name: /^NAS 39/ });
+  expect(discovery).toHaveBeenCalled();
+  expect(places).not.toHaveBeenCalled();
+  const after = app.runtime.store.getState();
+  expect(after.places?.drives).toBe(before.places?.drives);
+  expect(after.places?.networkMounts).toBe(before.places?.networkMounts);
+  expect(after.windows).toBe(before.windows);
+  expect(after.placesAnnouncement).toBe(before.placesAnnouncement);
+  act(() => app.base.devForget());
+  await waitFor(() => expect(network()).toBeNull());
+  expect(places).not.toHaveBeenCalled();
+});
+
+test("a pending places refresh cannot overwrite newer discovery results", async () => {
+  const app = await setupApp({ settings: { sidebarDiscovery: true } });
+  const oldSnapshot = await app.api.placesSnapshot();
+  let release!: (snapshot: typeof oldSnapshot) => void;
+  vi.spyOn(app.api, "placesSnapshot").mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+  let pending!: Promise<void>;
+  act(() => { pending = app.runtime.controller.refreshPlaces(); });
+  act(() => app.base.devDiscover(service));
+  await screen.findByRole("treeitem", { name: /^Office NAS/ });
+  await act(async () => { release(oldSnapshot); await pending; });
+  expect(screen.getByRole("treeitem", { name: /^Office NAS/ })).toBeVisible();
+});
+
+test("disabling while a discovery snapshot is pending does not restore stale entries", async () => {
+  const app = await setupApp({ settings: { sidebarDiscovery: true } });
+  let release!: (services: DiscoveredService[]) => void;
+  vi.spyOn(app.api, "discoverySnapshot").mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+  act(() => app.base.devDiscover(service));
+  await act(async () => {
+    app.runtime.controller.updateSettings(s => ({ ...s, sidebarDiscovery: false }));
+    await app.runtime.controller.saveNow();
+    release([service]);
+  });
+  expect(network()).toBeNull();
+  expect(app.runtime.store.getState().places?.discoveredServices).toEqual([]);
+});

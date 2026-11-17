@@ -96,6 +96,10 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   const unmounting = new Set<string>();
   let placesRequest: Promise<void> | null = null;
   let placesAgain = false;
+  let discoveredServices: import("../ipc/types").DiscoveredService[] = [];
+  let discoveryRequest: Promise<void> | null = null;
+  let discoveryAgain = false;
+  let discoveryEpoch = 0;
   let lastVisibleMode: "icons" | "full" = "full";
   let placesVisibility: boolean | null = null;
   function sidebarVisible() { return (get().settings.sidebarMode ?? "full") !== "hidden" && (typeof document === "undefined" || document.visibilityState !== "hidden"); }
@@ -106,6 +110,24 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     void api.placesSetVisible(visible).catch(() => {});
     if (visible) void refreshPlaces();
   }
+  function refreshDiscovery(): Promise<void> {
+    if (discoveryRequest) { discoveryAgain = true; return discoveryRequest; }
+    discoveryRequest = (async () => {
+      do {
+        discoveryAgain = false;
+        const epoch = discoveryEpoch;
+        try {
+          const services = await api.discoverySnapshot();
+          if (disposed) return;
+          if (epoch !== discoveryEpoch || discoveryAgain) continue;
+          discoveredServices = get().settings.sidebarDiscovery ? services : [];
+          const snapshot = get().places;
+          if (snapshot) dispatch({ type: "places", snapshot: { ...snapshot, discoveredServices }, announcement: get().placesAnnouncement });
+        } catch { /* Retain the last discovery cache until the next event. */ }
+      } while (discoveryAgain && !disposed);
+    })().finally(() => { discoveryRequest = null; });
+    return discoveryRequest;
+  }
   function refreshPlaces(): Promise<void> {
     if (placesRequest) { placesAgain = true; return placesRequest; }
     placesRequest = (async () => {
@@ -114,6 +136,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         try {
           const snapshot = await api.placesSnapshot();
           if (disposed) return;
+          // A slow places response must not overwrite a newer discovery-only update.
+          snapshot.discoveredServices = discoveredServices;
           const old = get().places;
           const mounted = (p: import("../ipc/types").PlacesSnapshot) => [...p.drives.filter(d => d.mounted !== false || d.fstab?.automount), ...p.networkMounts.filter(m => m.mountedAt).map(m => ({ path: m.mountedAt!, name: m.name }))];
           const before = old ? mounted(old) : [], after = mounted(snapshot);
@@ -982,10 +1006,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const before = get().settings.sidebarDiscovery ?? false;
     dispatch({ type: "settings", update });
     if (before !== (get().settings.sidebarDiscovery ?? false)) {
+      discoveryEpoch++;
+      discoveredServices = [];
       const snapshot = get().places;
-      if (snapshot) dispatch({ type: "places", snapshot: { ...snapshot, discoveredServices: [] }, announcement: "" });
+      if (snapshot) dispatch({ type: "places", snapshot: { ...snapshot, discoveredServices }, announcement: "" });
       // Discovery changes bypass the ordinary autosave debounce, including in the settings window.
-      void saveNow().then(() => refreshPlaces());
+      void saveNow().then(() => refreshDiscovery());
     }
   }
 
@@ -1251,6 +1277,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   function handleEvent(event: CoreEvent): void {
     if (disposed) return;
     switch (event.type) {
+      case "discoveryChanged": void refreshDiscovery(); return;
       case "placesChanged": void refreshPlaces(); return;
       case "job": {
         // 9b exposes the job ID through events before undoRun resolves.
@@ -1441,7 +1468,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       window.addEventListener("focus", focusPlaces);
       document.addEventListener("visibilitychange", visibilityPlaces);
       later(pollPlaces, 60000);
-      await refreshPlaces();
+      await Promise.all([refreshPlaces(), refreshDiscovery()]);
       lastSaved = currentSnapshot();
       lastSettingsRef = get().settings;
       lastWindows = get().windows;

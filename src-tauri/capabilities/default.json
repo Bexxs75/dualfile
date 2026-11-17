@@ -13,6 +13,7 @@
     "allow-ssh-prompt-answer",
     "allow-local-drives",
     "allow-places-snapshot",
+    "allow-discovery-snapshot",
     "allow-places-mount-affected",
     "allow-places-save-connection",
     "allow-device-list",

@@ -487,6 +487,7 @@ export interface ItemErrorInfo { jobId: number; name: string; kind: "permission"
 
 export type CoreEvent =
   | { type: "placesChanged" }
+  | { type: "discoveryChanged" }
   | { type: "closeSaveRequested" }
   | { type: "closeRequested"; count: number }
   | { type: "itemError"; error: ItemErrorInfo }

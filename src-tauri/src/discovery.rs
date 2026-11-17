@@ -50,7 +50,11 @@ fn dns_name(raw: &str) -> Option<String> {
     Some(name.to_ascii_lowercase())
 }
 fn host_name(raw: &str, address: &str, interface: i32) -> Option<String> {
-    let raw = if raw.is_empty() { address } else { raw };
+    ip_address(raw, interface)
+        .or_else(|| dns_name(raw))
+        .or_else(|| ip_address(address, interface))
+}
+fn ip_address(raw: &str, interface: i32) -> Option<String> {
     if raw.len() > 254 {
         return None;
     }
@@ -84,7 +88,7 @@ fn host_name(raw: &str, address: &str, interface: i32) -> Option<String> {
             _ => None,
         };
     }
-    dns_name(raw)
+    None
 }
 fn link_local(ip: Ipv6Addr) -> bool {
     ip.segments()[0] & 0xffc0 == 0xfe80
@@ -156,11 +160,13 @@ fn parse_service(reply: Resolved) -> Option<Service> {
     let mut paths = BTreeMap::new();
     for record in txt {
         if record.len() > 255 {
-            return None;
+            continue;
         }
-        let record = std::str::from_utf8(&record).ok()?;
+        let Ok(record) = std::str::from_utf8(&record) else {
+            continue;
+        };
         if record.chars().any(invisible) {
-            return None;
+            continue;
         }
         let Some((key, value)) = record.split_once('=') else {
             continue;
@@ -169,6 +175,7 @@ fn parse_service(reply: Resolved) -> Option<Service> {
         if !["path", "share"].contains(&key) {
             continue;
         }
+        let value = value.trim();
         if value.is_empty()
             || value.contains(['\\', '?', '#', '@', '%', ':'])
             || value.split('/').any(|p| p == "." || p == "..")
@@ -193,6 +200,7 @@ fn parse_service(reply: Resolved) -> Option<Service> {
             }
         })
     };
+    let path = path.filter(|value| !value.is_empty());
     Some(Service {
         // Stable across app restarts so persisted hidden-entry keys keep working.
         key: format!("{host}|{protocol}|{port}"),
@@ -234,7 +242,7 @@ impl Discovery {
         cache.entries.clear();
         self.changed.send_replace(cache.generation);
         drop(cache);
-        sink.emit(CoreEventDto::PlacesChanged);
+        sink.emit(CoreEventDto::DiscoveryChanged);
     }
     pub fn snapshot(&self) -> Vec<Service> {
         self.cache
@@ -278,7 +286,7 @@ fn publish(cache: &Mutex<Cache>, generation: u64, entries: Vec<Service>, sink: &
     {
         cache.entries = entries;
         drop(cache);
-        sink.emit(CoreEventDto::PlacesChanged);
+        sink.emit(CoreEventDto::DiscoveryChanged);
     }
 }
 struct Pending {
@@ -552,7 +560,9 @@ mod tests {
     #[derive(Default)]
     struct Sink(AtomicUsize);
     impl EventSink for Sink {
-        fn emit(&self, _: CoreEventDto) {
+        fn emit(&self, event: CoreEventDto) {
+            // PlacesChanged would send the frontend through places_snapshot -> discover().
+            assert_eq!(event, CoreEventDto::DiscoveryChanged);
             self.0.fetch_add(1, Ordering::SeqCst);
         }
     }
@@ -630,7 +640,7 @@ mod tests {
         ] {
             let mut r = reply(SERVICE_TYPES[0], &[]);
             r.5 = host.into();
-            assert!(parse_service(r).is_none(), "{host:?}");
+            assert_eq!(parse_service(r).unwrap().host, "192.168.1.2", "{host:?}");
         }
         for name in [
             "".to_owned(),
@@ -645,14 +655,7 @@ mod tests {
         let mut r = reply(SERVICE_TYPES[0], &[]);
         r.2 = "a\u{202e}\u{200b}\u{feff}b".into();
         assert_eq!(parse_service(r).unwrap().name, "ab");
-        for txt in [
-            vec![vec![b'x'; 256]],
-            vec![b"x=y".to_vec(); 33],
-            vec![vec![b'x'; 255]; 17],
-            vec![vec![0xff]],
-            vec![b"path=bad\0name".to_vec()],
-            vec!["path=a\u{200b}b".as_bytes().to_vec()],
-        ] {
+        for txt in [vec![b"x=y".to_vec(); 33], vec![vec![b'x'; 255]; 17]] {
             let mut r = reply(SERVICE_TYPES[0], &[]);
             r.9 = txt;
             assert!(parse_service(r).is_none());
@@ -681,6 +684,67 @@ mod tests {
         assert!(parse_service(reply("_http._tcp", &[])).is_none());
         assert!(dns_name(&format!("{}.local", "x".repeat(64))).is_none());
         assert!(dns_name(&vec!["x".repeat(63); 5].join(".")).is_none());
+    }
+    #[test]
+    fn invalid_txt_records_do_not_discard_services_or_valid_paths() {
+        for record in [
+            vec![0xff],
+            vec![b'x'; 256],
+            b"vendor=bad\0value".to_vec(),
+            "vendor=a\u{200b}b".as_bytes().to_vec(),
+            b"path=bad\0name".to_vec(),
+            b"share=\xff".to_vec(),
+            format!("path={}", "x".repeat(256)).into_bytes(),
+            "path=a\u{202e}b".as_bytes().to_vec(),
+        ] {
+            let mut r = reply(SERVICE_TYPES[0], &[]);
+            r.9 = vec![record];
+            assert!(parse_service(r.clone()).unwrap().path.is_none());
+            r.9.push(b"share=documents".to_vec());
+            assert_eq!(parse_service(r).unwrap().path.as_deref(), Some("documents"));
+        }
+    }
+    #[test]
+    fn txt_paths_trim_surrounding_whitespace_before_validation() {
+        for (kind, txt, expected) in [
+            ("_smb._tcp", "share=  /documents  ", Some("documents")),
+            ("_smb._tcp", "path=  documents  ", Some("documents")),
+            ("_nfs._tcp", "path=  /documents  ", Some("/documents")),
+            (
+                "_webdav._tcp",
+                "path=\u{a0}documents\u{a0}",
+                Some("/documents"),
+            ),
+            ("_smb._tcp", "share=   ", None),
+            ("_smb._tcp", "share= / ", None),
+            ("_nfs._tcp", "path=  ../secret  ", None),
+            ("_nfs._tcp", "path=\tdocuments\t", None),
+        ] {
+            assert_eq!(
+                parse_service(reply(kind, &[txt])).unwrap().path.as_deref(),
+                expected
+            );
+        }
+    }
+    #[test]
+    fn non_dns_hosts_fall_back_only_to_validated_addresses() {
+        for host in ["WINDOWS_NAS.local", "embedded device", "", &"x".repeat(255)] {
+            let mut r = reply(SERVICE_TYPES[0], &[]);
+            r.5 = host.into();
+            assert_eq!(parse_service(r.clone()).unwrap().host, "192.168.1.2");
+            r.7 = "fe80::2".into();
+            assert_eq!(parse_service(r.clone()).unwrap().host, "fe80::2%2");
+            for address in [
+                "bad/host",
+                "other.local",
+                "192.0.2.1%2",
+                "fe80::2%bad/zone",
+                "",
+            ] {
+                r.7 = address.into();
+                assert!(parse_service(r.clone()).is_none());
+            }
+        }
     }
     #[test]
     fn ipv4_ipv6_and_link_local_scope() {

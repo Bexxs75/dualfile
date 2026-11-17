@@ -209,6 +209,7 @@ export function createTauriApi(): DualfileApi {
     pluginColumns: (paths, columnIds) => call("plugin_columns", { paths, columnIds }),
     pluginPreview: (path, pluginId) => call("plugin_preview", { path, pluginId: pluginId ?? null }),
 
+    discoverySnapshot: () => call("discovery_snapshot"),
     placesSnapshot: () => call("places_snapshot"),
     placesSpace: path => call("places_space", { path }),
     placesSetVisible: visible => call("places_set_visible", { visible }),

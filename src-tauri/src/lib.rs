@@ -193,6 +193,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             places::places_snapshot,
+            places::discovery_snapshot,
             places::places_mount_affected,
             commands::places_save_connection,
             devices::device_list,

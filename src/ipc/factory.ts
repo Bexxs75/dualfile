@@ -14,7 +14,7 @@ export function createApi(host: object = window): DualfileApi {
   api.connectionEditorOpen = async (_profileId, _title, appearance, discoveryKey) => {
     if (!discoveryKey) return true;
     if (editor && !editor.closed) { editor.focus(); return false; }
-    const service = (await api.placesSnapshot()).discoveredServices?.find(s => s.key === discoveryKey);
+    const service = (await api.discoverySnapshot()).find(s => s.key === discoveryKey);
     if (!service) return false;
     const q = new URLSearchParams({ view: "connection-editor", discovered: JSON.stringify(service),
       ...Object.fromEntries(Object.entries(appearance).map(([key, value]) => [key, key === "accentAutomatic" ? value ? "1" : "0" : String(value)])) });

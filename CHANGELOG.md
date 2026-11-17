@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- LAN discovery updates its cached sidebar section without triggering filesystem or device refreshes. Invalid individual TXT records no longer hide services, advertised paths are trimmed, and non-DNS host names fall back to validated resolved addresses.
+
 ### Added
 
 - Opt-in LAN service discovery through Avahi over D-Bus. The sidebar shows up to 64 discovered SMB, NFS, SFTP and WebDAV endpoints; clicking opens a validated, prefilled connection editor without connecting or sending credentials. The setting defaults off and synchronizes with the settings window. Browsing is isolated, bounded and cancelled when disabled; unavailable Avahi stays silent, and removed/restarted services clear stale results.
