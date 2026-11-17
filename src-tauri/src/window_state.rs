@@ -27,6 +27,16 @@ fn detect_wayland() -> bool {
     false
 }
 
+/// The plugin is built before GTK is initialized, so GDK must not be touched here
+/// (Display::default() panics). Mirror GDK's own backend choice from the environment.
+fn wayland_from_env(gdk_backend: Option<&str>, wayland_display: Option<&str>) -> bool {
+    match gdk_backend.map(str::trim) {
+        Some(b) if b.starts_with("wayland") => true,
+        Some(b) if !b.is_empty() && !b.starts_with('*') => false,
+        _ => wayland_display.is_some_and(|d| !d.is_empty()),
+    }
+}
+
 static WAYLAND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Setup has an initialized GTK display; async commands must not call GTK themselves.
@@ -41,7 +51,10 @@ pub(crate) fn is_wayland() -> bool {
 /// Only the main window is tracked, so editor or settings windows never overwrite its size.
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri_plugin_window_state::Builder::default()
-        .with_state_flags(flags(detect_wayland()))
+        .with_state_flags(flags(wayland_from_env(
+            std::env::var("GDK_BACKEND").ok().as_deref(),
+            std::env::var("WAYLAND_DISPLAY").ok().as_deref(),
+        )))
         .with_filter(|label| label == "main")
         .build()
 }
@@ -49,6 +62,15 @@ pub fn plugin() -> TauriPlugin<Wry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plugin_backend_guess_needs_no_gtk() {
+        assert!(wayland_from_env(None, Some("wayland-0")));
+        assert!(!wayland_from_env(None, None));
+        assert!(!wayland_from_env(Some("x11"), Some("wayland-0")));
+        assert!(wayland_from_env(Some("wayland,x11"), None));
+        assert!(wayland_from_env(Some("*"), Some("wayland-0")));
+    }
 
     #[test]
     fn position_is_only_restored_outside_wayland() {
