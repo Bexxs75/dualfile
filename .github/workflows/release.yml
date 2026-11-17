@@ -46,6 +46,8 @@ jobs:
           if os.environ['RELEASE_TAG'] != 'v' + version:
               raise SystemExit('Tag must match src-tauri/tauri.conf.json version')
           PY
+      - name: Check CHANGELOG has release notes for this tag
+        run: python3 scripts/changelog-notes.py --version "$RELEASE_TAG" > /dev/null
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
@@ -112,6 +114,7 @@ jobs:
           merge-multiple: true
       - name: Generate updater manifest
         run: |
+          python3 scripts/changelog-notes.py --version "$RELEASE_TAG" > release-notes.md
           shopt -s nullglob
           x86=(release-assets/*-x86_64.AppImage.sig)
           arm=(release-assets/*-aarch64.AppImage.sig)
@@ -124,7 +127,7 @@ jobs:
             --release-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}" \
             --signature "linux-x86_64=${x86[0]}" \
             --signature "linux-aarch64=${arm[0]}" \
-            --notes-file .github/RELEASE_TEMPLATE.md \
+            --notes-file release-notes.md \
             --output release-assets/latest.json
       - name: Generate checksums
         working-directory: release-assets
@@ -134,6 +137,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          body_path: .github/RELEASE_TEMPLATE.md
+          body_path: release-notes.md
           fail_on_unmatched_files: true
           files: release-assets/*
