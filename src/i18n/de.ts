@@ -127,7 +127,7 @@ const de = {
   "whatsNew.skipped": "Du hast mehrere Versionen übersprungen. Hier sind die Änderungen.",
   "system.settingsTitle": "System",
   "system.tray": "Symbol im Infobereich (Tray) anzeigen",
-  "system.trayHelp": "Minimieren und Schließen verstecken das Fenster im Tray; Beenden über das Tray-Menü. Standard: aus.",
+  "system.trayHelp": "Schließen versteckt das Fenster im Tray, unter X11 auch Minimieren (unter Wayland bleibt es dann in der Taskleiste); Beenden über das Tray-Menü. Standard: aus.",
   "system.trayUnavailable": "Kein Infobereich gefunden, Fenster wird normal minimiert.",
   "system.startMenu": "Startmenü-Eintrag:",
   "system.present": "vorhanden",

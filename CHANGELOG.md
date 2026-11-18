@@ -13,6 +13,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 - X11: the main window opened in the top-left corner of the screen instead of where it was left. The stored position could come from a session that does not know it: a Wayland session writes 0/0 into the window-state file, and so did a start that never showed the window (minimized to the tray). Dualfile now keeps the position in a file of its own (`window-position.json` in the configuration folder) and only stores what a shown, non-maximized X11 window reported; a position whose title bar would lie outside every monitor is not applied, and the window manager places the window instead. The first start after the update is placed by the window manager once, because the old stored position is not trusted. Wayland is unchanged: the compositor places the window. (#18)
 
+### Changed
+
+- Tray help text and README: on Wayland (KDE Plasma, GNOME) only closing hides the window in the tray; minimizing keeps the task bar entry, because the compositor does not tell the app that the window was minimized. On X11 minimizing still hides to the tray. (#19)
+
 ## [0.3.6] - 2026-11-17
 
 ### Added
