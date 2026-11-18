@@ -69,7 +69,7 @@ For an AppImage, make the downloaded file executable and run it. A tar.gz extrac
 
 Linux with a graphical desktop. KDE Plasma and GNOME integration includes importing system places; this is not a guarantee for every desktop/distribution combination. The Tauri shell uses GTK 3 and WebKitGTK 4.1. AppImage execution may require FUSE 2, or extraction on systems without FUSE. RAR browsing requires an installed `7z` or `unrar` helper. Persistent remote credentials use the Linux desktop keyring (Secret Service/KWallet).
 
-Enable the notification-area icon in Settings → System (off by default). Minimizing hides the window in the tray; use its Open/Quit menu. If tray creation fails, Settings shows a hint and the window minimizes normally. GNOME may require an AppIndicator extension. Settings also lets you add or remove the user-local start-menu entry; the startup prompt appears at most three times. Windows and macOS are not supported targets here.
+Enable the notification-area icon in Settings → System (off by default). Closing hides the window in the tray, and on X11 so does minimizing; use its Open/Quit menu. On Wayland (KDE Plasma, GNOME) minimizing keeps the normal task bar entry, because the compositor does not tell the app that the window was minimized. If tray creation fails, Settings shows a hint and the window minimizes normally. GNOME may require an AppIndicator extension. Settings also lets you add or remove the user-local start-menu entry; the startup prompt appears at most three times. Windows and macOS are not supported targets here.
 
 ## Is it safe to install?
 

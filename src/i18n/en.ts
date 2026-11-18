@@ -127,7 +127,7 @@ const en: Record<keyof typeof de, string> = {
   "whatsNew.skipped": "You skipped several versions. Here are the changes.",
   "system.settingsTitle": "System",
   "system.tray": "Show icon in the notification area (tray)",
-  "system.trayHelp": "Minimize and close hide the window in the tray; quit from the tray menu. Default: off.",
+  "system.trayHelp": "Close hides the window in the tray, on X11 minimize does too (on Wayland it stays in the task bar); quit from the tray menu. Default: off.",
   "system.trayUnavailable": "No notification area found; the window will minimize normally.",
   "system.startMenu": "Start menu entry:",
   "system.present": "present",

@@ -124,6 +124,8 @@ pub fn run() {
                 .discovery
                 .set_enabled(settings.sidebar_discovery, &TauriSink(app.handle().clone()));
             if let Some(window) = app.get_webview_window("main") {
+                // Before the window is shown: GTK applies the position when it maps the window.
+                window_state::restore(&window);
                 system::show_at_start(
                     &window,
                     autostart::minimized_requested(std::env::args_os()),
@@ -153,7 +155,12 @@ pub fn run() {
             if window.label() != "main" {
                 return;
             }
+            if let tauri::WindowEvent::Moved(position) = event {
+                window_state::track(window.app_handle(), *position);
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Here the window is still shown, whether it then closes or hides to the tray.
+                window_state::save(window.app_handle());
                 if *system::INSTALLING.read().unwrap_or_else(|e| e.into_inner()) {
                     api.prevent_close();
                     return;

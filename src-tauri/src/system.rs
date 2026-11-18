@@ -588,6 +588,8 @@ pub(crate) fn restart_now(app: tauri::AppHandle) -> Result<(), String> {
     );
     dualfile_core::appenv::apply_clean_env(&mut command);
     dualfile_core::appenv::apply_external_current_dir(&mut command);
+    // The process exits below without a close request, which is where the position is saved.
+    crate::window_state::save(&app);
     // As Tauri's own restart does: release the single-instance lock first, or the new process
     // may find this one still running and quit as a second instance.
     app.cleanup_before_exit();
@@ -632,6 +634,13 @@ pub async fn release_open() -> Result<(), String> {
 }
 
 /// GTK reports iconification directly; window resizing is not a minimize event.
+///
+/// X11 only in effect. On Wayland a window is minimized by the compositor (KWin draws the title
+/// bar buttons) and xdg-shell has no minimized state, so GDK never sets ICONIFIED there
+/// (`gdk_wayland_window_iconify` only sends the request) and this handler does not run: the
+/// window stays a minimized task bar entry. The only hint a compositor gives is the xdg-shell
+/// "suspended" state, which KWin also sets on a desktop switch or when the screens turn off,
+/// and which the GTK bundled in the AppImage (3.24.38) does not pass on at all.
 #[cfg(target_os = "linux")]
 pub fn watch_minimize(app: &tauri::AppHandle) -> tauri::Result<()> {
     use gtk::prelude::*;
