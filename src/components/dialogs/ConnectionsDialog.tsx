@@ -106,7 +106,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
   </>}><p>{tr("ssh.deleteConfirm", { name: deleting.name })}</p>{error && <p role="alert">{error}</p>}</Modal>;
   if (password) return <Modal title={tr("ssh.prompt.password")} onClose={() => setPassword(null)}>
     <form autoComplete="off" onSubmit={(event) => { event.preventDefault(); const secret = input.current?.value ?? ""; if (input.current) input.current.value = ""; void connect(password, secret); }}>
-      <label>{tr("ssh.answer")}<input ref={input} data-autofocus type="password" autoComplete="off" /></label>
+      <label>{tr("ssh.prompt.password")}<input ref={input} data-autofocus type="password" autoComplete="off" /></label>
       <button className="tb" type="button" onClick={() => setPassword(null)}>{tr("action.cancel")}</button><button className="tb">{tr("ssh.connect")}</button>
     </form>
   </Modal>;

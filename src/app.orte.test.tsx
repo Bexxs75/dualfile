@@ -95,7 +95,7 @@ test("password and host-key flow preserves the target panel; stale bookmark reso
   await app.user.click(screen.getByRole("menuitem", { name: /nas · SFTP/ }));
   expect(screen.getByRole("dialog", { name: "Passwort" })).toBeVisible();
   act(() => controller.setActive(0));
-  await app.user.type(screen.getByLabelText("Antwort"), "demo");
+  await app.user.type(screen.getByLabelText("Passwort", { selector: "input" }), "demo");
   await app.user.click(screen.getByRole("button", { name: "Verbinden" }));
   await app.user.click(await screen.findByRole("button", { name: "Einmal vertrauen und verbinden" }));
   await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 1).path).toMatch(/^sftp:/));

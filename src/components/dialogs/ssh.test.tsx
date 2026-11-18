@@ -126,7 +126,7 @@ test("the connect call carries the profile the dialog showed", async () => {
     return <ConnectionsDialog api={api} onClose={() => {}} />;
   });
   await user.click(await screen.findByRole("button", { name: "Verbinden" }));
-  await user.type(screen.getByLabelText("Antwort"), "pw");
+  await user.type(screen.getByLabelText("Passwort", { selector: "input" }), "pw");
   const connect = vi.spyOn(api, "connectionConnect").mockResolvedValue({ state: "connected", connectionId: "c", root: "/", secretStore: "none" });
   await user.click(screen.getAllByRole("button", { name: "Verbinden" }).at(-1)!);
   expect(connect).toHaveBeenCalledWith("p", "pw", shown("old.example").profile);
@@ -140,16 +140,16 @@ test("a password question is dropped when the editor window changed that profile
   render(<RuntimeProvider runtime={runtime}><ConnectionsDialog api={api} onClose={() => {}} /></RuntimeProvider>);
   const user = userEvent.setup();
   await user.click(await screen.findByRole("button", { name: "Verbinden" }));
-  expect(screen.getByLabelText("Antwort")).toBeVisible();
+  expect(screen.getByLabelText("Passwort", { selector: "input" })).toBeVisible();
   list.mockResolvedValue([shown("new.example")]);
   await act(async () => { await runtime.controller.refreshConnections(); });
-  await waitFor(() => expect(screen.queryByLabelText("Antwort")).toBeNull());
+  await waitFor(() => expect(screen.queryByLabelText("Passwort", { selector: "input" })).toBeNull());
   expect(runtime.store.getState().toasts.some((t) => /inzwischen geändert/.test(t.text))).toBe(true);
   // Vanished profile: same treatment.
   await user.click(await screen.findByRole("button", { name: "Verbinden" }));
   list.mockResolvedValue([]);
   await act(async () => { await runtime.controller.refreshConnections(); });
-  await waitFor(() => expect(screen.queryByLabelText("Antwort")).toBeNull());
+  await waitFor(() => expect(screen.queryByLabelText("Passwort", { selector: "input" })).toBeNull());
 });
 
 test("profile deletion requires in-dialog confirmation and supports cancel", async () => {
