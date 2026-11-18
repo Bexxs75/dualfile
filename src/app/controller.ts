@@ -212,8 +212,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (place.profileId) {
       const entry = state.connections.find(e => e.profile.id === place.profileId);
       if (entry) await chooseConnection(w, entry.profile);
-    } else if (place.systemUrl) {
-      const profile = await saveSystemPlace(key, place.systemUrl);
+    } else if (place.systemKey) {
+      const profile = await saveSystemPlace(key, place.systemKey);
       if (profile) await chooseConnection(w, profile);
     } else if (destination) await navigatePlace(w, destination);
   }
@@ -223,8 +223,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
    * connects like any saved connection. The list is fetched directly: the backend's change
    * event may supersede a concurrent refresh, and the new profile must not be missed.
    */
-  async function saveSystemPlace(key: string, url: string): Promise<import("../ipc/types").ConnectionProfile | null> {
-    const bookmark = get().places?.systemPlaces?.find(p => p.url === url);
+  async function saveSystemPlace(key: string, placeKey: string): Promise<import("../ipc/types").ConnectionProfile | null> {
+    const bookmark = get().places?.systemPlaces?.find(p => p.placeKey === placeKey);
     if (!bookmark) return null;
     try {
       await api.placesSaveConnection(key);
@@ -363,7 +363,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (!place) return;
     try { await api.placesSaveConnection(place.mountKey ? `mount:${place.mountKey}` : key); await refreshConnections(); }
     // Saving a desktop bookmark mounts nothing, so a mount-permission message would mislead.
-    catch (error) { if (place.systemUrl) fail(error); else placeFailure(error); }
+    catch (error) { if (place.systemKey) fail(error); else placeFailure(error); }
   }
   function focusFileList() { document.querySelector<HTMLElement>(`[data-pane="${get().active}"] [role="grid"]`)?.focus(); }
   function focusSidebar() {

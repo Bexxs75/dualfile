@@ -43,22 +43,23 @@ function toBytes(value: unknown): Uint8Array {
 }
 
 /** Nur bekannte Ereignisformen erreichen die Oberfläche. */
+// One check per event type. The mapped type makes the compiler reject a new CoreEvent
+// variant without a check: "placesChanged" and "discoveryChanged" were once missing here
+// and silently dropped, so the sidebar only followed mounts on its slow fallback poll.
+const coreEventChecks: { [K in CoreEvent["type"]]: (value: Record<string, unknown>) => boolean } = {
+  placesChanged: () => true,
+  discoveryChanged: () => true,
+  closeSaveRequested: () => true,
+  closeRequested: value => typeof value.count === "number",
+  itemError: value => isRecord(value.error),
+  job: value => isRecord(value.status),
+  conflict: value => isRecord(value.conflict),
+  dirChanged: value => typeof value.path === "string",
+  connectionsChanged: () => true,
+};
 function isCoreEvent(value: unknown): value is CoreEvent {
-  if (!isRecord(value)) return false;
-  switch (value.type) {
-    case "closeSaveRequested": return true;
-    case "closeRequested": return typeof value.count === "number";
-    case "itemError": return isRecord(value.error);
-    case "job":
-      return isRecord(value.status);
-    case "conflict":
-      return isRecord(value.conflict);
-    case "dirChanged":
-      return typeof value.path === "string";
-    case "connectionsChanged": return true;
-    default:
-      return false;
-  }
+  if (!isRecord(value) || typeof value.type !== "string" || !Object.hasOwn(coreEventChecks, value.type)) return false;
+  return coreEventChecks[value.type as CoreEvent["type"]](value);
 }
 
 export function createTauriApi(): DualfileApi {

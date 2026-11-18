@@ -1452,7 +1452,7 @@ pub fn valid_sidebar_key(key: &str) -> bool {
         && key.split_once(':').is_some_and(|(kind, value)| {
             !value.is_empty()
                 && [
-                    "xdg", "bookmark", "drive", "fstab", "conn", "mount", "trash", "net",
+                    "xdg", "bookmark", "drive", "fstab", "conn", "mount", "trash", "net", "system",
                 ]
                 .contains(&kind)
         })

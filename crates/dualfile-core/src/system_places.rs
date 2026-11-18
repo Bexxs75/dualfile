@@ -412,6 +412,18 @@ pub fn bookmarks(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
     }
     out
 }
+/// Stable, opaque name of a bookmark for the sidebar. The URL may carry an account name and
+/// can be longer than a settings key may be, and the hidden-entries list is written to
+/// `settings.json`, so the key is a digest instead of the URL itself. It must stay the same
+/// across restarts, otherwise a hidden entry would come back.
+pub fn place_key(place: &SystemPlace) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(place.url.as_bytes())
+        .iter()
+        .take(16)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
 /// Bookmarks for the sidebar: a location that is already mounted is listed there as a
 /// mounted place, so its bookmark is dropped instead of appearing a second time. Uses the
 /// same authority and path rules as [`matching_mount`] and touches no filesystem.
@@ -953,6 +965,14 @@ mod tests {
             shown.iter().map(|p| p.host.as_str()).collect::<Vec<_>>(),
             ["homebox.example", "cloud.example"]
         );
+        // Sidebar keys are stable, distinct per bookmark and reveal neither host nor account.
+        let keys: Vec<_> = shown.iter().map(place_key).collect();
+        assert_eq!(keys[0], place_key(&shown[0]));
+        assert_ne!(keys[0], keys[1]);
+        for key in &keys {
+            assert!(key.len() == 32 && key.bytes().all(|b| b.is_ascii_hexdigit()));
+            assert!(crate::settings::valid_sidebar_key(&format!("system:{key}")));
+        }
         // Another account or another share on the same server is a different place.
         let other = vec![
             parse_url("smb://guest@homebox.example/", "mounted", "").unwrap(),

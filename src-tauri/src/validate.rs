@@ -718,7 +718,11 @@ mod sidebar_validation_tests {
             s.sidebar_hidden = keys;
             assert!(validate_settings(&s).is_err());
         }
-        s.sidebar_hidden = vec!["drive:/data".into()];
+        // Desktop bookmarks are hidden by their opaque key, never by URL.
+        s.sidebar_hidden = vec![
+            "drive:/data".into(),
+            "system:0123456789abcdef0123456789abcdef".into(),
+        ];
         assert!(validate_settings(&s).is_ok());
     }
 }

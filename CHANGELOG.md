@@ -11,6 +11,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Fixed
 
+- Sidebar: mounts, plugged-in devices, changed desktop bookmarks and discovered network services now show up within about a second instead of only after up to a minute (or a restart). The app window dropped the backend's "places changed" and "discovery changed" notifications, so only the slow fallback refresh updated the list.
+- Sidebar: the background watcher no longer reacts to its own reads of `/etc/fstab` and the bookmark files, which made it rescan about twice a second while idle.
 - Sidebar: mounted targets the user may not read or enter (for example `/root` on its own btrfs subvolume) are no longer listed under Devices, where a click could only report "permission denied". Only mounted local filesystems are checked, with a deadline; network, automount and FUSE mounts are not probed, and unmounted devices and fstab entries stay listed. (#20)
 
 ## [0.3.7] - 2026-11-18

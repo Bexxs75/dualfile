@@ -442,7 +442,12 @@ describe("Ereignisse", () => {
     emit(conflict);
     emit({ type: "dirChanged", path: "/x" });
     emit({ type: "connectionsChanged" });
-    expect(handler.mock.calls.map((c) => (c[0] as CoreEvent).type)).toEqual(["job", "conflict", "dirChanged", "connectionsChanged"]);
+    // Sidebar live updates (mounts, devices, desktop bookmarks, LAN discovery) depend on these.
+    emit({ type: "placesChanged" });
+    emit({ type: "discoveryChanged" });
+    emit({ type: "closeSaveRequested" });
+    emit({ type: "closeRequested", count: 2 });
+    expect(handler.mock.calls.map((c) => (c[0] as CoreEvent).type)).toEqual(["job", "conflict", "dirChanged", "connectionsChanged", "placesChanged", "discoveryChanged", "closeSaveRequested", "closeRequested"]);
     expect(handler.mock.calls[0]?.[0]).toBe(jobEvent);
   });
 
@@ -450,7 +455,7 @@ describe("Ereignisse", () => {
     const { emit } = captureListen();
     const handler = vi.fn();
     createTauriApi().onEvent(handler);
-    for (const bad of [null, "text", 5, {}, { type: "unbekannt" }, { type: "dirChanged" }, { type: "job" }, { type: "conflict", conflict: 3 }]) {
+    for (const bad of [null, "text", 5, {}, { type: "unbekannt" }, { type: "toString" }, { type: "closeRequested" }, { type: "dirChanged" }, { type: "job" }, { type: "conflict", conflict: 3 }]) {
       emit(bad);
     }
     expect(handler).not.toHaveBeenCalled();

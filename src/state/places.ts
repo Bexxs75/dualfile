@@ -4,8 +4,8 @@ import type { TranslationKey } from "../i18n";
 import { systemPlaceExists } from "../ipc/systemPlaces";
 export interface Place {
   discoveryKey?: string;
-  /** Set for a desktop bookmark (Dolphin, GNOME Files) that is not a saved connection yet. */
-  systemUrl?: string;
+  /** Opaque key of a desktop bookmark (Dolphin, GNOME Files) that is not a saved connection yet. */
+  systemKey?: string;
   deviceKey?: string; canRemove?: boolean;
   canSave?: boolean;
   readOnly?: boolean; canMount?: boolean; canUnmount?: boolean; mountKey?: string;
@@ -59,9 +59,12 @@ export function buildPlaces(snapshot: PlacesSnapshot | null, connections: readon
   // removed by the backend. Only name and protocol are displayed, never the URL or account.
   const profiles = connections.map(e => e.profile);
   for (const p of snapshot?.systemPlaces ?? []) {
-    const key = `system:${p.url}`;
+    // The key is an opaque digest from the backend: it is stored in the hidden-entries
+    // list, and the URL (which may name an account) must not end up in settings.json.
+    if (!p.placeKey) continue;
+    const key = `system:${p.placeKey}`;
     if (systemPlaceExists(p, profiles) || remote.some(e => e.key === key)) continue;
-    remote.push({ key, systemUrl: p.url, canSave: true, name: `${p.name} · ${p.scheme.toUpperCase()}`, icon: "network", state: "disconnected", reason: "sidebar.systemPlaceHelp" });
+    remote.push({ key, systemKey: p.placeKey, canSave: true, name: `${p.name} · ${p.scheme.toUpperCase()}`, icon: "network", state: "disconnected", reason: "sidebar.systemPlaceHelp" });
   }
   const network: Place[] = settings.sidebarDiscovery ? (snapshot?.discoveredServices ?? []).map(service => ({
     key: `net:${service.key}`, discoveryKey: service.key, name: `${service.name} · ${service.protocol.toUpperCase()} · ${service.host.includes(":") ? `[${service.host}]` : service.host}:${service.port}`,

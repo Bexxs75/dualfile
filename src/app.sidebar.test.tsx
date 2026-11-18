@@ -642,13 +642,13 @@ test("a desktop bookmark is announced as system place, can be hidden, and a clic
   fireEvent.contextMenu(row()!);
   expect(screen.getByRole("menuitem", { name: "Als Verbindung speichern" })).toBeInTheDocument();
   await app.user.click(screen.getByRole("menuitem", { name: "Eintrag ausblenden" }));
-  expect(app.runtime.store.getState().settings.sidebarHidden).toContain("system:sftp://nas/");
+  expect(app.runtime.store.getState().settings.sidebarHidden).toContain("system:mock0");
   expect(row()).toBeNull();
-  act(() => app.runtime.controller.hidePlace("system:sftp://nas/", false));
+  act(() => app.runtime.controller.hidePlace("system:mock0", false));
   await app.user.click(row()!);
   // Same path as a saved connection: the connect dialog runs and the pane opens the remote root.
   await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toMatch(/^sftp:/));
-  expect(save).toHaveBeenCalledWith("system:sftp://nas/");
+  expect(save).toHaveBeenCalledWith("system:mock0");
   expect(app.runtime.store.getState().connections).toMatchObject([{ connected: true, profile: { name: "Home server", protocol: "sftp", host: "nas" } }]);
   // Now a saved connection: listed once, without the system-place wording.
   await waitFor(() => expect(row()).toBeNull());

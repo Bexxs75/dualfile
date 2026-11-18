@@ -75,22 +75,23 @@ test("device rows keep stable keys, support polkit fstab and exclude encrypted m
 test("desktop bookmarks appear once as disconnected system places and never show URL or account", async () => {
   const api = createMockApi();
   const snapshot = await api.placesSnapshot();
-  const bookmark = (url: string, name: string, scheme: string, host: string, user: string | null = null, path = "/") => ({ sources: ["dolphin"], name, scheme, host, port: null, user, path, url, mountedAt: null });
+  const bookmark = (url: string, name: string, scheme: string, host: string, user: string | null = null, path = "/") => ({ placeKey: `k-${name}`, sources: ["dolphin"], name, scheme, host, port: null, user, path, url, mountedAt: null });
   snapshot.systemPlaces = [bookmark("sftp://nas/", "Home server", "sftp", "nas"), bookmark("smb://alice@box/team", "Team", "smb", "box", "alice", "/team")];
   const remote = (connections: Parameters<typeof buildPlaces>[1], settings = defaultSettings, showHidden = false) => buildPlaces(snapshot, connections, settings, snapshot.home, showHidden)[1]!.entries;
   const entries = remote([]);
-  expect(entries.find(e => e.key === "system:sftp://nas/")).toMatchObject({ name: "Home server · SFTP", state: "disconnected", canSave: true, systemUrl: "sftp://nas/", reason: "sidebar.systemPlaceHelp" });
-  const team = entries.find(e => e.key === "system:smb://alice@box/team")!;
+  expect(entries.find(e => e.key === "system:k-Home server")).toMatchObject({ name: "Home server · SFTP", state: "disconnected", canSave: true, systemKey: "k-Home server", reason: "sidebar.systemPlaceHelp" });
+  const team = entries.find(e => e.key === "system:k-Team")!;
   expect(team.path).toBeUndefined();
-  expect(`${team.name} ${team.path}`).not.toMatch(/alice|smb:\/\//);
+  // Neither the row nor its key (stored when hidden) carries the URL or the account.
+  expect(JSON.stringify(team)).not.toMatch(/alice|smb:\/\/|box/);
   // Saved connections are listed first; a bookmark that was saved is not repeated below them.
   await api.connectionSave(systemPlaceProfile(snapshot.systemPlaces[0]!));
   const saved = remote(await api.connectionsList());
-  expect(saved.some(e => e.key === "system:sftp://nas/")).toBe(false);
+  expect(saved.some(e => e.key === "system:k-Home server")).toBe(false);
   expect(saved.filter(e => e.name.startsWith("Home server"))).toHaveLength(1);
-  expect(saved.some(e => e.key === "system:smb://alice@box/team")).toBe(true);
+  expect(saved.some(e => e.key === "system:k-Team")).toBe(true);
   // "Hide entry" uses the ordinary hidden list, so the choice is stored with the settings.
-  const hidden = { ...defaultSettings, sidebarHidden: ["system:smb://alice@box/team"] };
-  expect(remote([], hidden).some(e => e.key === "system:smb://alice@box/team")).toBe(false);
-  expect(remote([], hidden, true).find(e => e.key === "system:smb://alice@box/team")?.hidden).toBe(true);
+  const hidden = { ...defaultSettings, sidebarHidden: ["system:k-Team"] };
+  expect(remote([], hidden).some(e => e.key === "system:k-Team")).toBe(false);
+  expect(remote([], hidden, true).find(e => e.key === "system:k-Team")?.hidden).toBe(true);
 });

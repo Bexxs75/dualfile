@@ -721,6 +721,8 @@ export interface PlacesSnapshot {
 }
 
 export interface SystemPlace {
+  /** Opaque, stable key of a desktop bookmark in the sidebar (never the URL). */
+  placeKey?: string;
   mountKey?: string;
   canUnmount?: boolean;
   sources: string[];

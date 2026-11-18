@@ -19,15 +19,23 @@ const DEVICE_WATCH: &str = "/dev/disk/by-id";
 fn watch_event(
     event: &notify_debouncer_mini::notify::Result<notify_debouncer_mini::notify::Event>,
 ) -> (bool, bool) {
-    use notify_debouncer_mini::notify::{event::ModifyKind, EventKind};
+    use notify_debouncer_mini::notify::{
+        event::{AccessKind, AccessMode, ModifyKind},
+        EventKind,
+    };
     let Ok(event) = event else {
         return (true, true);
     };
-    let relevant = event.paths.iter().any(|p| {
-        p.starts_with(DEVICE_WATCH)
-            || p == std::path::Path::new("/etc/fstab")
-            || bookmark_files().contains(p)
-    });
+    // Opening and reading a watched file is reported too. Discovery itself reads fstab and
+    // the bookmark files, so counting those would make every refresh trigger the next one.
+    let read_only = matches!(event.kind, EventKind::Access(kind)
+        if kind != AccessKind::Close(AccessMode::Write));
+    let relevant = !read_only
+        && event.paths.iter().any(|p| {
+            p.starts_with(DEVICE_WATCH)
+                || p == std::path::Path::new("/etc/fstab")
+                || bookmark_files().contains(p)
+        });
     let lost = event.need_rescan()
         || (event
             .paths
@@ -67,7 +75,7 @@ pub struct Snapshot {
     drives: Vec<drives::Drive>,
     network_mounts: Vec<NetworkMount>,
     /// Desktop network bookmarks that are not mounted; the URL never carries a password.
-    system_places: Vec<system_places::SystemPlace>,
+    system_places: Vec<SystemBookmark>,
     discovered_services: Vec<crate::discovery::Service>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -77,6 +85,14 @@ pub struct NetworkMount {
     place: system_places::SystemPlace,
     mount_key: String,
     can_unmount: bool,
+}
+/// A desktop bookmark with the opaque key the sidebar uses for it (see `place_key`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemBookmark {
+    #[serde(flatten)]
+    place: system_places::SystemPlace,
+    place_key: String,
 }
 impl std::ops::Deref for NetworkMount {
     type Target = system_places::SystemPlace;
@@ -204,7 +220,13 @@ fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
         system_places::probe_mounts(&paths, places_pool::paths(), Duration::from_millis(500));
     // A missed deadline is not evidence that the bookmarks are gone: keep the last list.
     let system_places = match bounded_bookmarks() {
-        Some(bookmarks) => system_places::unmounted_bookmarks(bookmarks, &mounts),
+        Some(bookmarks) => system_places::unmounted_bookmarks(bookmarks, &mounts)
+            .into_iter()
+            .map(|place| SystemBookmark {
+                place_key: system_places::place_key(&place),
+                place,
+            })
+            .collect(),
         None => previous.map_or_else(Vec::new, |p| p.system_places.clone()),
     };
     let mut network_mounts: Vec<_> = mounts.into_iter().filter_map(public_mount).collect();
@@ -1133,13 +1155,13 @@ fn import_source(source: &str, fstype: &str) -> Option<system_places::SystemPlac
 }
 /// Resolve saved connection data internally; credentials never reach the request or response.
 pub fn importable_place(key: &str) -> Result<system_places::SystemPlace, UiError> {
-    if let Some(url) = key.strip_prefix("system:") {
+    if let Some(key) = key.strip_prefix("system:") {
         // A desktop bookmark keeps its own title and account name, as in the import dialog.
-        // It is looked up again by URL so the request can only name an existing bookmark.
+        // It is looked up again by key so the request can only name an existing bookmark.
         return bounded_bookmarks()
             .ok_or_else(|| mount_error("timeout"))?
             .into_iter()
-            .find(|place| place.url == url)
+            .find(|place| system_places::place_key(place) == key)
             .ok_or_else(|| mount_error("notFound"));
     }
     let mut place = if let Some(key) = key.strip_prefix("mount:") {
@@ -1239,6 +1261,20 @@ mod tests {
         assert_eq!(watch_event(&event("/etc/fstab")), (true, false));
         assert_eq!(
             watch_event(&event("/dev/disk/by-id/usb-example")),
+            (true, false)
+        );
+        // Our own reads of a watched file must not count as a change; a finished write does.
+        use notify_debouncer_mini::notify::event::{AccessKind, AccessMode};
+        let access = |kind| Ok(Event::new(EventKind::Access(kind)).add_path("/etc/fstab".into()));
+        for kind in [
+            AccessKind::Open(AccessMode::Any),
+            AccessKind::Read,
+            AccessKind::Close(AccessMode::Read),
+        ] {
+            assert_eq!(watch_event(&access(kind)), (false, false), "{kind:?}");
+        }
+        assert_eq!(
+            watch_event(&access(AccessKind::Close(AccessMode::Write))),
             (true, false)
         );
         for file in bookmark_files() {
