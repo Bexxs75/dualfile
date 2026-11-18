@@ -37,6 +37,23 @@ test("bridge merges whitelisted patches, preserves main changes, and saves once 
   expect(snapshot.settings).not.toHaveProperty("session"); expect(snapshot.logDir).toBe("/home/demo");
   b.stop();
 });
+test("bridge applies an autostart choice and returns a failure to the settings window", async () => {
+  const b = await bridge();
+  const set = vi.spyOn(b.api, "autostartSet");
+  b.receive({ session: "s1", seq: 1, kind: "setAutostart", mode: "minimized" });
+  await tick();
+  expect(set).toHaveBeenCalledWith("minimized");
+  expect(b.runtime.store.getState().settings.autostartPrompted).toBe(true);
+  set.mockRejectedValueOnce(new Error("Permission denied"));
+  b.receive({ session: "s1", seq: 2, kind: "setAutostart", mode: "off" });
+  await tick();
+  await vi.waitFor(() => expect(b.push.mock.lastCall![0]).toMatchObject({ ack: 2, errors: [{ seq: 2, message: "Permission denied" }] }));
+  const status = vi.spyOn(b.api, "systemStatus").mockResolvedValue({ appImage: false, startMenuExists: true, autostart: "shown" });
+  b.receive({ session: "s1", seq: 3, kind: "refreshStatus" });
+  await vi.waitFor(() => expect(b.push.mock.lastCall![0]).toMatchObject({ ack: 3, system: { status: { autostart: "shown" } } }));
+  expect(status).toHaveBeenCalled();
+  b.stop();
+});
 test("bridge serializes actions and ignores the old session when reopened during an action", async () => {
   const b = await bridge();
   let release!: () => void;

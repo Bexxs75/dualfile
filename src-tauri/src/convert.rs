@@ -633,6 +633,8 @@ pub struct SettingsDto {
     #[serde(default)]
     pub start_menu_prompt_count: u8,
     #[serde(default)]
+    pub autostart_prompted: bool,
+    #[serde(default)]
     pub dismissed_update_version: String,
     #[serde(default)]
     pub last_update_check: Option<String>,
@@ -721,6 +723,7 @@ impl From<&settings::Settings> for SettingsDto {
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
             start_menu_prompt_count: s.start_menu_prompt_count,
+            autostart_prompted: s.autostart_prompted,
             dismissed_update_version: s.dismissed_update_version.clone(),
             last_update_check: s.last_update_check.clone(),
             last_seen_version: s.last_seen_version.clone(),
@@ -790,6 +793,7 @@ impl From<&SettingsDto> for settings::Settings {
             tray_enabled: s.tray_enabled,
             start_menu_prompted: s.start_menu_prompted,
             start_menu_prompt_count: s.start_menu_prompt_count,
+            autostart_prompted: s.autostart_prompted,
             dismissed_update_version: s.dismissed_update_version.clone(),
             last_update_check: s.last_update_check.clone(),
             last_seen_version: s.last_seen_version.clone(),

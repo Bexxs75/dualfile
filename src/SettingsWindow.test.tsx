@@ -38,12 +38,46 @@ test("busy until first snapshot; live appearance and language without settings I
 test("tray sends patch before action; start-menu error appears inline", async () => {
   const b = setup("system"); b.snapshot();
   await b.user.click(screen.getByRole("checkbox"));
-  await waitFor(() => expect(b.send.mock.calls.map(([m]) => m.kind)).toEqual(["patch", "setTray"]));
+  await waitFor(() => expect(b.send.mock.calls.map(([m]) => m.kind)).toEqual(["refreshStatus", "patch", "setTray"]));
   const add = screen.getAllByRole("button").find(el => /Add/.test(el.textContent ?? ""))!;
   await b.user.click(add);
-  await waitFor(() => expect(b.send).toHaveBeenCalledTimes(3));
-  b.snapshot({ ack: 3, errors: [{ seq: 3, message: "permission denied" }] });
+  await waitFor(() => expect(b.send).toHaveBeenCalledTimes(4));
+  b.snapshot({ ack: 4, errors: [{ seq: 4, message: "permission denied" }] });
   expect(await screen.findAllByText("permission denied")).not.toHaveLength(0);
+});
+test("autostart select shows the entry on disk, sends the choice and reports a failure inline", async () => {
+  const b = setup("system"); b.snapshot();
+  const select = screen.getByRole("combobox", { name: "Start with the system" });
+  expect(select).toHaveValue("off");
+  expect([...select.querySelectorAll("option")].map(o => o.textContent)).toEqual(["Off", "Start minimized", "Start and show the window"]);
+  await b.user.selectOptions(select, "minimized");
+  await waitFor(() => expect(b.send).toHaveBeenCalledWith({ session: "s1", seq: 2, kind: "setAutostart", mode: "minimized" }));
+  b.snapshot({ ack: 2, system: { ...testSnapshot().system, status: { appImage: true, startMenuExists: false, autostart: "minimized" } } });
+  await waitFor(() => expect(select).toHaveValue("minimized"));
+  await b.user.selectOptions(select, "shown");
+  await waitFor(() => expect(b.send).toHaveBeenCalledWith({ session: "s1", seq: 3, kind: "setAutostart", mode: "shown" }));
+  b.snapshot({ ack: 3, errors: [{ seq: 3, message: "Permission denied" }], system: { ...testSnapshot().system, status: { appImage: true, startMenuExists: false, autostart: "minimized" } } });
+  expect(await screen.findByText("The autostart entry could not be changed: Permission denied")).toBeVisible();
+  expect(select).toHaveValue("minimized");
+});
+test("opening the system tab and focusing the window re-read the entries from disk", async () => {
+  const b = setup("system"); b.snapshot();
+  await waitFor(() => expect(b.send).toHaveBeenCalledWith({ session: "s1", seq: 1, kind: "refreshStatus" }));
+  const select = screen.getByRole("combobox", { name: "Start with the system" });
+  b.snapshot({ ack: 1, system: { ...testSnapshot().system, status: { appImage: true, startMenuExists: false, autostart: "shown" } } });
+  await waitFor(() => expect(select).toHaveValue("shown"));
+  act(() => { window.dispatchEvent(new Event("focus")); });
+  await waitFor(() => expect(b.send).toHaveBeenCalledWith({ session: "s1", seq: 2, kind: "refreshStatus" }));
+  // Deleted outside Dualfile in the meantime: the control follows the disk.
+  b.snapshot({ ack: 2, system: { ...testSnapshot().system, status: { appImage: true, startMenuExists: false, autostart: "off", startMenuError: "Symlink in desktop integration path" } } });
+  await waitFor(() => expect(select).toHaveValue("off"));
+  expect(select).toBeEnabled();
+  expect(screen.getByText("Symlink in desktop integration path")).toBeVisible();
+});
+test("autostart entry that could not be read or refreshed is reported in the settings", () => {
+  const b = setup("system");
+  b.snapshot({ system: { ...testSnapshot().system, status: { appImage: true, startMenuExists: false, autostart: "off", autostartError: "Autostart entry is a symlink" } } });
+  expect(screen.getByText("The autostart entry could not be changed: Autostart entry is a symlink")).toBeVisible();
 });
 test("Done waits for acknowledgement, and X uses the same protocol", async () => {
   const b = setup(); b.snapshot();

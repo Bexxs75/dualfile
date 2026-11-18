@@ -3,7 +3,10 @@ import { useAppState, useLanguage, useRuntime, useT } from "../../app/context";
 import { isFinished } from "../../state/operations";
 import { useDialogFocus } from "./useDialogFocus";
 import { Modal } from "../Modal";
+import type { AutostartMode } from "../../ipc/system";
 import config from "../../../src-tauri/tauri.conf.json";
+
+const AUTOSTART_MODES: readonly AutostartMode[] = ["off", "minimized", "shown"];
 
 function useSystem() {
   const { system } = useRuntime();
@@ -31,6 +34,15 @@ export function SystemSettings() {
   const language = useLanguage();
   const tr = useT();
   const { busy, error, run } = useAction();
+  const autostart = useAction();
+  // The entries can change outside Dualfile (deleted, switched off in the desktop's settings).
+  useEffect(() => {
+    const refresh = () => void system.refreshStatus();
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [system]);
+  const startMenuError = error || state.status?.startMenuError;
   return <>
     <section className="system-group" aria-labelledby="system-heading">
       <h3 id="system-heading">{tr("system.settingsTitle")}</h3>
@@ -42,7 +54,16 @@ export function SystemSettings() {
       {state.trayUnavailable && <p className="field-error" role="status">{tr("system.trayUnavailable")}</p>}
       <p className="muted">{tr("system.startMenu")} <b className={state.status?.startMenuExists ? "system-present" : undefined}>{tr(!state.status ? "system.loading" : state.status.startMenuExists ? "system.present" : "system.absent")}</b></p>
       <div><button className="tb" disabled={busy || !state.status} onClick={() => void run(() => system.setStartMenu(!state.status?.startMenuExists))}>{tr(state.status?.startMenuExists ? "system.remove" : "system.add")}</button></div>
-      {error && <p role="alert" className="field-error">{error}</p>}
+      {startMenuError && <p role="alert" className="field-error">{startMenuError}</p>}
+      <div className="fld">
+        <label htmlFor="autostart-mode">{tr("system.autostart")}</label>
+        <select id="autostart-mode" value={state.status?.autostart ?? "off"} disabled={autostart.busy || !state.status} aria-describedby="autostart-help"
+          onChange={e => { const mode = e.target.value as AutostartMode; void autostart.run(() => system.setAutostart(mode)); }}>
+          {AUTOSTART_MODES.map(mode => <option key={mode} value={mode}>{tr(`system.autostart.${mode}`)}</option>)}
+        </select>
+        <p id="autostart-help" className="field-help">{tr("system.autostartHelp")}</p>
+        {(autostart.error || state.status?.autostartError) && <p role="alert" className="field-error">{tr("system.autostartFailed", { message: autostart.error || state.status?.autostartError || "" })}</p>}
+      </div>
     </section>
   </>;
 }
@@ -123,6 +144,22 @@ function StartMenuPrompt() {
   </Modal>;
 }
 
+/** Asked once; closing it any way counts as "not now" (off) and it does not return. */
+function AutostartPrompt() {
+  const { system } = useSystem();
+  const tr = useT();
+  const { busy, error, run } = useAction();
+  const answer = (mode: AutostartMode) => { if (!busy) void run(() => system.answerAutostart(mode)); };
+  return <Modal title={tr("system.autostartPromptTitle")} closeDisabled={busy} onClose={() => answer("off")} footer={<>
+    <button className="tb" disabled={busy} data-autofocus onClick={() => answer("off")}>{tr("system.autostartLater")}</button>
+    <button className="tb" disabled={busy} onClick={() => answer("minimized")}>{tr("system.autostart.minimized")}</button>
+    <button className="tb" disabled={busy} onClick={() => answer("shown")}>{tr("system.autostart.shown")}</button>
+  </>}>
+    <p className="muted">{tr("system.autostartPromptHelp")}</p>
+    {error && <p role="alert" className="field-error">{tr("system.autostartFailed", { message: error })}</p>}
+  </Modal>;
+}
+
 export function SystemUpdates() {
   const { system, state } = useSystem();
   const tr = useT();
@@ -170,5 +207,6 @@ export function SystemUpdates() {
       <p role="status" className="muted">{state.installed ? tr(relaunchFailed ? "updates.restartFailed" : "updates.installed") : progress?.phase === "install" ? tr("updates.installing") : <>{percent !== undefined ? `${percent} % · ` : ""}{tr(progress?.total ? "updates.bytes" : "updates.bytesUnknown", { downloaded: ((progress?.downloaded ?? 0) / 1e6).toFixed(1), total: ((progress?.total ?? 0) / 1e6).toFixed(1) })}</>}</p>
     </Modal>}
     {state.prompt && !otherDialog && !notes && !state.installing && <StartMenuPrompt />}
+    {state.autostartPrompt && !state.prompt && !otherDialog && !notes && !state.installing && <AutostartPrompt />}
   </>;
 }

@@ -5,20 +5,29 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const ID: &str = "de.thebexxs.dualfile";
-const MARKER: &str = "X-Dualfile-Managed=true";
+pub(crate) const ID: &str = "de.thebexxs.dualfile";
+pub(crate) const MARKER: &str = "X-Dualfile-Managed=true";
 const ICON: &[u8] = include_bytes!("../icons/128x128.png");
 
-fn invalid(message: &str) -> io::Error {
+pub(crate) fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::PermissionDenied, message)
 }
 
 pub fn executable() -> io::Result<PathBuf> {
-    let path = std::env::var_os("APPIMAGE")
+    executable_from(std::env::var_os("APPIMAGE"), std::env::current_exe)
+}
+
+// Inside an AppImage the running binary lives in a temporary mount (/tmp/.mount_*) that is
+// gone after exit; only `$APPIMAGE` names the file the user really starts.
+fn executable_from(
+    app_image: Option<std::ffi::OsString>,
+    current_exe: impl FnOnce() -> io::Result<PathBuf>,
+) -> io::Result<PathBuf> {
+    let path = app_image
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .map(Ok)
-        .unwrap_or_else(std::env::current_exe)?;
+        .unwrap_or_else(current_exe)?;
     if !path.is_absolute() {
         return Err(invalid("Executable path must be absolute"));
     }
@@ -34,7 +43,7 @@ pub fn home() -> io::Result<PathBuf> {
 
 // Desktop Entry escaping is applied after Exec argument quoting. Percent is a field code,
 // not a shell character. Reject line breaks instead of allowing injected desktop keys.
-pub fn render(exe: &Path) -> io::Result<String> {
+pub(crate) fn quote_exec(exe: &Path) -> io::Result<String> {
     let raw = exe
         .to_str()
         .ok_or_else(|| invalid("Executable path is not UTF-8"))?;
@@ -53,7 +62,22 @@ pub fn render(exe: &Path) -> io::Result<String> {
             _ => quoted.push(c),
         }
     }
-    Ok(format!("[Desktop Entry]\nType=Application\nName=Dualfile\nComment=Two-pane file manager\nComment[de]=Zwei-Fenster-Dateimanager\nExec=\"{quoted}\"\nIcon={ID}\nTerminal=false\nCategories=Utility;FileManager;\nStartupWMClass={ID}\n{MARKER}\n"))
+    Ok(format!("\"{quoted}\""))
+}
+
+pub fn render(exe: &Path) -> io::Result<String> {
+    let exec = quote_exec(exe)?;
+    Ok(format!("[Desktop Entry]\nType=Application\nName=Dualfile\nComment=Two-pane file manager\nComment[de]=Zwei-Fenster-Dateimanager\nExec={exec}\nIcon={ID}\nTerminal=false\nCategories=Utility;FileManager;\nStartupWMClass={ID}\n{MARKER}\n"))
+}
+
+/// Replaces `path` in one step, so a reader never sees a half-written entry.
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(|| invalid("No parent"))?;
+    let mut temp = tempfile::NamedTempFile::new_in(parent)?;
+    temp.write_all(bytes)?;
+    temp.as_file().sync_all()?;
+    temp.persist(path).map_err(|e| e.error)?;
+    Ok(())
 }
 
 pub struct DesktopEntry {
@@ -116,11 +140,7 @@ impl DesktopEntry {
         let parent = path.parent().ok_or_else(|| invalid("No parent"))?;
         fs::create_dir_all(parent)?;
         self.safe(path)?;
-        let mut temp = tempfile::NamedTempFile::new_in(parent)?;
-        temp.write_all(bytes)?;
-        temp.as_file().sync_all()?;
-        temp.persist(path).map_err(|e| e.error)?;
-        Ok(())
+        write_atomic(path, bytes)
     }
     pub fn install(&self, exe: &Path) -> io::Result<()> {
         let text = render(exe)?;
@@ -172,6 +192,24 @@ mod tests {
         assert!(s.contains("Exec=\"/tmp/My App/\\\\$cash\\\\`x\\\\\"%%.AppImage\"\n"));
         assert!(render(Path::new("/tmp/x\nExec=evil")).is_err());
         assert!(render(Path::new("relative")).is_err());
+    }
+    #[test]
+    fn executable_is_the_appimage_file_and_the_binary_only_outside_an_appimage() {
+        let mount = || Ok(PathBuf::from("/tmp/.mount_DualfXYZ/usr/bin/dualfile"));
+        assert_eq!(
+            executable_from(Some("/home/u/Apps/Dualfile.AppImage".into()), mount).unwrap(),
+            Path::new("/home/u/Apps/Dualfile.AppImage")
+        );
+        let dev = || Ok(PathBuf::from("/w/target/debug/dualfile"));
+        assert_eq!(
+            executable_from(None, dev).unwrap(),
+            Path::new("/w/target/debug/dualfile")
+        );
+        assert_eq!(
+            executable_from(Some("".into()), dev).unwrap(),
+            Path::new("/w/target/debug/dualfile")
+        );
+        assert!(executable_from(Some("relative.AppImage".into()), dev).is_err());
     }
     #[test]
     fn temporary_home_install_move_remove_and_foreign_file() {

@@ -41,6 +41,9 @@ pub struct Settings {
     pub tray_enabled: bool,
     pub start_menu_prompted: bool,
     pub start_menu_prompt_count: u8,
+    /// The one-time "start with the system?" question was answered (or the choice was made
+    /// in the settings). The mode itself is not stored: the autostart entry on disk is.
+    pub autostart_prompted: bool,
     pub dismissed_update_version: String,
     pub last_update_check: Option<String>,
     pub last_seen_version: Option<String>,
@@ -98,6 +101,7 @@ impl Default for Settings {
             tray_enabled: false,
             start_menu_prompted: false,
             start_menu_prompt_count: 0,
+            autostart_prompted: false,
             dismissed_update_version: String::new(),
             last_update_check: None,
             last_seen_version: None,
@@ -388,6 +392,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         tray_enabled: field(&mut obj, "tray_enabled", false, &mut fixes),
         start_menu_prompted: field(&mut obj, "start_menu_prompted", false, &mut fixes),
         start_menu_prompt_count: field(&mut obj, "start_menu_prompt_count", 0, &mut fixes),
+        autostart_prompted: field(&mut obj, "autostart_prompted", false, &mut fixes),
         dismissed_update_version: field(
             &mut obj,
             "dismissed_update_version",
@@ -1380,11 +1385,13 @@ mod updater_migration_tests {
         assert!(s.check_updates_on_start);
         assert!(!s.tray_enabled && !s.start_menu_prompted);
         assert_eq!(s.start_menu_prompt_count, 0);
+        assert!(!s.autostart_prompted);
         assert!(s.dismissed_update_version.is_empty() && s.last_update_check.is_none());
         s.check_updates_on_start = false;
         s.tray_enabled = true;
         s.start_menu_prompted = true;
         s.start_menu_prompt_count = 3;
+        s.autostart_prompted = true;
         s.dismissed_update_version = "1.2.3".into();
         s.last_update_check = Some("2026-01-01T00:00:00Z".into());
         save(dir.path(), &s, false).unwrap();

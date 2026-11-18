@@ -97,12 +97,14 @@ export function createTauriApi(): DualfileApi {
     settingsWindowPush: (snapshot, title, close = false, control = {}) => call("settings_window_push", { snapshot, title, close, control: { cancelClose: control.cancelClose ?? false, error: control.error ?? null } }),
     onSettingsWindowMessage: handler => terminalListener<SettingsWindowMessage>("settings-window", message => {
       if (isRecord(message) && typeof message.session === "string" && Number.isSafeInteger(message.seq) && message.seq >= 0 &&
-        (["session", "closed", "closeFailed", "flush", "checkUpdates"].includes(message.kind) ||
+        (["session", "closed", "closeFailed", "flush", "checkUpdates", "refreshStatus"].includes(message.kind) ||
          message.kind === "patch" && isRecord(message.patch) ||
-         ["setTray", "setStartMenu"].includes(message.kind) && typeof (message as { enabled?: unknown }).enabled === "boolean")) handler(message);
+         ["setTray", "setStartMenu"].includes(message.kind) && typeof (message as { enabled?: unknown }).enabled === "boolean" ||
+         message.kind === "setAutostart" && ["off", "minimized", "shown"].includes(message.mode))) handler(message);
     }),
     systemStatus: () => call("system_status"),
     startMenuSet: enabled => call("start_menu_set", { enabled }),
+    autostartSet: mode => call("autostart_set", { mode }),
     traySet: (enabled, language) => call("tray_set", { enabled, language }),
     updateCheck: () => call("update_check"),
     updateInstall: (version, onProgress) => {

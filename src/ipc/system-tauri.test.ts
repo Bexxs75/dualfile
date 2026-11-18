@@ -8,6 +8,7 @@ test("system commands use the typed native bridge and a progress channel", async
   const api = createTauriApi();
   await api.systemStatus(); expect(invoke).toHaveBeenLastCalledWith("system_status", undefined);
   await api.startMenuSet(true); expect(invoke).toHaveBeenLastCalledWith("start_menu_set", { enabled: true });
+  await api.autostartSet("minimized"); expect(invoke).toHaveBeenLastCalledWith("autostart_set", { mode: "minimized" });
   await api.traySet(false, "en"); expect(invoke).toHaveBeenLastCalledWith("tray_set", { enabled: false, language: "en" });
   await api.updateCheck(); expect(invoke).toHaveBeenLastCalledWith("update_check", undefined);
   const progress = vi.fn(); await api.updateInstall("1.2.0", progress);

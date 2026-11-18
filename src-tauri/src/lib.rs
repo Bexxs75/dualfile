@@ -2,6 +2,7 @@
 //! through the commands in `commands.rs`; the core reports back through `core-event`.
 
 mod anonymize;
+mod autostart;
 mod close;
 mod close_policy;
 mod commands;
@@ -118,10 +119,17 @@ pub fn run() {
             };
             #[cfg(not(unix))]
             let state = AppState::new(sink, home_dir(), dualfile_core::settings::config_dir());
-            state.discovery.set_enabled(
-                state.load_settings().settings.sidebar_discovery,
-                &TauriSink(app.handle().clone()),
-            );
+            let settings = state.load_settings().settings;
+            state
+                .discovery
+                .set_enabled(settings.sidebar_discovery, &TauriSink(app.handle().clone()));
+            if let Some(window) = app.get_webview_window("main") {
+                system::show_at_start(
+                    &window,
+                    autostart::minimized_requested(std::env::args_os()),
+                    settings.tray_enabled,
+                );
+            }
             state
                 .discovery
                 .start(Arc::new(TauriSink(app.handle().clone())));
@@ -171,7 +179,7 @@ pub fn run() {
                     CONFIRMED_CLOSE.load(Ordering::SeqCst),
                     close::SAVING.load(Ordering::SeqCst),
                     close::READY.load(Ordering::SeqCst),
-                    window.app_handle().tray_by_id("dualfile").is_some()
+                    system::tray_usable(window.app_handle())
                         && !system::QUIT_REQUESTED.load(Ordering::SeqCst),
                 ) {
                     close::Decision::Allow => connection_editor::mark_main_closing(),
@@ -220,6 +228,7 @@ pub fn run() {
             terminal::terminal_close,
             system::system_status,
             system::start_menu_set,
+            system::autostart_set,
             system::tray_set,
             system::update_check,
             system::update_install,

@@ -462,6 +462,8 @@ export interface Settings {
   trayEnabled?: boolean;
   startMenuPrompted?: boolean;
   startMenuPromptCount?: number;
+  /** The one-time "start with the system?" question was answered; the mode lives in the autostart entry. */
+  autostartPrompted?: boolean;
   dismissedUpdateVersion?: string;
   lastUpdateCheck?: string | null;
   lastSeenVersion?: string | null;
@@ -736,7 +738,8 @@ export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpda
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |
   { kind: "setTray"; enabled: boolean } | { kind: "setStartMenu"; enabled: boolean } |
-  { kind: "session" } | { kind: "closed" } | { kind: "closeFailed" } | { kind: "flush" });
+  { kind: "setAutostart"; mode: import("./system").AutostartMode } |
+  { kind: "refreshStatus" } | { kind: "session" } | { kind: "closed" } | { kind: "closeFailed" } | { kind: "flush" });
 export interface SettingsWindowSnapshot {
   session: string;
   ack: number;

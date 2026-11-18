@@ -1,14 +1,15 @@
 import { describe, expect, test, vi } from "vitest";
 import { createSystemController, isNewerVersion } from "./system";
 import { defaultSettings } from "./state";
-import type { SystemApi } from "../ipc/system";
+import type { AutostartMode, SystemApi } from "../ipc/system";
 
 function fixture(appImage = true) {
   let settings = { ...defaultSettings };
   let busy = false;
   const api: SystemApi = {
-    systemStatus: vi.fn(async () => ({ appImage, startMenuExists: false })),
+    systemStatus: vi.fn(async () => ({ appImage, startMenuExists: false, autostart: "off" as const })),
     startMenuSet: vi.fn(async () => {}), traySet: vi.fn(async () => true),
+    autostartSet: vi.fn(async (mode: AutostartMode) => mode),
     updateCheck: vi.fn(async () => ({ version: "1.2.0", notes: "Release notes" })),
     updateInstall: vi.fn(async (_version, progress) => { progress({ downloaded: 12, total: 12, phase: "download" }); }),
     updateCancel: vi.fn(async () => true),
@@ -97,7 +98,7 @@ describe("UPD1 policy", () => {
   test("successful registration marks prompt complete; existing entry never prompts", async () => {
     const f = fixture(); await f.controller.start("de"); await f.controller.answerPrompt(true, false);
     expect(f.settings().startMenuPrompted).toBe(true); expect(f.controller.getSnapshot().status?.startMenuExists).toBe(true);
-    const existing = fixture(); vi.mocked(existing.api.systemStatus).mockResolvedValue({ appImage: true, startMenuExists: true });
+    const existing = fixture(); vi.mocked(existing.api.systemStatus).mockResolvedValue({ appImage: true, startMenuExists: true, autostart: "off" });
     await existing.controller.start("en"); expect(existing.controller.getSnapshot().prompt).toBe(false);
     expect(existing.settings().startMenuPromptCount).toBe(0);
   });
@@ -141,4 +142,126 @@ test("a failed settings drain cancels installation with a visible system error",
   await controller.start("en"); await controller.check(true); await controller.install();
   expect(f.api.updateInstall).not.toHaveBeenCalled();
   expect(controller.getSnapshot()).toMatchObject({ installing: false, error: "Settings could not close" });
+});
+
+describe("autostart", () => {
+  test("asks once while never answered; not now ends with off and does not return", async () => {
+    const f = fixture(); await f.controller.start("de");
+    expect(f.controller.getSnapshot().autostartPrompt).toBe(true);
+    expect(f.settings().autostartPrompted).toBe(false);
+    await f.controller.answerAutostart("off");
+    expect(f.api.autostartSet).toHaveBeenCalledExactlyOnceWith("off");
+    expect(f.settings().autostartPrompted).toBe(true); expect(f.save).toHaveBeenCalled();
+    expect(f.controller.getSnapshot().autostartPrompt).toBe(false);
+    const next = f.make(); await next.start("de"); expect(next.getSnapshot().autostartPrompt).toBe(false);
+  });
+  test.each(["minimized", "shown"] as const)("answer %s writes the entry and shows what is on disk", async mode => {
+    const f = fixture(); await f.controller.start("de");
+    await f.controller.answerAutostart(mode);
+    expect(f.api.autostartSet).toHaveBeenCalledWith(mode);
+    expect(f.controller.getSnapshot()).toMatchObject({ autostartPrompt: false, status: { autostart: mode } });
+    expect(f.settings().autostartPrompted).toBe(true);
+  });
+  test("a failed write keeps the question open, the setting unanswered and the status unchanged", async () => {
+    const f = fixture(); vi.mocked(f.api.autostartSet).mockRejectedValueOnce(new Error("Permission denied"));
+    await f.controller.start("de");
+    await expect(f.controller.answerAutostart("minimized")).rejects.toThrow("Permission denied");
+    expect(f.controller.getSnapshot()).toMatchObject({ autostartPrompt: true, status: { autostart: "off" } });
+    expect(f.settings().autostartPrompted).toBe(false);
+    vi.mocked(f.api.autostartSet).mockRejectedValueOnce(new Error("Read-only file system"));
+    await expect(f.controller.setAutostart("shown")).rejects.toThrow("Read-only file system");
+    expect(f.controller.getSnapshot().status?.autostart).toBe("off");
+  });
+  test("an existing entry counts as answered; settings changes follow the disk, not the request", async () => {
+    const f = fixture(); vi.mocked(f.api.systemStatus).mockResolvedValue({ appImage: true, startMenuExists: true, autostart: "minimized", autostartError: "stale" });
+    await f.controller.start("en");
+    expect(f.controller.getSnapshot().autostartPrompt).toBe(false); expect(f.settings().autostartPrompted).toBe(true);
+    vi.mocked(f.api.autostartSet).mockResolvedValueOnce("off");
+    await f.controller.setAutostart("shown");
+    expect(f.controller.getSnapshot().status).toMatchObject({ autostart: "off", autostartError: null });
+    const asked = fixture(); asked.patch({ autostartPrompted: true }); await asked.controller.start("en");
+    expect(asked.controller.getSnapshot().autostartPrompt).toBe(false);
+    await asked.controller.setAutostart("off");
+    expect(asked.api.autostartSet).toHaveBeenCalledWith("off");
+  });
+});
+
+describe("autostart status follows the disk", () => {
+  const status = (autostart: AutostartMode, extra: object = {}) => ({ appImage: true, startMenuExists: true, autostart, ...extra });
+  test("refresh re-reads the entries; a failed change reconciles with the disk", async () => {
+    const f = fixture(); f.patch({ autostartPrompted: true });
+    vi.mocked(f.api.systemStatus).mockResolvedValue(status("minimized"));
+    await f.controller.start("en");
+    vi.mocked(f.api.systemStatus).mockResolvedValue(status("off"));
+    await f.controller.refreshStatus();
+    expect(f.controller.getSnapshot().status?.autostart).toBe("off");
+    // The write failed, but something else changed the entry meanwhile: show what is there.
+    vi.mocked(f.api.autostartSet).mockRejectedValueOnce(new Error("Permission denied"));
+    vi.mocked(f.api.systemStatus).mockResolvedValue(status("shown"));
+    await expect(f.controller.setAutostart("minimized")).rejects.toThrow("Permission denied");
+    expect(f.controller.getSnapshot().status?.autostart).toBe("shown");
+  });
+  test("a slow older refresh cannot overwrite a newer choice", async () => {
+    const f = fixture(); f.patch({ autostartPrompted: true });
+    vi.mocked(f.api.systemStatus).mockResolvedValue(status("minimized"));
+    await f.controller.start("en");
+    let release!: () => void;
+    vi.mocked(f.api.systemStatus).mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(status("minimized")); }));
+    const refresh = f.controller.refreshStatus();
+    const choice = f.controller.setAutostart("off");
+    await Promise.resolve(); await Promise.resolve();
+    expect(f.api.autostartSet).not.toHaveBeenCalled();
+    release(); await refresh; await choice;
+    expect(f.api.autostartSet).toHaveBeenCalledExactlyOnceWith("off");
+    expect(f.controller.getSnapshot().status?.autostart).toBe("off");
+  });
+  test("a start-menu error neither asks about the start menu nor blocks autostart", async () => {
+    const f = fixture();
+    vi.mocked(f.api.systemStatus).mockResolvedValue({ appImage: true, startMenuExists: false, startMenuError: "Symlink in desktop integration path", autostart: "off" });
+    await f.controller.start("en");
+    expect(f.controller.getSnapshot()).toMatchObject({ prompt: false, autostartPrompt: true });
+    await f.controller.answerAutostart("shown");
+    expect(f.controller.getSnapshot().status).toMatchObject({ autostart: "shown", startMenuError: "Symlink in desktop integration path" });
+  });
+  test("not now always ends with off, also when an entry is already enabled", async () => {
+    const f = fixture(); await f.controller.start("de");
+    // The entry got enabled while the question was still open (earlier answer, other window).
+    vi.mocked(f.api.systemStatus).mockResolvedValue({ appImage: true, startMenuExists: false, autostart: "minimized" });
+    await f.controller.refreshStatus();
+    await f.controller.answerAutostart("off");
+    expect(f.api.autostartSet).toHaveBeenCalledExactlyOnceWith("off");
+    expect(f.controller.getSnapshot()).toMatchObject({ autostartPrompt: false, status: { autostart: "off" } });
+    expect(f.settings().autostartPrompted).toBe(true);
+    // Removing it fails: the question stays, nothing is claimed.
+    const g = fixture(); await g.controller.start("de");
+    vi.mocked(g.api.systemStatus).mockResolvedValue({ appImage: true, startMenuExists: false, autostart: "shown" });
+    await g.controller.refreshStatus();
+    vi.mocked(g.api.autostartSet).mockRejectedValueOnce(new Error("Read-only file system"));
+    await expect(g.controller.answerAutostart("off")).rejects.toThrow("Read-only file system");
+    expect(g.controller.getSnapshot()).toMatchObject({ autostartPrompt: true, status: { autostart: "shown" } });
+    expect(g.settings().autostartPrompted).toBe(false);
+  });
+  test("an answer that cannot be saved closes the question, keeps the entry as chosen and reports the error", async () => {
+    const f = fixture(); await f.controller.start("de");
+    f.save.mockClear(); f.save.mockRejectedValueOnce(new Error("disk full"));
+    await f.controller.answerAutostart("minimized");
+    expect(f.controller.getSnapshot()).toMatchObject({ autostartPrompt: false, error: "disk full", status: { autostart: "minimized" } });
+    expect(f.settings().autostartPrompted).toBe(true);
+    const g = fixture(); await g.controller.start("de");
+    g.save.mockClear(); g.save.mockRejectedValueOnce(new Error("disk full"));
+    await g.controller.answerAutostart("off");
+    expect(g.api.autostartSet).toHaveBeenCalledExactlyOnceWith("off");
+    expect(g.controller.getSnapshot()).toMatchObject({ autostartPrompt: false, error: "disk full", status: { autostart: "off" } });
+  });
+  test("not now removes an entry that was enabled outside Dualfile without any refresh in between", async () => {
+    const f = fixture(); await f.controller.start("de");
+    // Cached status still says off; on disk the entry is enabled meanwhile.
+    let disk: AutostartMode = "minimized";
+    vi.mocked(f.api.autostartSet).mockImplementation(async mode => disk = mode);
+    expect(f.controller.getSnapshot().status?.autostart).toBe("off");
+    await f.controller.answerAutostart("off");
+    expect(f.api.autostartSet).toHaveBeenCalledExactlyOnceWith("off");
+    expect(disk).toBe("off");
+    expect(f.controller.getSnapshot()).toMatchObject({ autostartPrompt: false, status: { autostart: "off" } });
+  });
 });
