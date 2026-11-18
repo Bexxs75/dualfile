@@ -1,8 +1,11 @@
 import type { ConnectionEntry, PlacesSnapshot, Settings } from "../ipc/types";
 import type { IconName } from "../components/Icon";
 import type { TranslationKey } from "../i18n";
+import { systemPlaceExists } from "../ipc/systemPlaces";
 export interface Place {
   discoveryKey?: string;
+  /** Set for a desktop bookmark (Dolphin, GNOME Files) that is not a saved connection yet. */
+  systemUrl?: string;
   deviceKey?: string; canRemove?: boolean;
   canSave?: boolean;
   readOnly?: boolean; canMount?: boolean; canUnmount?: boolean; mountKey?: string;
@@ -50,6 +53,15 @@ export function buildPlaces(snapshot: PlacesSnapshot | null, connections: readon
     const key = `mount:${m.mountedAt ?? m.url}`;
     if (remote.some(e => e.key === key)) continue;
     remote.push({ key, canSave: !!m.mountKey, mountKey: m.mountKey, canUnmount: m.canUnmount, name: `${m.name} · ${m.scheme.toUpperCase()}`, path: m.mountedAt ?? undefined, icon: "network", state: "mounted", disabled: !m.mountedAt, reason: m.mountedAt ? undefined : "sidebar.redactedMount" });
+  }
+  // Desktop bookmarks come last in the section. One that is already saved as a connection is
+  // shown by that connection only (same comparison as the import dialog); mounted ones were
+  // removed by the backend. Only name and protocol are displayed, never the URL or account.
+  const profiles = connections.map(e => e.profile);
+  for (const p of snapshot?.systemPlaces ?? []) {
+    const key = `system:${p.url}`;
+    if (systemPlaceExists(p, profiles) || remote.some(e => e.key === key)) continue;
+    remote.push({ key, systemUrl: p.url, canSave: true, name: `${p.name} · ${p.scheme.toUpperCase()}`, icon: "network", state: "disconnected", reason: "sidebar.systemPlaceHelp" });
   }
   const network: Place[] = settings.sidebarDiscovery ? (snapshot?.discoveredServices ?? []).map(service => ({
     key: `net:${service.key}`, discoveryKey: service.key, name: `${service.name} · ${service.protocol.toUpperCase()} · ${service.host.includes(":") ? `[${service.host}]` : service.host}:${service.port}`,

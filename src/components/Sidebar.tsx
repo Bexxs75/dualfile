@@ -176,7 +176,7 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
           {mode === "icons" && !inPopover && !entry.color && <small className="place-badge">{entry.badge}</small>}
           {entry.state && <i className={`place-state ${entry.state}`} />}
         </span>
-        {(mode === "full" || inPopover) && <><span className="place-name">{label(entry)}</span>{entry.hint && <kbd>Alt+{entry.hint}</kbd>}<span className="place-markers">{left === entry.key ? "L" : ""}{right === entry.key ? "R" : ""}</span></>}
+        {(mode === "full" || inPopover) && <><span className="place-name">{label(entry)}</span>{entry.hint && <kbd>Alt+{entry.hint}</kbd>}{entry.systemUrl && <Icon name="link" size={11} className="place-system" />}<span className="place-markers">{left === entry.key ? "L" : ""}{right === entry.key ? "R" : ""}</span></>}
         {used !== null && <span className={`place-space ${used > .9 ? "warning" : ""}`} aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, used * 100))}%` }} /></span>}
       </button>
       {entry.canRemove && <button type="button" className="sidebar-eject" aria-label={`${tr("sidebar.eject")} · ${label(entry)}`} title={tr("sidebar.eject")}

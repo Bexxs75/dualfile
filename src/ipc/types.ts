@@ -716,6 +716,8 @@ export interface PlacesSnapshot {
   trash: { path: string; empty: boolean };
   drives: Drive[];
   networkMounts: SystemPlace[];
+  /** Desktop network bookmarks (Dolphin, GNOME Files) that are not mounted. */
+  systemPlaces?: SystemPlace[];
 }
 
 export interface SystemPlace {

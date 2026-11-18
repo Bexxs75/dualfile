@@ -346,7 +346,10 @@ fn push(out: &mut Vec<SystemPlace>, place: Option<SystemPlace>) {
         out.push(place);
     }
 }
-pub fn discover(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
+/// Network locations the desktop remembers (Dolphin network folders and places, GTK
+/// bookmarks), whether or not they are mounted. Reads small local files only and never
+/// enters a mount, so it is safe to call on every sidebar refresh.
+pub fn bookmarks(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
     let mut out = Vec::new();
     for path in dirs(&paths.data.join("remoteview")) {
         if path.extension().is_none_or(|s| s != "desktop") {
@@ -407,6 +410,22 @@ pub fn discover(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
             push(&mut out, parse_url(url, "gnome", name.trim()));
         }
     }
+    out
+}
+/// Bookmarks for the sidebar: a location that is already mounted is listed there as a
+/// mounted place, so its bookmark is dropped instead of appearing a second time. Uses the
+/// same authority and path rules as [`matching_mount`] and touches no filesystem.
+pub fn unmounted_bookmarks(
+    bookmarks: Vec<SystemPlace>,
+    mounted: &[SystemPlace],
+) -> Vec<SystemPlace> {
+    bookmarks
+        .into_iter()
+        .filter(|place| matching_mount(place, mounted).is_none())
+        .collect()
+}
+pub fn discover(paths: &DiscoveryPaths) -> Vec<SystemPlace> {
+    let mut out = bookmarks(paths);
     let mounted = mounts(paths);
     for place in &mut out {
         if let Some(path) = match_mount(place, &mounted, &|p| p.is_dir()) {
@@ -893,5 +912,52 @@ mod tests {
         assert_eq!(settings.version, 6);
         assert_eq!(settings.connections.len(), 1);
         assert!(settings.connections[0].system_url.is_none());
+    }
+    #[test]
+    fn bookmarks_list_desktop_places_without_secrets_and_drop_mounted_ones() {
+        let (_tmp, paths) = fixture();
+        fs::write(
+            paths.data.join("user-places.xbel"),
+            r#"<xbel><bookmark href="sftp://austausch/daten/"><title>Austausch</title></bookmark>
+<bookmark href="smb://nas:geheim@homebox.example/"><title>smb://nas:geheim@homebox.example/</title></bookmark>
+<bookmark href="file:///home/me"><title>Home</title></bookmark></xbel>"#,
+        )
+        .unwrap();
+        fs::write(
+            paths.config.join("gtk-3.0/bookmarks"),
+            "davs://cloud.example/files Cloud\nsftp://austausch/daten/ Austausch\n",
+        )
+        .unwrap();
+        // A mount that exists is ignored here: bookmarks never look at mounts.
+        fs::create_dir_all(paths.runtime.join("gvfs/sftp:host=austausch")).unwrap();
+        let found = bookmarks(&paths);
+        assert_eq!(
+            found.iter().map(|p| p.url.as_str()).collect::<Vec<_>>(),
+            [
+                "sftp://austausch/daten/",
+                "smb://nas@homebox.example/",
+                "davs://cloud.example/files"
+            ]
+        );
+        assert_eq!(found[0].sources, ["dolphin", "gnome"]);
+        assert!(found.iter().all(|p| p.mounted_at.is_none()));
+        // A title that repeats the URL (with its password) is replaced by the host name.
+        assert_eq!(found[1].name, "homebox.example");
+        let public = format!("{found:?} {}", serde_json::to_string(&found).unwrap());
+        assert!(!public.contains("geheim"));
+
+        let mounted = mounts(&paths);
+        assert_eq!(mounted.len(), 1);
+        let shown = unmounted_bookmarks(found, &mounted);
+        assert_eq!(
+            shown.iter().map(|p| p.host.as_str()).collect::<Vec<_>>(),
+            ["homebox.example", "cloud.example"]
+        );
+        // Another account or another share on the same server is a different place.
+        let other = vec![
+            parse_url("smb://guest@homebox.example/", "mounted", "").unwrap(),
+            parse_url("davs://cloud.example/other", "mounted", "").unwrap(),
+        ];
+        assert_eq!(unmounted_bookmarks(shown.clone(), &other), shown);
     }
 }

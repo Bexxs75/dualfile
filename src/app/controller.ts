@@ -1,4 +1,5 @@
 import { buildPlaces, inside } from "../state/places";
+import { systemPlaceExists } from "../ipc/systemPlaces";
 import { currentVersion, releaseNotes } from "../release-notes";
 import { selectReleaseVersions, seenVersionOnClose } from "../state/releaseNotes";
 import { formatJobPresentation } from "../state/jobPresentation";
@@ -211,7 +212,26 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (place.profileId) {
       const entry = state.connections.find(e => e.profile.id === place.profileId);
       if (entry) await chooseConnection(w, entry.profile);
+    } else if (place.systemUrl) {
+      const profile = await saveSystemPlace(key, place.systemUrl);
+      if (profile) await chooseConnection(w, profile);
     } else if (destination) await navigatePlace(w, destination);
+  }
+  /**
+   * Connecting needs a stored profile (password store, host-key trust, start folder), so
+   * opening a desktop bookmark first saves it exactly like "Save as connection" and then
+   * connects like any saved connection. The list is fetched directly: the backend's change
+   * event may supersede a concurrent refresh, and the new profile must not be missed.
+   */
+  async function saveSystemPlace(key: string, url: string): Promise<import("../ipc/types").ConnectionProfile | null> {
+    const bookmark = get().places?.systemPlaces?.find(p => p.url === url);
+    if (!bookmark) return null;
+    try {
+      await api.placesSaveConnection(key);
+      const entries = await api.connectionsList();
+      void refreshConnections();
+      return entries.find(e => systemPlaceExists(bookmark, [e.profile]))?.profile ?? null;
+    } catch (error) { fail(error); return null; }
   }
   function findPlace(key: string) {
     const s = get();
@@ -342,7 +362,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     const place = findPlace(key);
     if (!place) return;
     try { await api.placesSaveConnection(place.mountKey ? `mount:${place.mountKey}` : key); await refreshConnections(); }
-    catch (error) { placeFailure(error); }
+    // Saving a desktop bookmark mounts nothing, so a mount-permission message would mislead.
+    catch (error) { if (place.systemUrl) fail(error); else placeFailure(error); }
   }
   function focusFileList() { document.querySelector<HTMLElement>(`[data-pane="${get().active}"] [role="grid"]`)?.focus(); }
   function focusSidebar() {

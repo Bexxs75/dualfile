@@ -73,6 +73,7 @@ const de = {
   "sidebar.copyPath": "Pfad kopieren",
   "sidebar.removeBookmark": "Lesezeichen entfernen",
   "sidebar.trashUnavailable": "Der System-Papierkorb konnte nicht geöffnet werden.",
+  "sidebar.systemPlaceHelp": "Systemort aus Dolphin oder GNOME Dateien. Öffnen speichert ihn als Verbindung und verbindet.",
   "sidebar.redactedMount": "Dieser eingehängte Ort wird nur angezeigt, weil sein lokaler Pfad Anmeldedaten enthält.",
   "sidebar.title": "Seitenleiste",
   "sidebar.places": "Orte",

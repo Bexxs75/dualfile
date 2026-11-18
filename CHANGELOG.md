@@ -5,6 +5,14 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- Sidebar: network locations the desktop already knows (Dolphin places and network folders, GNOME Files bookmarks) appear directly under Connections, marked as system location and "not connected". Opening one saves it as a connection (as "Import from system …" does) and connects like any saved connection; the context menu offers "Save as connection" and "Hide entry". A location that is already saved or mounted is listed only once, changes to the bookmark files show up within seconds, and only title and protocol are shown, never address, account name or password. (#10)
+
+### Fixed
+
+- Sidebar: mounted targets the user may not read or enter (for example `/root` on its own btrfs subvolume) are no longer listed under Devices, where a click could only report "permission denied". Only mounted local filesystems are checked, with a deadline; network, automount and FUSE mounts are not probed, and unmounted devices and fstab entries stay listed. (#20)
+
 ## [0.3.7] - 2026-11-18
 
 ### Added

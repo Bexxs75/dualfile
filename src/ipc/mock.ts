@@ -920,6 +920,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     { key: "demo-office", name: "Office NAS", protocol: "smb", host: "office.local", port: 445, path: "documents" },
     { key: "demo-backup", name: "Backup NAS", protocol: "smb", host: "backup.local", port: 445, path: "backups" },
   ] : [];
+  // Demo data only: the default snapshot stays free of desktop bookmarks.
+  if (options.samples) places.systemPlaces = structuredClone(mockSystemPlaces.filter(p => !p.mountedAt));
   if (options.initialSettings?.sidebarDiscovery) places.discoveredServices = structuredClone(discoverySamples);
   const scheduler = options.scheduler ?? defaultScheduler;
   const clock = options.now ?? (() => Date.now());
@@ -2318,8 +2320,9 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       return paths.flatMap((p, i) => p === root || p.startsWith(root + "/") ? [i] : []);
     },
     async placesSaveConnection(key) {
-      const mount = places.networkMounts.find(m => `mount:${m.mountKey}` === key);
+      const mount = places.networkMounts.find(m => `mount:${m.mountKey}` === key) ?? places.systemPlaces?.find(p => `system:${p.url}` === key);
       if (!mount) throw new CoreError("not found", "notFound");
+      if (systemPlaceExists(mount, [...profiles.values()].map(r => r.profile))) return;
       await api.connectionSave(systemPlaceProfile(mount));
     },
     async fstabMount(mountPoint) {

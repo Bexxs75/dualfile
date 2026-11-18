@@ -598,6 +598,8 @@ html.editor-window-root body { padding: 0; }
 .sidebar-entry.unmounted, .sidebar-entry.place-hidden { opacity: .5; }
 .sidebar-entry .place-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-entry kbd, .place-markers { font-size: 9px; color: var(--muted); }
+/* Decorative hint for a desktop bookmark; the accessible name and tooltip carry the text. */
+.place-system { flex: none; color: var(--muted); }
 .place-icon { position: relative; display: inline-flex; flex: none; }
 .place-state { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--muted); top: -3px; right: -3px; }
 .place-state.mounted { background: #67b981; }

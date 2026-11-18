@@ -73,6 +73,7 @@ const en: Record<keyof typeof de, string> = {
   "sidebar.copyPath": "Copy path",
   "sidebar.removeBookmark": "Remove bookmark",
   "sidebar.trashUnavailable": "The system trash could not be opened.",
+  "sidebar.systemPlaceHelp": "System location from Dolphin or GNOME Files. Opening saves it as a connection and connects.",
   "sidebar.redactedMount": "This mounted location is display-only because its local path contains sign-in information.",
   "sidebar.title": "Sidebar",
   "sidebar.places": "Places",

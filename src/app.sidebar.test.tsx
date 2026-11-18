@@ -631,3 +631,26 @@ test("optical eject uses the eject endpoint without powering off the drive", asy
   expect(powerOff).not.toHaveBeenCalled();
   expect(screen.queryByRole("treeitem", { name: /^Optical disc/ })).not.toBeInTheDocument();
 });
+
+test("a desktop bookmark is announced as system place, can be hidden, and a click saves and connects it", async () => {
+  const app = await setupApp({ samples: true });
+  const save = vi.spyOn(app.api, "placesSaveConnection");
+  const row = () => within(sidebar()).queryByRole("treeitem", { name: /^Home server · SFTP · Nicht verbunden · Systemort/ });
+  await waitFor(() => expect(row()).toBeInTheDocument());
+  // The visible marker is decorative; the text lives in the accessible name.
+  expect(row()!.querySelector(".place-system")).toHaveAttribute("aria-hidden", "true");
+  fireEvent.contextMenu(row()!);
+  expect(screen.getByRole("menuitem", { name: "Als Verbindung speichern" })).toBeInTheDocument();
+  await app.user.click(screen.getByRole("menuitem", { name: "Eintrag ausblenden" }));
+  expect(app.runtime.store.getState().settings.sidebarHidden).toContain("system:sftp://nas/");
+  expect(row()).toBeNull();
+  act(() => app.runtime.controller.hidePlace("system:sftp://nas/", false));
+  await app.user.click(row()!);
+  // Same path as a saved connection: the connect dialog runs and the pane opens the remote root.
+  await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toMatch(/^sftp:/));
+  expect(save).toHaveBeenCalledWith("system:sftp://nas/");
+  expect(app.runtime.store.getState().connections).toMatchObject([{ connected: true, profile: { name: "Home server", protocol: "sftp", host: "nas" } }]);
+  // Now a saved connection: listed once, without the system-place wording.
+  await waitFor(() => expect(row()).toBeNull());
+  expect(within(sidebar()).getAllByRole("treeitem", { name: /^Home server/ })).toHaveLength(1);
+});

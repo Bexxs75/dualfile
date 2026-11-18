@@ -23,10 +23,11 @@ fn watch_event(
     let Ok(event) = event else {
         return (true, true);
     };
-    let relevant = event
-        .paths
-        .iter()
-        .any(|p| p.starts_with(DEVICE_WATCH) || p == std::path::Path::new("/etc/fstab"));
+    let relevant = event.paths.iter().any(|p| {
+        p.starts_with(DEVICE_WATCH)
+            || p == std::path::Path::new("/etc/fstab")
+            || bookmark_files().contains(p)
+    });
     let lost = event.need_rescan()
         || (event
             .paths
@@ -37,6 +38,18 @@ fn watch_event(
                 EventKind::Remove(_) | EventKind::Modify(ModifyKind::Name(_)) | EventKind::Any
             ));
     (relevant || lost, lost)
+}
+/// Desktop bookmark files whose change must refresh the sidebar's system places. Their
+/// folders are watched (not the files) because Dolphin and GTK replace them by rename.
+fn bookmark_files() -> &'static [std::path::PathBuf] {
+    static FILES: OnceLock<Vec<std::path::PathBuf>> = OnceLock::new();
+    FILES.get_or_init(|| {
+        let paths = system_places::DiscoveryPaths::system();
+        vec![
+            paths.data.join("user-places.xbel"),
+            paths.config.join("gtk-3.0/bookmarks"),
+        ]
+    })
 }
 fn rearm_device_watch(lost: &AtomicBool, rearm: impl FnOnce() -> bool) {
     // Clear before rearming so a concurrent loss notification cannot be overwritten.
@@ -53,6 +66,8 @@ pub struct Snapshot {
     trash: Trash,
     drives: Vec<drives::Drive>,
     network_mounts: Vec<NetworkMount>,
+    /// Desktop network bookmarks that are not mounted; the URL never carries a password.
+    system_places: Vec<system_places::SystemPlace>,
     discovered_services: Vec<crate::discovery::Service>,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -175,8 +190,23 @@ fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
             );
         }
     }
+    // Each probe owns a bounded slot: a mount point that does not answer in time counts as
+    // unknown and stays visible, so a slow disk never removes a usable entry.
+    let drives = drives::drop_inaccessible(drives, |drive| {
+        let path = drive.path.clone();
+        places_pool::paths()
+            .run_keyed(path.clone(), Duration::from_millis(100), move || {
+                drives::probe_access(&path)
+            })
+            .unwrap_or(drives::MountAccess::Unknown)
+    });
     let (mounts, complete) =
         system_places::probe_mounts(&paths, places_pool::paths(), Duration::from_millis(500));
+    // A missed deadline is not evidence that the bookmarks are gone: keep the last list.
+    let system_places = match bounded_bookmarks() {
+        Some(bookmarks) => system_places::unmounted_bookmarks(bookmarks, &mounts),
+        None => previous.map_or_else(Vec::new, |p| p.system_places.clone()),
+    };
     let mut network_mounts: Vec<_> = mounts.into_iter().filter_map(public_mount).collect();
     if !complete {
         if let Some(previous) = previous {
@@ -199,8 +229,18 @@ fn discover(previous: Option<&Snapshot>) -> Option<Snapshot> {
         },
         drives,
         network_mounts,
+        system_places,
         discovered_services: vec![],
     })
+}
+/// The bookmark files live in the home directory, which may itself be a slow network
+/// mount, so reading them gets its own slot and deadline like every other places probe.
+fn bounded_bookmarks() -> Option<Vec<system_places::SystemPlace>> {
+    places_pool::metadata().run_keyed(
+        "system-bookmarks".into(),
+        Duration::from_millis(300),
+        || system_places::bookmarks(&system_places::DiscoveryPaths::system()),
+    )
 }
 /// Reading the kernel table is isolated from all probes that can enter a remote mount.
 pub async fn navigation_mount(path: String) -> Option<String> {
@@ -499,6 +539,13 @@ pub fn start(app: tauri::AppHandle, state: Arc<Places>) {
                     })
                     .ok()?;
                 let _ = watcher.watch(std::path::Path::new("/etc"), RecursiveMode::NonRecursive);
+                // Missing folders (no Dolphin, no GTK) are fine: the visible-sidebar poll
+                // still picks up bookmark changes within a few seconds.
+                for file in bookmark_files() {
+                    if let Some(folder) = file.parent() {
+                        let _ = watcher.watch(folder, RecursiveMode::NonRecursive);
+                    }
+                }
                 rearm_device_watch(&watch_lost, || {
                     watcher
                         .watch(
@@ -1086,6 +1133,15 @@ fn import_source(source: &str, fstype: &str) -> Option<system_places::SystemPlac
 }
 /// Resolve saved connection data internally; credentials never reach the request or response.
 pub fn importable_place(key: &str) -> Result<system_places::SystemPlace, UiError> {
+    if let Some(url) = key.strip_prefix("system:") {
+        // A desktop bookmark keeps its own title and account name, as in the import dialog.
+        // It is looked up again by URL so the request can only name an existing bookmark.
+        return bounded_bookmarks()
+            .ok_or_else(|| mount_error("timeout"))?
+            .into_iter()
+            .find(|place| place.url == url)
+            .ok_or_else(|| mount_error("notFound"));
+    }
     let mut place = if let Some(key) = key.strip_prefix("mount:") {
         fresh_mounts()?
             .into_iter()
@@ -1185,6 +1241,12 @@ mod tests {
             watch_event(&event("/dev/disk/by-id/usb-example")),
             (true, false)
         );
+        for file in bookmark_files() {
+            assert_eq!(watch_event(&event(file.to_str().unwrap())), (true, false));
+            // Other files in the same busy folder must not wake discovery.
+            let noise = file.with_file_name("recently-used.xbel");
+            assert_eq!(watch_event(&event(noise.to_str().unwrap())), (false, false));
+        }
         let removed =
             Ok(Event::new(EventKind::Remove(RemoveKind::Folder)).add_path(DEVICE_WATCH.into()));
         assert_eq!(watch_event(&removed), (true, true));
@@ -1421,6 +1483,7 @@ mod watcher_tests {
             },
             drives: drives::parse_mountinfo(table, None),
             network_mounts: vec![],
+            system_places: vec![],
             discovered_services: vec![],
         }
     }

@@ -150,6 +150,54 @@ impl Drive {
     }
 }
 
+/// Filesystems whose mount point may block a syscall for a long time: network mounts,
+/// automount triggers and FUSE bridges (a dead server or a hung daemon never answers).
+fn may_block(fs: &str) -> bool {
+    network_type(fs) || fs == "autofs" || fs == "fuse" || fs.starts_with("fuse.")
+}
+
+/// What a probe of a mount point told us about the current user's access to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MountAccess {
+    Granted,
+    /// The kernel refused read or search permission (`EACCES`).
+    Denied,
+    /// Not probed, timed out or failed for another reason. Never a reason to hide.
+    Unknown,
+}
+
+/// Only mounted targets on filesystems that cannot hang are probed. Unmounted devices and
+/// fstab entries have no access rights yet (those only exist after mounting), and a probe
+/// of a network, automount or FUSE mount could block on a dead server or trigger a mount.
+/// The root is always shown: it is the anchor of the whole list.
+pub fn access_probe_allowed(drive: &Drive) -> bool {
+    drive.mounted && drive.path != "/" && !may_block(&drive.fstype)
+}
+
+/// `access(2)` for reading and entering a directory, with the real user ID. Only a clear
+/// "permission denied" counts as denied; a vanished mount point or any other error is unknown.
+pub fn probe_access(path: &str) -> MountAccess {
+    use rustix::fs::Access;
+    match rustix::fs::access(path, Access::READ_OK | Access::EXEC_OK) {
+        Ok(()) => MountAccess::Granted,
+        Err(rustix::io::Errno::ACCESS) => MountAccess::Denied,
+        Err(_) => MountAccess::Unknown,
+    }
+}
+
+/// Drop mounted drives the user may not read or enter (for example `/root` on its own
+/// btrfs subvolume): clicking such an entry could only ever report "permission denied".
+/// `probe` is called only for drives that [`access_probe_allowed`]; the caller bounds it.
+pub fn drop_inaccessible(
+    drives: Vec<Drive>,
+    mut probe: impl FnMut(&Drive) -> MountAccess,
+) -> Vec<Drive> {
+    drives
+        .into_iter()
+        .filter(|drive| !access_probe_allowed(drive) || probe(drive) != MountAccess::Denied)
+        .collect()
+}
+
 /// Last successful kernel mount table. Classification is advisory: unavailable metadata
 /// falls back to ordinary navigation, while a dirty cache keeps its last known value.
 #[derive(Default)]
@@ -213,10 +261,7 @@ pub fn navigation_mount(path: &str, table: &str) -> Option<String> {
                 || path
                     .strip_prefix(&point)
                     .is_some_and(|s| s.starts_with('/'));
-            inside.then_some((
-                point,
-                network_type(fs) || fs == "autofs" || fs == "fuse" || fs.starts_with("fuse."),
-            ))
+            inside.then_some((point, may_block(fs)))
         })
         .max_by_key(|(point, _)| point.len())
         .and_then(|(point, bounded)| bounded.then_some(point))
@@ -495,5 +540,85 @@ mod navigation_tests {
         ] {
             assert_eq!(navigation_mount(path, table).as_deref(), Some(root));
         }
+    }
+}
+
+#[cfg(test)]
+mod access_tests {
+    use super::*;
+    fn drive(path: &str, fstype: &str, mounted: bool) -> Drive {
+        let mut drive = Drive::new(path.into(), fstype, "/dev/a", "rw");
+        drive.mounted = mounted;
+        drive
+    }
+    #[test]
+    fn only_mounted_local_non_root_targets_are_probed() {
+        assert!(access_probe_allowed(&drive("/root", "btrfs", true)));
+        assert!(access_probe_allowed(&drive("/mnt/win", "fuseblk", true)));
+        // The root stays; unmounted devices have no access rights yet.
+        assert!(!access_probe_allowed(&drive("/", "btrfs", true)));
+        assert!(!access_probe_allowed(&drive("/mnt/usb", "vfat", false)));
+        // Anything that can hang or trigger a mount is never touched.
+        for fs in [
+            "nfs",
+            "nfs4",
+            "cifs",
+            "smb3",
+            "fuse.sshfs",
+            "fuse.rclone",
+            "davfs",
+            "9p",
+            "ceph",
+            "autofs",
+            "fuse",
+        ] {
+            assert!(!access_probe_allowed(&drive("/mnt/net", fs, true)), "{fs}");
+        }
+    }
+    #[test]
+    fn denied_mounts_are_dropped_and_unknown_or_unprobed_ones_stay() {
+        let drives = vec![
+            drive("/", "btrfs", true),
+            drive("/home", "btrfs", true),
+            drive("/root", "btrfs", true),
+            drive("/mnt/slow", "ext4", true),
+            drive("/mnt/dead-nfs", "nfs4", true),
+            drive("/mnt/usb", "vfat", false),
+        ];
+        let mut probed = Vec::new();
+        let kept = drop_inaccessible(drives, |d| {
+            probed.push(d.path.clone());
+            match d.path.as_str() {
+                "/home" => MountAccess::Granted,
+                "/mnt/slow" => MountAccess::Unknown,
+                _ => MountAccess::Denied,
+            }
+        });
+        // "/", the NFS mount and the unmounted stick are kept without being probed.
+        assert_eq!(probed, ["/home", "/root", "/mnt/slow"]);
+        assert_eq!(
+            kept.iter().map(|d| d.path.as_str()).collect::<Vec<_>>(),
+            ["/", "/home", "/mnt/slow", "/mnt/dead-nfs", "/mnt/usb"]
+        );
+    }
+    #[test]
+    fn probe_reports_denied_only_for_missing_permission() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let open = tmp.path().join("open");
+        let locked = tmp.path().join("locked");
+        std::fs::create_dir(&open).unwrap();
+        std::fs::create_dir(&locked).unwrap();
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        assert_eq!(probe_access(open.to_str().unwrap()), MountAccess::Granted);
+        assert_eq!(
+            probe_access(tmp.path().join("missing").to_str().unwrap()),
+            MountAccess::Unknown
+        );
+        // Root passes every permission check, so the denial is only observable as a user.
+        if !rustix::process::getuid().is_root() {
+            assert_eq!(probe_access(locked.to_str().unwrap()), MountAccess::Denied);
+        }
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 }
