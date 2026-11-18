@@ -5,6 +5,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-11-18
+
 ### Added
 
 - Sidebar: network locations the desktop already knows (Dolphin places and network folders, GNOME Files bookmarks) appear directly under Connections, marked as system location and "not connected". Opening one saves it as a connection (as "Import from system …" does) and connects like any saved connection; the context menu offers "Save as connection" and "Hide entry". A location that is already saved or mounted is listed only once, changes to the bookmark files show up within seconds, and only title and protocol are shown, never address, account name or password. (#10)

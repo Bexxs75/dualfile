@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.3.8": {
+    date: "2026-11-18",
+    de: {
+      new: ["Netzwerkorte, die dein Desktop schon kennt (Dolphin, GNOME Dateien), stehen direkt unter Verbindungen. Ein Klick speichert und verbindet sie."],
+      improved: ["Eingesteckte Geräte, neue Einhängepunkte und geänderte Lesezeichen erscheinen in der Seitenleiste nach etwa einer Sekunde statt nach bis zu einer Minute.", "Einhängepunkte, die du nicht öffnen darfst, werden unter Geräte nicht mehr angezeigt."],
+      fixed: ["Die Passwortabfrage beim Verbinden heißt jetzt „Passwort“ statt „Antwort“."],
+    },
+    en: {
+      new: ["Network locations your desktop already knows (Dolphin, GNOME Files) appear directly under Connections. One click saves and connects them."],
+      improved: ["Plugged-in devices, new mounts and changed bookmarks show up in the sidebar after about a second instead of up to a minute.", "Mounts you may not open are no longer listed under Devices."],
+      fixed: ["The password prompt when connecting is now labeled “Password” instead of “Answer”."],
+    },
+  },
   "0.3.7": {
     date: "2026-11-18",
     de: {
