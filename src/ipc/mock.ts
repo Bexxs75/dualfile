@@ -2173,10 +2173,12 @@ export function createMockApi(options: MockOptions = {}): MockApi {
   // ---------------------------------------------------------------- API
 
   let startMenuExists = true;
+  let autostart: import("./system").AutostartMode = "off";
   const api: MockApi = {
     ...createTerminalMock(),
-    systemStatus: async () => ({ appImage: false, startMenuExists }),
+    systemStatus: async () => ({ appImage: false, startMenuExists, autostart }),
     startMenuSet: async enabled => { startMenuExists = enabled; },
+    autostartSet: async mode => autostart = mode,
     traySet: async () => false,
     updateCheck: async () => null,
     updateCancel: async () => false,

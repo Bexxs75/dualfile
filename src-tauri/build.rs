@@ -12,6 +12,7 @@ const COMMANDS: &[&str] = &[
     "terminal_close",
     "system_status",
     "start_menu_set",
+    "autostart_set",
     "tray_set",
     "update_check",
     "update_install",

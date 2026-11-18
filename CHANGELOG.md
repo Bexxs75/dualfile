@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- Start with the system: Off (default), Start minimized, or Start and show the window. Dualfile asks once at startup (after the other startup questions; "Not now" means off and is not asked again), and the choice can be changed at any time under Settings → System. It writes a per-user XDG autostart entry (`~/.config/autostart/de.thebexxs.dualfile.desktop`, respecting `XDG_CONFIG_HOME`) that points to the AppImage file itself and follows it when the AppImage is moved; "Off" removes the entry, and an entry of another application is never replaced or removed. A minimized start (`--minimized`) does not flash the window: it stays in the tray when the tray icon is enabled and a panel actually shows it (StatusNotifier host), otherwise it starts minimized in the task bar. Write errors are shown next to the setting.
+
 ## [0.3.6] - 2026-11-17
 
 ### Added

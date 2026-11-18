@@ -396,6 +396,15 @@ pub enum SettingsWindowMessage {
         seq: u64,
         enabled: bool,
     },
+    RefreshStatus {
+        session: String,
+        seq: u64,
+    },
+    SetAutostart {
+        session: String,
+        seq: u64,
+        mode: crate::autostart::Mode,
+    },
     Flush {
         session: String,
         seq: u64,
@@ -406,8 +415,10 @@ impl SettingsWindowMessage {
         match self {
             Self::Patch { session, seq, .. }
             | Self::CheckUpdates { session, seq }
+            | Self::RefreshStatus { session, seq }
             | Self::SetTray { session, seq, .. }
             | Self::SetStartMenu { session, seq, .. }
+            | Self::SetAutostart { session, seq, .. }
             | Self::Flush { session, seq } => (session, *seq),
         }
     }

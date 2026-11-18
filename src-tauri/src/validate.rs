@@ -546,6 +546,7 @@ mod tests {
             tray_enabled: false,
             start_menu_prompted: false,
             start_menu_prompt_count: 0,
+            autostart_prompted: false,
             dismissed_update_version: String::new(),
             last_update_check: None,
             last_seen_version: None,

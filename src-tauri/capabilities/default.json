@@ -124,6 +124,7 @@
     "allow-similar-trash",
     "allow-system-status",
     "allow-start-menu-set",
+    "allow-autostart-set",
     "allow-tray-set",
     "allow-update-check",
     "allow-update-install",

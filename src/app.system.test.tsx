@@ -75,7 +75,7 @@ test("without AppImage the only update action opens the release page", async () 
 
 test("running and paused jobs disable installation with an explanation, completion unlocks", async () => {
   const install = vi.fn(async () => {});
-  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), updateInstall: install }) });
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "off" }), updateInstall: install }) });
   const button = await screen.findByRole("button", { name: "Aktualisieren" });
   // A real mock transfer supplies a full job DTO; keep it queued via the manual scheduler.
   await act(async () => { await app.api.copy(["/home/demo/Dokumente/notizen.txt"], "/home/demo/Downloads"); });
@@ -92,7 +92,7 @@ test("running and paused jobs disable installation with an explanation, completi
 });
 
 test.each([false, true])("first-start refusal, never=%s, persists count and choice", async never => {
-  const app = await setupApp({ settings: { checkUpdatesOnStart: false }, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false }) }) });
+  const app = await setupApp({ settings: { checkUpdatesOnStart: false }, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false, autostart: "off" }) }) });
   const dlg = within(await screen.findByRole("dialog", { name: "Dualfile im Startmenü eintragen?" }));
   expect(app.runtime.store.getState().settings.startMenuPromptCount).toBe(1);
   if (never) await app.user.click(dlg.getByRole("checkbox", { name: "Nicht noch einmal fragen" }));
@@ -103,20 +103,20 @@ test.each([false, true])("first-start refusal, never=%s, persists count and choi
 });
 
 test("third prompt: Escape counts as refusal and no fourth prompt appears", async () => {
-  const app = await setupApp({ settings: { startMenuPromptCount: 2 }, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false }) }) });
+  const app = await setupApp({ settings: { startMenuPromptCount: 2 }, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false, autostart: "off" }) }) });
   await screen.findByRole("dialog", { name: "Dualfile im Startmenü eintragen?" });
   await app.user.keyboard("{Escape}");
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(app.runtime.store.getState().settings.startMenuPromptCount).toBe(3);
   expect(app.runtime.store.getState().settings.startMenuPrompted).toBe(true);
   app.view.unmount();
-  await setupApp({ settings: { startMenuPromptCount: 3, startMenuPrompted: false }, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false }) }) });
+  await setupApp({ settings: { startMenuPromptCount: 3, startMenuPrompted: false }, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false, autostart: "off" }) }) });
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 test("first-start add retries a failed entry and closes after success", async () => {
   const menu = vi.fn(async () => {}).mockRejectedValueOnce(new Error("Read only"));
-  const app = await setupApp({ wrap: api => ({ ...api, startMenuSet: menu, systemStatus: async () => ({ appImage: false, startMenuExists: false }) }) });
+  const app = await setupApp({ wrap: api => ({ ...api, startMenuSet: menu, systemStatus: async () => ({ appImage: false, startMenuExists: false, autostart: "off" }) }) });
   const dlg = within(await screen.findByRole("dialog", { name: "Dualfile im Startmenü eintragen?" }));
   await app.user.click(dlg.getByRole("button", { name: "Eintragen" }));
   expect(dlg.getByRole("alert")).toHaveTextContent("Read only");
@@ -130,7 +130,7 @@ test("progress cancellation calls the native boundary and does not restart", asy
   let reject!: (error: Error) => void;
   const restart = vi.fn(async () => {});
   const cancel = vi.fn(async () => { reject(new Error("Update cancelled")); return true; });
-  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), restart, updateCancel: cancel,
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "off" }), restart, updateCancel: cancel,
     updateInstall: async (_v, progress) => { progress({ downloaded: 41e6, total: 66e6, phase: "download" }); await new Promise<void>((_resolve, fail) => { reject = fail; }); },
   }) });
   await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
@@ -146,7 +146,7 @@ test("install phase blocks Escape/cancel; installed relaunches automatically, fa
   let report!: (p: UpdateProgress) => void, finish!: () => void;
   const restart = vi.fn(async () => {}).mockRejectedValueOnce(new Error("Restart failed"));
   const cancel = vi.fn(async () => true);
-  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), restart, updateCancel: cancel,
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "off" }), restart, updateCancel: cancel,
     updateInstall: async (_v, progress) => { report = progress; await new Promise<void>(resolve => { finish = resolve; }); },
   }) });
   await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
@@ -188,7 +188,7 @@ test("startup is nonblocking and only checks once even when settings reopen", as
 test("failed settings persistence prevents native installation", async () => {
   const install = vi.fn(async () => {});
   const app = await setupApp({ settings: { checkUpdatesOnStart: false }, wrap: api => ({ ...api,
-    systemStatus: async () => ({ appImage: true, startMenuExists: true }),
+    systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "off" }),
     updateCheck: async () => available, updateInstall: install,
     saveSettings: async () => { throw new Error("Disk full"); },
   }) });
@@ -202,14 +202,14 @@ test("failed settings persistence prevents native installation", async () => {
 
 test("successful install relaunches automatically without a manual click", async () => {
   const restart = vi.fn(async () => {});
-  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), restart, updateInstall: async () => {} }) });
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "off" }), restart, updateInstall: async () => {} }) });
   await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
   await waitFor(() => expect(restart).toHaveBeenCalledOnce());
   expect(screen.queryByRole("button", { name: "Jetzt neu starten" })).toBeNull();
 });
 
 test("update errors appear as toast and leave the banner unchanged", async () => {
-  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true }), updateInstall: async () => { throw new Error("Download broke"); } }) });
+  const app = await setupApp({ wrap: api => ({ ...api, updateCheck: async () => available, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "off" }), updateInstall: async () => { throw new Error("Download broke"); } }) });
   const banner = screen.getByRole("region", { name: "Update verfügbar" }).textContent;
   await app.user.click(await screen.findByRole("button", { name: "Aktualisieren" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Download broke");
@@ -226,4 +226,73 @@ test("Info tab shows version, license and a GitHub button that opens the reposit
   expect(dlg.getByRole("region", { name: "Über Dualfile" })).toHaveTextContent(`Dualfile ${config.version} · Lizenz: MIT`);
   await app.user.click(dlg.getByRole("button", { name: "Projekt auf GitHub" }));
   expect(openUrl).toHaveBeenCalledWith("https://github.com/Bexxs75/dualfile");
+});
+
+const neverAsked = { autostartPrompted: false, checkUpdatesOnStart: false };
+test.each(["de", "en"] as const)("autostart question appears once (%s); not now is remembered and ends with off", async language => {
+  const set = vi.fn(async (mode: "off" | "minimized" | "shown") => mode);
+  const app = await setupApp({ language, settings: neverAsked, wrap: api => ({ ...api, autostartSet: set }) });
+  const de = language === "de";
+  const dlg = within(await screen.findByRole("dialog", { name: de ? "Dualfile mit dem System starten?" : "Start Dualfile with the system?" }));
+  expect(dlg.getByRole("button", { name: de ? "Minimiert starten" : "Start minimized" })).toBeVisible();
+  expect(dlg.getByRole("button", { name: de ? "Starten und Fenster zeigen" : "Start and show the window" })).toBeVisible();
+  await app.user.click(dlg.getByRole("button", { name: de ? "Nicht jetzt" : "Not now" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(set.mock.calls).toEqual([["off"]]);
+  expect((await app.api.loadSettings()).settings.autostartPrompted).toBe(true);
+  app.view.unmount();
+  await setupApp({ language, settings: { ...neverAsked, autostartPrompted: true } });
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+test("autostart question: Escape counts as not now; a choice writes the entry", async () => {
+  const set = vi.fn(async (mode: "off" | "minimized" | "shown") => mode);
+  const first = await setupApp({ settings: neverAsked, wrap: api => ({ ...api, autostartSet: set }) });
+  await screen.findByRole("dialog", { name: "Dualfile mit dem System starten?" });
+  await first.user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(set.mock.calls).toEqual([["off"]]);
+  expect(first.runtime.store.getState().settings.autostartPrompted).toBe(true);
+  first.view.unmount();
+  const app = await setupApp({ settings: neverAsked, wrap: api => ({ ...api, autostartSet: set }) });
+  const dlg = within(await screen.findByRole("dialog", { name: "Dualfile mit dem System starten?" }));
+  await app.user.click(dlg.getByRole("button", { name: "Minimiert starten" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(set).toHaveBeenLastCalledWith("minimized");
+  expect(app.runtime.system.getSnapshot().status?.autostart).toBe("minimized");
+  expect((await app.api.loadSettings()).settings.autostartPrompted).toBe(true);
+});
+
+test("autostart question shows a write error, stays open and can still be declined", async () => {
+  const set = vi.fn(async (mode: "off" | "minimized" | "shown") => mode).mockRejectedValueOnce(new Error("Permission denied"));
+  const app = await setupApp({ settings: neverAsked, wrap: api => ({ ...api, autostartSet: set }) });
+  const dlg = within(await screen.findByRole("dialog", { name: "Dualfile mit dem System starten?" }));
+  await app.user.click(dlg.getByRole("button", { name: "Starten und Fenster zeigen" }));
+  expect(await dlg.findByRole("alert")).toHaveTextContent("Der Autostart-Eintrag konnte nicht geändert werden: Permission denied");
+  expect(app.runtime.store.getState().settings.autostartPrompted).toBe(false);
+  await app.user.click(dlg.getByRole("button", { name: "Nicht jetzt" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(app.runtime.store.getState().settings.autostartPrompted).toBe(true);
+});
+
+test("startup questions come one at a time: what's new, then start menu, then autostart", async () => {
+  const app = await setupApp({ settings: { ...neverAsked, lastSeenVersion: "0.3.5" },
+    wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: false, autostart: "off" }) }) });
+  await waitFor(() => expect(app.runtime.system.getSnapshot()).toMatchObject({ prompt: true, autostartPrompt: true }));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(app.runtime.store.getState().dialog?.kind).toBe("whatsNew");
+  await app.user.keyboard("{Escape}");
+  const menu = within(await screen.findByRole("dialog", { name: "Dualfile im Startmenü eintragen?" }));
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await app.user.click(menu.getByRole("button", { name: "Nein, danke" }));
+  await screen.findByRole("dialog", { name: "Dualfile mit dem System starten?" });
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await app.user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+test("an existing autostart entry is never asked about", async () => {
+  const app = await setupApp({ settings: neverAsked, wrap: api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: "shown" }) }) });
+  await waitFor(() => expect(app.runtime.store.getState().settings.autostartPrompted).toBe(true));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });

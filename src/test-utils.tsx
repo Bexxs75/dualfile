@@ -64,6 +64,7 @@ export async function setupApp(setup: SetupOptions = {}) {
   const scheduler = new ManualScheduler();
   const initialSettings: Settings = {
     lastSeenVersion: currentVersion,
+    autostartPrompted: true,
     version: 1, verifyPolicy: "auto",
     theme: "schiefer",
     accent: "#e0a45c",

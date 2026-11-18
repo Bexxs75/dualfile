@@ -3,6 +3,7 @@ import type { Settings, SettingsWindowMessage, SettingsWindowPatch, SettingsWind
 import type { AppRuntime } from "./runtime";
 import type { AppStore, Controller } from "./controller";
 import type { SystemController } from "./system";
+import type { AutostartMode } from "../ipc/system";
 import { activeTabOf, defaultSettings, type AppState } from "./state";
 import { isArchivePath, parseRemotePath } from "../state/paths";
 import { createTranslator } from "../i18n";
@@ -82,6 +83,8 @@ export function createSettingsWindowBridge(api: DualfileApi, store: AppStore, co
           case "checkUpdates": void system.check(true); break;
           case "setTray": await system.setTray(message.enabled, controller.language()); break;
           case "setStartMenu": await system.setStartMenu(message.enabled); break;
+          case "refreshStatus": await system.refreshStatus(); break;
+          case "setAutostart": await system.setAutostart(message.mode); break;
           // Closing is a persistence barrier as well as an applied-message barrier.
           case "flush":
             if (store.getState().outcome.kind !== "newerVersion") await controller.saveNow(true);
@@ -126,7 +129,7 @@ export function createSettingsWindowBridge(api: DualfileApi, store: AppStore, co
   } };
 }
 
-type Action = { kind: "patch"; patch: SettingsWindowPatch } | { kind: "setTray" | "setStartMenu"; enabled: boolean } | { kind: "checkUpdates" | "flush" };
+type Action = { kind: "patch"; patch: SettingsWindowPatch } | { kind: "setTray" | "setStartMenu"; enabled: boolean } | { kind: "setAutostart"; mode: AutostartMode } | { kind: "checkUpdates" | "flush" | "refreshStatus" };
 export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime) {
   let session = "", seq = 0, queue = Promise.resolve();
   let snapshot: SettingsWindowSnapshot | null = null;
@@ -208,7 +211,9 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
     start: async () => {}, check: () => send({ kind: "checkUpdates" }).catch(() => {}),
     setTray: enabled => send({ kind: "setTray", enabled }).catch(() => {}),
     setStartMenu: enabled => send({ kind: "setStartMenu", enabled }),
-    dismiss() {}, answerPrompt: async () => {}, install: async () => {}, cancel: async () => {}, restart: async () => {},
+    setAutostart: mode => send({ kind: "setAutostart", mode }),
+    refreshStatus: () => send({ kind: "refreshStatus" }).catch(() => {}),
+    dismiss() {}, answerPrompt: async () => {}, answerAutostart: async () => {}, install: async () => {}, cancel: async () => {}, restart: async () => {},
   };
   let attachment: Promise<void> | undefined;
   let initialSnapshotTimer: ReturnType<typeof setTimeout> | undefined;

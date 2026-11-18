@@ -148,6 +148,7 @@ export const defaultSettings: Settings = {
   trayEnabled: false,
   startMenuPrompted: false,
   startMenuPromptCount: 0,
+  autostartPrompted: false,
   dismissedUpdateVersion: "",
   lastUpdateCheck: null,
   lastSeenVersion: null,

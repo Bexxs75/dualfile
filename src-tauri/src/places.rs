@@ -696,6 +696,12 @@ fn confirmed_resize_delta(before: u32, requested: u32, actual: u32, tolerance: u
         0.0
     }
 }
+/// Maximized and fullscreen windows keep their size. So does a window that is not shown: after
+/// a minimized start it was never mapped, the toolkit still reports its creation size instead of
+/// the restored one, and resizing from that would overwrite the saved window size.
+fn geometry_fixed(visible: bool, maximized: bool, fullscreen: bool) -> bool {
+    !visible || maximized || fullscreen
+}
 async fn resize_geometry(
     window: tauri::WebviewWindow,
     delta: f64,
@@ -704,7 +710,11 @@ async fn resize_geometry(
     let error = |_| UiError::new("unavailable", "Window geometry unavailable");
     let scale = window.scale_factor().map_err(error)?;
     let before = window.inner_size().map_err(error)?;
-    if window.is_maximized().map_err(error)? || window.is_fullscreen().map_err(error)? {
+    if geometry_fixed(
+        window.is_visible().map_err(error)?,
+        window.is_maximized().map_err(error)?,
+        window.is_fullscreen().map_err(error)?,
+    ) {
         return Ok(ResizeResult {
             actual_delta: 0.0,
             can_grow: false,
@@ -1192,6 +1202,15 @@ mod tests {
         assert!(lost.load(Ordering::Acquire));
     }
     use super::*;
+
+    #[test]
+    fn sidebar_never_resizes_a_hidden_maximized_or_fullscreen_window() {
+        assert!(!geometry_fixed(true, false, false));
+        // Hidden start (tray, or waiting for the task-bar fallback): the saved size must survive.
+        assert!(geometry_fixed(false, false, false));
+        assert!(geometry_fixed(true, true, false));
+        assert!(geometry_fixed(true, false, true));
+    }
     #[test]
     fn user_resize_during_settle_does_not_earn_sidebar_growth_credit() {
         assert_eq!(confirmed_resize_delta(1200, 1410, 1410, 1), 210.0);

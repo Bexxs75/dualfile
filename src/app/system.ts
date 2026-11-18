@@ -1,4 +1,4 @@
-import type { SystemApi, SystemStatus, AvailableUpdate, UpdateProgress } from "../ipc/system";
+import type { SystemApi, SystemStatus, AvailableUpdate, UpdateProgress, AutostartMode } from "../ipc/system";
 import type { Settings } from "../ipc/types";
 
 export interface SystemState {
@@ -10,6 +10,8 @@ export interface SystemState {
   installing: boolean;
   installed: boolean;
   prompt: boolean;
+  /** The one-time "start with the system?" question is due (shown after the start-menu question). */
+  autostartPrompt: boolean;
   trayUnavailable: boolean;
 }
 export function shouldPrompt(settings: Settings): boolean {
@@ -43,13 +45,37 @@ export function createSystemController(api: SystemApi, getSettings: () => Settin
   patch: (value: Partial<Settings>) => void, jobsActive: () => boolean,
   save: () => Promise<void>, now = () => new Date().toISOString(), beforeInstall: () => Promise<void> = async () => {}) {
   let state: SystemState = { status: null, update: null, check: "idle", error: "", progress: null,
-    installing: false, installed: false, prompt: false, trayUnavailable: false };
+    installing: false, installed: false, prompt: false, autostartPrompt: false, trayUnavailable: false };
   const listeners = new Set<() => void>();
   let started = false;
   let cancelRequested = false;
   let nativeInstall = false;
   let checking: Promise<void> | null = null;
   let traySequence: Promise<void> = Promise.resolve();
+  // Status reads and autostart writes run one after another, so a slow older answer can
+  // never overwrite what a newer choice put on disk.
+  let statusSequence: Promise<unknown> = Promise.resolve();
+  function queued<T>(task: () => Promise<T>): Promise<T> {
+    const result = statusSequence.then(task);
+    statusSequence = result.catch(() => {});
+    return result;
+  }
+  async function reload(): Promise<SystemStatus> {
+    const status = await api.systemStatus();
+    set({ status });
+    return status;
+  }
+  /** Shows what is on disk afterwards, also when the write failed half-way. */
+  async function writeAutostart(mode: AutostartMode): Promise<void> {
+    try {
+      const autostart = await api.autostartSet(mode);
+      if (state.status) set({ status: { ...state.status, autostart, autostartError: null } });
+      else await reload().catch(() => {});
+    } catch (error) {
+      await reload().catch(() => {});
+      throw error;
+    }
+  }
   const set = (next: Partial<SystemState>) => { state = { ...state, ...next }; listeners.forEach(fn => fn()); };
   const errorText = (e: unknown) => e instanceof Error ? e.message : String(e);
   async function check(manual = false): Promise<void> {
@@ -87,13 +113,17 @@ export function createSystemController(api: SystemApi, getSettings: () => Settin
       void setTray(settings.trayEnabled ?? false, language);
       if (settings.checkUpdatesOnStart !== false) void check();
       try {
-        const status = await api.systemStatus();
-        set({ status });
-        if (!status.startMenuExists && shouldPrompt(getSettings())) {
+        const status = await queued(reload);
+        if (!status.startMenuExists && !status.startMenuError && shouldPrompt(getSettings())) {
           const count = Math.min(3, (getSettings().startMenuPromptCount ?? 0) + 1);
           patch({ startMenuPromptCount: count });
           await save();
           set({ prompt: true });
+        }
+        // Never answered: ask once. An entry that already exists is an answer.
+        if (!getSettings().autostartPrompted) {
+          if (status.autostart === "off") set({ autostartPrompt: true });
+          else { patch({ autostartPrompted: true }); await save(); }
         }
       } catch (e) { set({ error: errorText(e) }); }
     },
@@ -116,6 +146,27 @@ export function createSystemController(api: SystemApi, getSettings: () => Settin
       await api.startMenuSet(enabled);
       set({ status: state.status ? { ...state.status, startMenuExists: enabled } : null });
       if (enabled) { patch({ startMenuPrompted: true }); await save(); }
+    },
+    /** Reads the entries from disk again (settings opened or focused): they may have changed outside Dualfile. */
+    refreshStatus(): Promise<void> {
+      return queued(async () => { try { await reload(); } catch (e) { set({ error: errorText(e) }); } });
+    },
+    /** Applies the choice; the shown mode is what the autostart entry on disk says afterwards. */
+    async setAutostart(mode: AutostartMode) {
+      await queued(() => writeAutostart(mode));
+      patch({ autostartPrompted: true });
+      await save();
+    },
+    /** "off" is also the answer of "Not now" and Escape; the question does not return. */
+    async answerAutostart(mode: AutostartMode) {
+      // "Not now" always ends with Off, whatever the cached status says: removing is idempotent
+      // and only ever touches our own entry.
+      await queued(() => writeAutostart(mode));
+      patch({ autostartPrompted: true });
+      // The entry on disk already matches the answer. If the answer cannot be saved, the
+      // question may return at the next start; report that instead of holding the dialog open.
+      try { await save(); set({ autostartPrompt: false }); }
+      catch (e) { set({ autostartPrompt: false, error: errorText(e) }); }
     },
     async install() {
       if (jobsActive() || state.installing || !state.update || !state.status) return;
