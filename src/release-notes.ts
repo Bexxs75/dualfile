@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.3.7": {
+    date: "2026-11-18",
+    de: {
+      new: ["Mit dem System starten: aus, minimiert oder mit Fenster. Dualfile fragt einmal beim Start, später unter Einstellungen → System änderbar."],
+      improved: ["Unter X11 öffnet sich das Fenster wieder dort, wo du es zuletzt hattest."],
+      fixed: ["Nach einem minimierten Start im Tray hat das Fenster wieder seine gespeicherte Größe."],
+    },
+    en: {
+      new: ["Start with the system: off, minimized or with the window shown. Dualfile asks once at startup; change it later under Settings → System."],
+      improved: ["On X11 the window opens again where you left it."],
+      fixed: ["After a minimized start in the tray the window has its saved size again."],
+    },
+  },
   "0.3.6": {
     date: "2026-11-17",
     de: {
