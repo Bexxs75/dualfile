@@ -4,5 +4,5 @@ members = ["crates/dualfile-core", "crates/dualfile-remote", "crates/dualfile-pl
 
 [workspace.package]
 edition = "2021"
-version = "0.3.8"
+version = "0.3.9"
 publish = false

@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.3.9": {
+    date: "2026-11-20",
+    de: {
+      new: ["Neues Design „Weiß“: reines Weiß mit eigenem blauen Akzent.", "Auf Wunsch zeigt die Dateiliste Rechte, Besitzer (uid) und Gruppe (gid) an, sortierbar. Einschalten in den Einstellungen."],
+      improved: ["Fensterfarben erscheinen jetzt satt und deckend. Ein Regler stellt die Deckung zwischen 80 und 100 % ein; Schrift, Auswahl und Cursor passen sich automatisch an, damit alles lesbar bleibt."],
+      fixed: [],
+    },
+    en: {
+      new: ["New “White” design: pure white with its own blue accent.", "The file list can show permissions, owner (uid) and group (gid), sortable. Turn it on in Settings."],
+      improved: ["Pane colours now appear rich and opaque. A slider sets the opacity between 80 and 100%; text, selection and cursor adapt automatically so everything stays readable."],
+      fixed: [],
+    },
+  },
   "0.3.8": {
     date: "2026-11-18",
     de: {

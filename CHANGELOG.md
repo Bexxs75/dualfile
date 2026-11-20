@@ -5,6 +5,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-20
+
 ### Added
 
 - Pure white design with its own blue accent and light terminal palette. (#21)
