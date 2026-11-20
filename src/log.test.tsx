@@ -5,7 +5,7 @@ import { setupApp } from "./test-utils";
 const settingsDialog = async (app: Awaited<ReturnType<typeof setupApp>>) => {
   act(() => app.runtime.controller.openDialog({ kind: "settings" }));
   const dlg = within(await screen.findByRole("dialog", { name: "Einstellungen" }));
-  await app.user.click(dlg.getByRole("tab", { name: "Info" }));
+  await app.user.click(dlg.getByRole("tab", { name: "Info & Hilfe" }));
   return dlg;
 };
 
@@ -32,7 +32,7 @@ test("Logdialog aus den Einstellungen: Schließen führt zurück zum Info-Reiter
   const log = within(await screen.findByRole("dialog", { name: "Logdatei" }));
   await app.user.click(log.getByRole("button", { name: "Schließen" }));
   const back = within(await screen.findByRole("dialog", { name: "Einstellungen" }));
-  expect(back.getByRole("tab", { name: "Info" })).toHaveAttribute("aria-selected", "true");
+  expect(back.getByRole("tab", { name: "Info & Hilfe" })).toHaveAttribute("aria-selected", "true");
 });
 
 test("Logdialog: anonymisiert vorab, Umschalter liest ohne Anonymisierung, Kopieren und Speichern", async () => {

@@ -136,6 +136,7 @@ describe("Einstellungen", () => {
     const app = await setupApp();
     expect(screen.getByRole("button", { name: /F5/ })).toHaveTextContent("Kopieren");
     await app.user.keyboard("{Control>},{/Control}");
+    await app.user.click(within(app.dialog()).getByRole("tab", { name: "Allgemein" }));
     await app.user.click(within(app.dialog()).getByRole("radio", { name: "English" }));
     expect(root().lang).toBe("en");
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Settings");
@@ -283,6 +284,7 @@ test("white design and pane opacity update live; opacity needs a pane colour", a
   const dlg = within(app.dialog());
   await app.user.click(dlg.getByRole("radio", { name: "Weiß" }));
   expect(root().dataset.fm).toBe("weiss");
+  await app.user.click(dlg.getByRole("tab", { name: "Dateiliste" }));
   const slider = dlg.getByRole("slider", { name: "Deckung der Fensterfarbe" });
   expect(slider).toBeDisabled();
   expect(slider).toHaveValue("100");
@@ -305,6 +307,7 @@ test("permissions, uid and gid checkboxes update independently", async () => {
   const app = await setupApp();
   await app.user.keyboard("{Control>},{/Control}");
   const dlg = within(app.dialog());
+  await app.user.click(dlg.getByRole("tab", { name: "Dateiliste" }));
   for (const [label, key] of [["Rechte anzeigen", "showPermissionsColumn"], ["Besitzer (uid) anzeigen", "showUidColumn"], ["Gruppe (gid) anzeigen", "showGidColumn"]] as const) {
     const checkbox = dlg.getByRole("checkbox", { name: label });
     expect(checkbox).not.toBeChecked();

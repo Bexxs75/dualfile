@@ -68,8 +68,8 @@ test("checksum setting persists through the settings API", async () => {
   const { rt, api, view, user } = await setup();
   const save = vi.spyOn(api, "saveSettings");
   view.rerender(<RuntimeProvider runtime={rt}><SettingsDialog /></RuntimeProvider>);
-  await user.click(screen.getByRole("tab", { name: "System" }));
-  await user.selectOptions(screen.getByLabelText("Nach dem Kopieren vergleichen (SHA-256)"), "always");
+  await user.click(screen.getByRole("tab", { name: "Kopieren" }));
+  await user.click(screen.getByRole("radio", { name: "Immer" }));
   await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ verifyPolicy: "always" })));
 });
 

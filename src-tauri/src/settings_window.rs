@@ -185,7 +185,22 @@ pub(crate) fn settings_query(
     tab: Option<&str>,
     appearance: &Appearance,
 ) -> Result<String, UiError> {
-    if tab.is_some_and(|t| !["appearance", "system", "info", "keyboard"].contains(&t)) {
+    if tab.is_some_and(|t| {
+        ![
+            "allgemein",
+            "darstellung",
+            "dateiliste",
+            "seitenleiste",
+            "terminal",
+            "kopieren",
+            "tastatur",
+            "info",
+            "appearance",
+            "system",
+            "keyboard",
+        ]
+        .contains(&t)
+    }) {
         return Err(invalid());
     }
     let mut url = tauri::Url::parse("http://localhost/?view=settings").map_err(|_| invalid())?;
@@ -674,6 +689,21 @@ mod tests {
         let q = settings_query(Some("keyboard"), &a).unwrap();
         assert!(q.contains("view=settings&tab=keyboard"));
         assert!(q.contains("accent=%23123abc"));
+        for tab in [
+            "allgemein",
+            "darstellung",
+            "dateiliste",
+            "seitenleiste",
+            "terminal",
+            "kopieren",
+            "tastatur",
+            "info",
+            "appearance",
+            "system",
+            "keyboard",
+        ] {
+            assert!(settings_query(Some(tab), &a).is_ok());
+        }
         assert!(settings_query(Some("info&x=y"), &a).is_err());
         a.theme = "bad".into();
         assert!(settings_query(None, &a).is_err());

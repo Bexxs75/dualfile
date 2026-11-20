@@ -42,7 +42,8 @@ test("extension column off by default: Typ header and full names", async () => {
 test("extension column setting toggles in the settings dialog", async () => {
   const app = await setupApp({ left: DOCS });
   await app.user.click(screen.getByRole("button", { name: /Einstellungen/ }));
-  const toggle = screen.getByRole("checkbox", { name: "Dateiendung in eigener Spalte" });
+  await app.user.click(screen.getByRole("tab", { name: "Dateiliste" }));
+  const toggle = screen.getByRole("switch", { name: "Dateiendung in eigener Spalte" });
   expect(toggle).not.toBeChecked();
   await app.user.click(toggle);
   expect(headers(app.pane(0))[1]).toBe("Endung");

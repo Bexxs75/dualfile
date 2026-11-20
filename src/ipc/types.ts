@@ -745,7 +745,7 @@ export interface SystemPlace {
   mountedAt: string | null;
 }
 
-export type SettingsTab = "appearance" | "system" | "info" | "keyboard";
+export type SettingsTab = "allgemein" | "darstellung" | "dateiliste" | "seitenleiste" | "terminal" | "kopieren" | "tastatur" | "info" | "appearance" | "system" | "keyboard";
 export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (

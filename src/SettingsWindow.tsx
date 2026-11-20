@@ -8,12 +8,13 @@ import { LogDialog } from "./components/dialogs/LogDialog";
 import { isModalOpen } from "./components/Modal";
 import { applyTheme } from "./themes/tokens";
 import type { DualfileApi } from "./ipc/api";
+import { resolveSection } from "./settings/catalog";
 import type { SettingsTab } from "./ipc/types";
 
 export function parseSettingsParams(search: string) {
   const tab = new URLSearchParams(search).get("tab");
   return { appearance: parseAppearance(search),
-    tab: (["appearance", "system", "info", "keyboard"].includes(tab ?? "") ? tab : "appearance") as SettingsTab };
+    tab: resolveSection(tab) };
 }
 function Panel({ client, tab }: { client: ReturnType<typeof createSettingsWindowClient>; tab: SettingsTab }) {
   const state = useSyncExternalStore(client.subscribe, client.getSnapshot);
@@ -32,7 +33,7 @@ function Panel({ client, tab }: { client: ReturnType<typeof createSettingsWindow
   const outcome = state.snapshot?.persistence.outcome;
   return <main className="editor-window settings-window" aria-busy={!ready} aria-label={tr("settings.title")}>
     <div className="editor-scroll"><fieldset disabled={state.closing}>
-      {ready && <SettingsPanel startTab={tab} />}
+      {ready && <SettingsPanel startTab={tab} onClose={() => void client.close()} />}
     </fieldset></div>
     <footer className="settings-window-foot">
       {outcome?.kind === "repaired" && <p role="status">{tr("notice.repaired", { messages: outcome.messages.join("; ") })}</p>}
@@ -43,7 +44,7 @@ function Panel({ client, tab }: { client: ReturnType<typeof createSettingsWindow
       {state.error && <p role="alert">{state.error}</p>}
       {state.closing && <p role="status">{tr("settings.applying")}</p>}
       {state.canForce && <div><p>{tr("settings.unsavedLost")}</p><button className="tb" onClick={() => void client.forceClose()}>{tr("settings.closeAnyway")}</button></div>}
-      <button className="tb primary" data-autofocus disabled={!ready || state.closing} onClick={() => void client.close()}>{tr("updates.done")}</button>
+
     </footer>
     {dialog?.kind === "log" && <LogDialog saveDir={state.snapshot?.logDir} />}
   </main>;

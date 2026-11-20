@@ -4,11 +4,12 @@ import { isFinished } from "../../state/operations";
 import { useDialogFocus } from "./useDialogFocus";
 import { Modal } from "../Modal";
 import type { AutostartMode } from "../../ipc/system";
+import { Highlight } from "../../settings/Highlight";
 import config from "../../../src-tauri/tauri.conf.json";
 
 const AUTOSTART_MODES: readonly AutostartMode[] = ["off", "minimized", "shown"];
 
-function useSystem() {
+export function useSystem() {
   const { system } = useRuntime();
   return { system, state: useSyncExternalStore(system.subscribe, system.getSnapshot) };
 }
@@ -27,57 +28,58 @@ function useAction() {
   return { busy, error, run };
 }
 
-export function SystemSettings() {
+export function SystemSettings({ field, query = "", onReset }: { field?: "autostart" | "startMenu"; query?: string; onReset?: () => void }) {
   const { system, state } = useSystem();
-  const { controller } = useRuntime();
-  const settings = useAppState(s => s.settings);
-  const language = useLanguage();
   const tr = useT();
   const { busy, error, run } = useAction();
   const autostart = useAction();
   // The entries can change outside Dualfile (deleted, switched off in the desktop's settings).
   useEffect(() => {
+    if (field === "startMenu") return;
     const refresh = () => void system.refreshStatus();
     refresh();
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
-  }, [system]);
+  }, [system, field]);
   const startMenuError = error || state.status?.startMenuError;
   return <>
-    <section className="system-group" aria-labelledby="system-heading">
-      <h3 id="system-heading">{tr("system.settingsTitle")}</h3>
-      <label className="system-row"><input type="checkbox" checked={settings.trayEnabled ?? false} onChange={e => {
-        const enabled = e.target.checked;
-        controller.updateSettings(s => ({ ...s, trayEnabled: enabled }));
-        void system.setTray(enabled, language);
-      }} /><span>{tr("system.tray")}<small>{tr("system.trayHelp")}</small></span></label>
-      {state.trayUnavailable && <p className="field-error" role="status">{tr("system.trayUnavailable")}</p>}
-      <p className="muted">{tr("system.startMenu")} <b className={state.status?.startMenuExists ? "system-present" : undefined}>{tr(!state.status ? "system.loading" : state.status.startMenuExists ? "system.present" : "system.absent")}</b></p>
-      <div><button className="tb" disabled={busy || !state.status} onClick={() => void run(() => system.setStartMenu(!state.status?.startMenuExists))}>{tr(state.status?.startMenuExists ? "system.remove" : "system.add")}</button></div>
-      {startMenuError && <p role="alert" className="field-error">{startMenuError}</p>}
-      <div className="fld">
-        <label htmlFor="autostart-mode">{tr("system.autostart")}</label>
-        <select id="autostart-mode" value={state.status?.autostart ?? "off"} disabled={autostart.busy || !state.status} aria-describedby="autostart-help"
-          onChange={e => { const mode = e.target.value as AutostartMode; void autostart.run(() => system.setAutostart(mode)); }}>
-          {AUTOSTART_MODES.map(mode => <option key={mode} value={mode}>{tr(`system.autostart.${mode}`)}</option>)}
-        </select>
-        <p id="autostart-help" className="field-help">{tr("system.autostartHelp")}</p>
-        {(autostart.error || state.status?.autostartError) && <p role="alert" className="field-error">{tr("system.autostartFailed", { message: autostart.error || state.status?.autostartError || "" })}</p>}
-      </div>
+    <section className="system-group" aria-label={tr(field === "startMenu" ? "system.startMenu" : "system.settingsTitle")}>
+      {field !== "autostart" && <div className="setting-row">
+        <span className="setting-label"><Highlight text={tr("system.startMenu")} query={query} /> <small className="rare">{tr("settings.rare")}</small></span>
+        <div className="setting-control">
+          <p className="muted"><b className={state.status?.startMenuExists ? "system-present" : undefined}>{tr(!state.status ? "system.loading" : state.status.startMenuExists ? "system.present" : "system.absent")}</b></p>
+          <button id="start-menu-action" className="tb" disabled={busy || !state.status} onClick={() => void run(() => system.setStartMenu(!state.status?.startMenuExists))}><Highlight text={tr(state.status?.startMenuExists ? "system.remove" : "system.add")} query={query} /></button>
+          {startMenuError && <p role="alert" className="field-error">{startMenuError}</p>}
+        </div>
+      </div>}
+      {field !== "startMenu" && <div className="setting-row">
+        <label htmlFor="autostart-mode"><Highlight text={tr("system.autostart")} query={query} /></label>
+        <div className="setting-control">
+          <select id="autostart-mode" value={state.status?.autostart ?? "off"} disabled={autostart.busy || !state.status} aria-describedby="autostart-help"
+            onChange={e => { const mode = e.target.value as AutostartMode; void autostart.run(() => system.setAutostart(mode)); }}>
+            {AUTOSTART_MODES.map(mode => <option key={mode} value={mode}>{tr(`system.autostart.${mode}`)}</option>)}
+          </select>
+          <p id="autostart-help" className="field-help"><Highlight text={tr("system.autostartHelp")} query={query} /></p>
+          {(autostart.error || state.status?.autostartError) && <p role="alert" className="field-error">{tr("system.autostartFailed", { message: autostart.error || state.status?.autostartError || "" })}</p>}
+        </div>
+        {onReset && <div className="setting-reset"><span className="modified-dot" title={tr("settings.changed")}>●</span><button className="link" onClick={onReset}>{tr("settings.reset")}</button></div>}
+      </div>}
     </section>
   </>;
 }
 
 const REPO_URL = "https://github.com/Bexxs75/dualfile";
 
-export function AboutSettings() {
+export function AboutSettings({ query = "" }: { query?: string }) {
+  const language = useLanguage();
   const { api } = useRuntime();
   const tr = useT();
   const { error, run } = useAction();
   return <section className="system-group" aria-labelledby="about-heading">
-    <h3 id="about-heading">{tr("settings.about.heading")}</h3>
-    <p>Dualfile <span className="system-version">{config.version}</span> · {tr("settings.about.license")}</p>
-    <div><button className="tb" onClick={() => void run(() => api.openUrl(REPO_URL))}>{tr("settings.about.github")}</button></div>
+    <h3 id="about-heading"><Highlight text={tr("settings.about.heading")} query={query} /></h3>
+    <p>Dualfile <span className="system-version">{config.version}</span> · <Highlight text={tr("settings.about.license")} query={query} /></p>
+    <div><button className="tb primary" onClick={() => void run(() => api.openUrl(language === "de" ? "https://wiki.dualfileapp.com/de/" : "https://wiki.dualfileapp.com/"))}><Highlight text={tr("settings.wiki")} query={query} /></button></div>
+    <div><button className="tb" onClick={() => void run(() => api.openUrl(REPO_URL))}><Highlight text={tr("settings.about.github")} query={query} /></button></div>
     {error && <p role="alert" className="field-error">{error}</p>}
   </section>;
 }
@@ -86,7 +88,7 @@ function formatBytes(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function TroubleshootSettings() {
+export function TroubleshootSettings({ query = "" }: { query?: string }) {
   const { api, controller } = useRuntime();
   const tr = useT();
   const { error, run } = useAction();
@@ -97,31 +99,30 @@ export function TroubleshootSettings() {
     return () => { current = false; };
   }, [api]);
   return <section className="system-group" aria-labelledby="troubleshoot-heading">
-    <h3 id="troubleshoot-heading">{tr("log.heading")}</h3>
-    <p>{tr("log.intro")}</p>
-    {info && <p><span className="muted">{tr("log.location")}</span> <code>{info.path}</code> <span className="muted">{formatBytes(info.bytes)}</span></p>}
+    <h3 id="troubleshoot-heading"><Highlight text={tr("log.heading")} query={query} /></h3>
+    <p><Highlight text={tr("log.intro")} query={query} /></p>
+    {info && <p><span className="muted"><Highlight text={tr("log.location")} query={query} /></span> <code>{info.path}</code> <span className="muted">{formatBytes(info.bytes)}</span></p>}
     <div className="system-actions">
-      <button className="tb primary" onClick={() => controller.openDialog({ kind: "log", fromSettings: true })}>{tr("log.view")}</button>
-      <button className="tb" onClick={() => void run(() => api.logOpenFolder())}>{tr("log.openFolder")}</button>
-      <button className="tb" onClick={() => void run(async () => api.openUrl(await api.reportIssueUrl()))}>{tr("log.report")}</button>
+      <button className="tb primary" onClick={() => controller.openDialog({ kind: "log", fromSettings: true })}><Highlight text={tr("log.view")} query={query} /></button>
+      <button className="tb" onClick={() => void run(() => api.logOpenFolder())}><Highlight text={tr("log.openFolder")} query={query} /></button>
+      <button className="tb" onClick={() => void run(async () => api.openUrl(await api.reportIssueUrl()))}><Highlight text={tr("log.report")} query={query} /></button>
     </div>
-    <p className="muted">{tr("log.reportHelp")}</p>
+    <p className="muted"><Highlight text={tr("log.reportHelp")} query={query} /></p>
     {error && <p role="alert" className="field-error">{error}</p>}
   </section>;
 }
 
-export function UpdateSettings() {
+export function UpdateSettings({ query = "" }: { query?: string }) {
   const { system, state } = useSystem();
-  const { controller } = useRuntime();
   const settings = useAppState(s => s.settings);
   const language = useLanguage();
   const tr = useT();
   return <>
     <section className="system-group" aria-labelledby="updates-heading">
-      <h3 id="updates-heading">{tr("updates.title")}</h3>
-      <p>{tr("updates.version")} <span className="system-version">{config.version}</span></p>
-      <label className="system-row"><input type="checkbox" checked={settings.checkUpdatesOnStart !== false} onChange={e => controller.updateSettings(s => ({ ...s, checkUpdatesOnStart: e.target.checked }))} /><span>{tr("updates.onStart")}<small>{tr("updates.onStartHelp")}</small></span></label>
-      <div className="system-actions"><button className="tb" disabled={state.check === "checking" || state.installing} onClick={() => void system.check(true)}>{tr("updates.checkNow")}</button>
+      <h3 id="updates-heading"><Highlight text={tr("updates.title")} query={query} /></h3>
+      <p><Highlight text={tr("updates.version")} query={query} /> <span className="system-version">{config.version}</span></p>
+
+      <div className="system-actions"><button className="tb" disabled={state.check === "checking" || state.installing} onClick={() => void system.check(true)}><Highlight text={tr("updates.checkNow")} query={query} /></button>
         <span className="muted" role="status">{tr("updates.lastCheck", { time: settings.lastUpdateCheck ? new Date(settings.lastUpdateCheck).toLocaleString(language) : tr("updates.never") })} · {tr(`updates.${state.check}`)}</span></div>
       {state.error && <p role="alert" className="field-error">{state.error}</p>}
     </section>

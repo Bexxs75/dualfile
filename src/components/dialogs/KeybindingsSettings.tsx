@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useAppState, useController, useT } from "../../app/context";
 import type { TranslationKey } from "../../i18n";
 import { effectiveBindings, eventToSpec, REBINDABLE, REBINDABLE_COMMANDS, RESERVED_SPECS, type RebindableCommand } from "../../state/keymap";
+import { Highlight } from "../../settings/Highlight";
+import { normalizeSearch } from "../../settings/catalog";
 import { Shortcut } from "../Shortcut";
 
 type Notice = { kind: "reserved" } | { kind: "conflict"; command: RebindableCommand; spec: string; owner: RebindableCommand };
@@ -14,7 +16,7 @@ export function effectiveSpec(command: RebindableCommand, bindings: Record<strin
 }
 
 /** Abschnitt „Tastenkürzel“ der Einstellungen: Tastenfang, Konfliktprüfung, Zurücksetzen. */
-export function KeybindingsSettings() {
+export function KeybindingsSettings({ commands = REBINDABLE_COMMANDS, query = "" }: { commands?: readonly RebindableCommand[]; query?: string }) {
   const controller = useController();
   const tr = useT();
   const bindings = useAppState((state) => state.settings.keybindings);
@@ -75,16 +77,16 @@ export function KeybindingsSettings() {
       <h3>{tr("settings.keys.title")}</h3>
       <p className="field-help">{tr("settings.keys.help")}</p>
       <div className="keys-list">
-        {REBINDABLE_COMMANDS.map((command) => {
+        {commands.map((command) => {
           const spec = effectiveSpec(command, bindings);
           const custom = spec !== REBINDABLE[command];
           const active = capturing === command;
           return (
             <div className="keys-row" key={command}>
-              <span className="keys-name">{tr(cmdKey(command))}</span>
+              <span className="keys-name"><Highlight text={tr(cmdKey(command))} query={query} /></span>
               {active
                 ? <kbd className="keys-key capturing">{tr("settings.keys.capture")}</kbd>
-                : <span className={`keys-caps${custom ? " custom" : ""}`}><Shortcut spec={spec} /></span>}
+                : <span className={`keys-caps${custom ? " custom" : ""}`}>{query.trim() && normalizeSearch(spec).includes(normalizeSearch(query.trim())) ? <mark><Shortcut spec={spec} /></mark> : <Shortcut spec={spec} />}</span>}
               <span className="keys-actions">
                 <button type="button" className="tb" onClick={() => { setNotice(null); setCapturing(active ? null : command); }}>{tr("settings.keys.change")}</button>
                 <button type="button" className="tb" disabled={!custom} onClick={() => { const next = { ...(bindings ?? {}) }; delete next[command]; save(next); setNotice(null); }}>{tr("settings.keys.reset")}</button>

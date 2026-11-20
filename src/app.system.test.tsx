@@ -17,9 +17,9 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   const app = await setupApp({ settings: { checkUpdatesOnStart: false }, wrap: api => ({ ...api, traySet: tray, startMenuSet: menu, updateCheck: check }) });
   expect(check).not.toHaveBeenCalled();
   const dlg = await settingsDialog(app);
-  await app.user.click(dlg.getByRole("tab", { name: "System" }));
+  await app.user.click(dlg.getByRole("tab", { name: "Allgemein" }));
   expect(dlg.getByRole("region", { name: "System" })).toBeInTheDocument();
-  await app.user.click(dlg.getByRole("checkbox", { name: /Symbol im Infobereich/ }));
+  await app.user.click(dlg.getByRole("switch", { name: /Symbol im Infobereich/ }));
   expect(tray).toHaveBeenLastCalledWith(true, "de");
   expect(app.runtime.store.getState().settings.trayEnabled).toBe(true);
   expect(dlg.getByText(/Kein Infobereich gefunden/)).toBeInTheDocument();
@@ -27,7 +27,7 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   expect(menu).toHaveBeenLastCalledWith(false);
   await app.user.click(dlg.getByRole("button", { name: "Eintragen" }));
   expect(menu).toHaveBeenLastCalledWith(true);
-  await app.user.click(dlg.getByRole("tab", { name: "Info" }));
+  await app.user.click(dlg.getByRole("tab", { name: "Info & Hilfe" }));
   // Reads the version from the same source the dialog does, so a version bump never breaks this test.
   expect(dlg.getByRole("region", { name: "Updates" })).toHaveTextContent(`Installierte Version ${config.version}`);
   await app.user.click(dlg.getByRole("button", { name: "Jetzt prüfen" }));
@@ -57,7 +57,7 @@ test("banner: notes are plain text, Escape restores focus, Later persists and ma
   await act(async () => app.runtime.system.check());
   expect(screen.queryByRole("region", { name: "Update verfügbar" })).toBeNull();
   const settings = await settingsDialog(app);
-  await app.user.click(settings.getByRole("tab", { name: "Info" }));
+  await app.user.click(settings.getByRole("tab", { name: "Info & Hilfe" }));
   await app.user.click(settings.getByRole("button", { name: "Jetzt prüfen" }));
   expect(screen.getByRole("region", { name: "Update verfügbar" })).toBeInTheDocument();
   expect(install).not.toHaveBeenCalled();
@@ -166,9 +166,10 @@ test("English groups and banner use English controls", async () => {
   const app = await setupApp({ language: "en", wrap: api => ({ ...api, updateCheck: async () => available }) });
   expect(await screen.findByRole("button", { name: "Open release page" })).toBeInTheDocument();
   act(() => app.runtime.controller.openDialog({ kind: "settings" }));
-  await app.user.click(screen.getByRole("tab", { name: "About" }));
+  await app.user.click(screen.getByRole("tab", { name: "Info & Help" }));
   expect(screen.getByRole("region", { name: "Updates" })).toHaveTextContent("Installed version");
-  expect(screen.getByRole("checkbox", { name: /Check for updates on startup/ })).toBeChecked();
+  await app.user.click(screen.getByRole("tab", { name: "General" }));
+  expect(screen.getByRole("switch", { name: /Check for updates on startup/ })).toBeChecked();
 });
 
 test("startup is nonblocking and only checks once even when settings reopen", async () => {
@@ -177,7 +178,7 @@ test("startup is nonblocking and only checks once even when settings reopen", as
   const app = await setupApp({ wrap: api => ({ ...api, updateCheck: check }) });
   expect(screen.getAllByRole("grid")).toHaveLength(2);
   const settings = await settingsDialog(app);
-  await app.user.click(settings.getByRole("tab", { name: "Info" }));
+  await app.user.click(settings.getByRole("tab", { name: "Info & Hilfe" }));
   expect(settings.getByRole("button", { name: "Jetzt prüfen" })).toBeDisabled();
   await app.user.click(settings.getByRole("button", { name: "Fertig" }));
   await settingsDialog(app);
@@ -222,7 +223,7 @@ test("Info tab shows version, license and a GitHub button that opens the reposit
   const openUrl = vi.fn(async () => {});
   const app = await setupApp({ wrap: api => ({ ...api, openUrl }) });
   const dlg = await settingsDialog(app);
-  await app.user.click(dlg.getByRole("tab", { name: "Info" }));
+  await app.user.click(dlg.getByRole("tab", { name: "Info & Hilfe" }));
   expect(dlg.getByRole("region", { name: "Über Dualfile" })).toHaveTextContent(`Dualfile ${config.version} · Lizenz: MIT`);
   await app.user.click(dlg.getByRole("button", { name: "Projekt auf GitHub" }));
   expect(openUrl).toHaveBeenCalledWith("https://github.com/Bexxs75/dualfile");

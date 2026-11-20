@@ -11,7 +11,8 @@ test("parent entry defaults on, toggles in settings and persists without moving 
   const name = app.names(0).find(n => n !== "..")!;
   await app.user.click(app.row(0, name));
   await app.user.click(screen.getByRole("button", { name: /Einstellungen/ }));
-  const toggle = screen.getByRole("checkbox", { name: "Eintrag „..“ anzeigen" });
+  await app.user.click(screen.getByRole("tab", { name: "Dateiliste" }));
+  const toggle = screen.getByRole("switch", { name: "Eintrag „..“ anzeigen" });
   expect(toggle).toBeChecked();
   await app.user.click(toggle);
   expect(app.names(0)).not.toContain("..");

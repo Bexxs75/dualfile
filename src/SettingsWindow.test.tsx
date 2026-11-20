@@ -37,7 +37,7 @@ test("busy until first snapshot; live appearance and language without settings I
 });
 test("tray sends patch before action; start-menu error appears inline", async () => {
   const b = setup("system"); b.snapshot();
-  await b.user.click(screen.getByRole("checkbox"));
+  await b.user.click(screen.getByRole("switch", { name: "Show icon in the notification area (tray)" }));
   await waitFor(() => expect(b.send.mock.calls.map(([m]) => m.kind)).toEqual(["refreshStatus", "patch", "setTray"]));
   const add = screen.getAllByRole("button").find(el => /Add/.test(el.textContent ?? ""))!;
   await b.user.click(add);
@@ -175,27 +175,27 @@ test("German close failure shows the translated loss warning and clears on recov
 });
 
 test("sidebar preferences appear and synchronize in the separate settings window", async () => {
-  const b = setup();
+  const b = setup("seitenleiste");
   b.snapshot({ settings: { ...testSnapshot().settings, sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: ["drive:/data"] } });
   await b.user.click(screen.getByRole("radio", { name: "Icons" }));
   await waitFor(() => expect(b.send).toHaveBeenCalledWith(expect.objectContaining({ kind: "patch", patch: { sidebarMode: "icons" } })));
   b.snapshot({ ack: 1, settings: { ...testSnapshot().settings, sidebarMode: "hidden", sidebarWidth: 260, sidebarCollapsed: ["devices"], sidebarHidden: [] } });
   expect(screen.getByRole("radio", { name: "Hidden" })).toHaveAttribute("aria-checked", "true");
-  expect(screen.getByRole("spinbutton", { name: "Sidebar width" })).toHaveValue(260);
+  expect(screen.getByRole("slider", { name: "Sidebar width" })).toHaveValue("260");
   expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
 });
 
 test("LAN discovery is opt-in and synchronized through the settings window relay", async () => {
-  const b = setup();
+  const b = setup("seitenleiste");
   b.snapshot();
   const label = "Discover services on the local network";
-  const checkbox = await screen.findByRole("checkbox", { name: label });
+  const checkbox = await screen.findByRole("switch", { name: label });
   expect(checkbox).not.toBeChecked();
   await b.user.click(checkbox);
   await waitFor(() => expect(b.send).toHaveBeenCalledWith(expect.objectContaining({ kind: "patch", patch: { sidebarDiscovery: true } })));
   b.snapshot({ ack: 1, settings: { ...testSnapshot().settings, sidebarDiscovery: true } });
   expect(checkbox).toBeChecked();
   b.snapshot({ ack: 1, settings: { ...testSnapshot().settings, sidebarDiscovery: false, language: "de" } });
-  expect(screen.getByRole("checkbox", { name: "Dienste im lokalen Netzwerk suchen" })).not.toBeChecked();
+  expect(screen.getByRole("switch", { name: "Dienste im lokalen Netzwerk suchen" })).not.toBeChecked();
   expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
 });

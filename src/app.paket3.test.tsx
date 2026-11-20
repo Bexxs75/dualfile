@@ -21,7 +21,7 @@ test("B07 filename minimum, ordered container breakpoints and full-name tooltip"
 
 test("B08 automatic Paper contrast and explicit custom colors survive theme changes", async () => {
   const app = await settings();
-  await app.user.click(screen.getByRole("button", { name: "Designstandard" }));
+  await app.user.click(screen.getByRole("button", { name: "Passend zum Design" }));
   await app.user.click(screen.getByRole("radio", { name: "Papier" }));
   const accent = document.documentElement.style.getPropertyValue("--accent");
   expect(contrastRatio(accent, themes.papier.bg)).toBeGreaterThanOrEqual(3);
@@ -70,7 +70,7 @@ test("B15 checksum help spans columns and warning slot always exists", async () 
   const slot = app.dialog().querySelector(".warning-slot");
   await app.user.clear(screen.getByLabelText("Eigener Farbwert (#rrggbb)"));
   expect(app.dialog().querySelector(".warning-slot")).toBe(slot);
-  await app.user.click(within(app.dialog()).getByRole("tab", { name: "System" }));
+  await app.user.click(within(app.dialog()).getByRole("tab", { name: "Kopieren" }));
   expect(app.dialog().querySelector("#verify-help")).toHaveClass("field-help");
 });
 
