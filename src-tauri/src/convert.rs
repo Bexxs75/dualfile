@@ -931,7 +931,8 @@ pub enum CoreEventDto {
         status: JobStatusDto,
     },
     Conflict {
-        conflict: ConflictInfoDto,
+        // Boxed: the DTO carries entry metadata and would bloat every event (clippy::large_enum_variant).
+        conflict: Box<ConflictInfoDto>,
     },
     DirChanged {
         path: String,
@@ -1393,7 +1394,7 @@ mod tests {
             destination_path: VPath::local("/d/a").unwrap(),
         };
         let event = CoreEventDto::Conflict {
-            conflict: conflict_dto(4, &conflict),
+            conflict: Box::new(conflict_dto(4, &conflict)),
         };
         let value = serde_json::to_value(event).unwrap();
         assert_eq!(value["type"], "conflict");

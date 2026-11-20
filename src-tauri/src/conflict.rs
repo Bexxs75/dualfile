@@ -116,7 +116,7 @@ impl ConflictResolver for BridgeResolver {
             return Resolution::Cancel;
         };
         self.sink.emit(CoreEventDto::Conflict {
-            conflict: conflict_dto(job, conflict),
+            conflict: Box::new(conflict_dto(job, conflict)),
         });
         // A dropped sender (nobody will ever answer) also means: do not overwrite anything.
         rx.recv().unwrap_or(Resolution::Cancel)
