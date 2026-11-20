@@ -144,7 +144,9 @@ export const defaultSettings: Settings = {
   terminalBg: "#102030",
   terminalFg: "#f0e6d2",
   extensionColumn: false,
-  showOwnerColumns: false,
+  showPermissionsColumn: false,
+  showUidColumn: false,
+  showGidColumn: false,
   paneTintStrength: 100,
   checkUpdatesOnStart: true,
   trayEnabled: false,
@@ -229,10 +231,10 @@ export function visibleEntries(state: AppState, w: WinIdx): readonly Entry[] {
   const tab = activeTab(state.windows[w]);
   const listing = state.listings[w];
   if (listing.path !== tab.path) return NONE;
-  const key = `${tab.path}\u0000${tab.sort}\u0000${state.settings.showOwnerColumns === true}\u0000${tab.filter}\u0000${state.showHidden}\u0000${state.settings.showParentEntry !== false}`;
+  const key = `${tab.path}\u0000${tab.sort}\u0000${state.settings.showPermissionsColumn === true}\u0000${state.settings.showUidColumn === true}\u0000${state.settings.showGidColumn === true}\u0000${tab.filter}\u0000${state.showHidden}\u0000${state.settings.showParentEntry !== false}`;
   const cached = caches[w];
   if (cached && cached.raw === listing.entries && cached.key === key) return cached.result;
-  const spec = visibleSort(tab.sort, state.settings.showOwnerColumns === true);
+  const spec = visibleSort(tab.sort, state.settings);
   const base = tab.path === "/" || state.settings.showParentEntry === false ? listing.entries : [UP_ENTRY, ...listing.entries];
   const result = sortEntries(filterEntries(base, tab.filter, state.showHidden), spec.key, spec.direction);
   caches[w] = { raw: listing.entries, key, result };
@@ -396,9 +398,11 @@ export function reducer(state: AppState, action: Action): AppState {
     case "saveError": return { ...state, saveError: action.error };
     case "settings": {
       const next = { ...state, settings: action.update(state.settings) };
-      // Both settings change the visible order (".." entry, hidden owner sort), so cursor and selection follow by name.
+      // These settings change the visible order (".." entry, hidden owner sort), so cursor and selection follow by name.
       const same = (next.settings.showParentEntry !== false) === (state.settings.showParentEntry !== false)
-        && (next.settings.showOwnerColumns === true) === (state.settings.showOwnerColumns === true);
+        && (next.settings.showPermissionsColumn === true) === (state.settings.showPermissionsColumn === true)
+        && (next.settings.showUidColumn === true) === (state.settings.showUidColumn === true)
+        && (next.settings.showGidColumn === true) === (state.settings.showGidColumn === true);
       return same ? next : reconcileWindow(reconcileWindow(next, 0), 1);
     }
     case "toggleHidden": {

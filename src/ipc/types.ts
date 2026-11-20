@@ -456,7 +456,9 @@ export interface Settings {
   terminalBg?: string;
   terminalFg?: string;
   extensionColumn?: boolean;
-  showOwnerColumns?: boolean;
+  showPermissionsColumn?: boolean;
+  showUidColumn?: boolean;
+  showGidColumn?: boolean;
   paneTintStrength?: number;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
@@ -744,7 +746,7 @@ export interface SystemPlace {
 }
 
 export type SettingsTab = "appearance" | "system" | "info" | "keyboard";
-export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showOwnerColumns" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |

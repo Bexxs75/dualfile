@@ -531,14 +531,18 @@ mod tests {
     fn white_and_owner_settings_validate_and_roundtrip() {
         let mut s = settings();
         s.theme = "weiss".into();
-        s.show_owner_columns = true;
+        s.show_permissions_column = true;
+        s.show_uid_column = true;
+        s.show_gid_column = true;
         for strength in [80, 85, 100] {
             s.pane_tint_strength = strength;
             validate_settings(&s).unwrap();
             let core = dualfile_core::settings::Settings::from(&s);
             let dto = SettingsDto::from(&core);
             assert_eq!(dto.pane_tint_strength, strength);
-            assert!(dto.show_owner_columns);
+            assert!(dto.show_permissions_column);
+            assert!(dto.show_uid_column);
+            assert!(dto.show_gid_column);
         }
         for strength in [0, 79, 101, 255] {
             s.pane_tint_strength = strength;
@@ -546,10 +550,14 @@ mod tests {
         }
         let mut old = serde_json::to_value(settings()).unwrap();
         old.as_object_mut().unwrap().remove("paneTintStrength");
-        old.as_object_mut().unwrap().remove("showOwnerColumns");
+        old.as_object_mut().unwrap().remove("showPermissionsColumn");
+        old.as_object_mut().unwrap().remove("showUidColumn");
+        old.as_object_mut().unwrap().remove("showGidColumn");
         let dto: SettingsDto = serde_json::from_value(old).unwrap();
         assert_eq!(dto.pane_tint_strength, 100);
-        assert!(!dto.show_owner_columns);
+        assert!(!dto.show_permissions_column);
+        assert!(!dto.show_uid_column);
+        assert!(!dto.show_gid_column);
     }
 
     fn settings() -> SettingsDto {
@@ -588,7 +596,9 @@ mod tests {
                 order: 0,
             }],
             extension_column: false,
-            show_owner_columns: false,
+            show_permissions_column: false,
+            show_uid_column: false,
+            show_gid_column: false,
             pane_tint_strength: 100,
             pane_color_left: String::new(),
             pane_color_right: String::new(),

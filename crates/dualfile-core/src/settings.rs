@@ -69,7 +69,9 @@ pub struct Settings {
     /// Show a separate file-extension column in the list (off by default).
     pub extension_column: bool,
     #[serde(default)]
-    pub show_owner_columns: bool,
+    pub show_permissions_column: bool,
+    pub show_uid_column: bool,
+    pub show_gid_column: bool,
     #[serde(default = "default_pane_tint_strength")]
     pub pane_tint_strength: u8,
     /// Optional tint colour (hex) per window; empty means no tint.
@@ -126,7 +128,9 @@ impl Default for Settings {
             connections: vec![],
             plugins: vec![],
             extension_column: false,
-            show_owner_columns: false,
+            show_permissions_column: false,
+            show_uid_column: false,
+            show_gid_column: false,
             pane_tint_strength: 100,
             pane_color_left: String::new(),
             pane_color_right: String::new(),
@@ -379,6 +383,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
     if !(80..=100).contains(&tint_strength) {
         fixes.push("pane_tint_strength".into());
     }
+    let legacy_owners = field(&mut obj, "show_owner_columns", false, &mut fixes);
     let mut s = Settings {
         version: SETTINGS_VERSION,
         verify_policy: field(&mut obj, "verify_policy", d.verify_policy, &mut fixes),
@@ -427,7 +432,14 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         session: field(&mut obj, "session", d.session.clone(), &mut fixes),
         connections: Vec::new(),
         plugins: Vec::new(),
-        show_owner_columns: field(&mut obj, "show_owner_columns", false, &mut fixes),
+        show_permissions_column: field(
+            &mut obj,
+            "show_permissions_column",
+            legacy_owners,
+            &mut fixes,
+        ),
+        show_uid_column: field(&mut obj, "show_uid_column", legacy_owners, &mut fixes),
+        show_gid_column: field(&mut obj, "show_gid_column", legacy_owners, &mut fixes),
         pane_tint_strength: tint_strength.clamp(80, 100) as u8,
         extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
         keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
@@ -776,10 +788,14 @@ mod tests {
         write(dir.path(), r#"{"version":6}"#);
         let (mut s, _) = load(dir.path());
         assert_eq!(s.pane_tint_strength, 100);
-        assert!(!s.show_owner_columns);
+        assert!(!s.show_permissions_column);
+        assert!(!s.show_uid_column);
+        assert!(!s.show_gid_column);
         s.theme = "weiss".into();
         s.pane_tint_strength = 85;
-        s.show_owner_columns = true;
+        s.show_permissions_column = true;
+        s.show_uid_column = true;
+        s.show_gid_column = true;
         save(dir.path(), &s, false).unwrap();
         assert_eq!(load(dir.path()).0, s);
         for (raw, expected) in [
@@ -797,6 +813,39 @@ mod tests {
             let (s, result) = load(dir.path());
             assert_eq!(s.pane_tint_strength, expected);
             assert!(matches!(result, LoadOutcome::Repaired(_)));
+        }
+    }
+
+    #[test]
+    fn individual_owner_columns_migrate_and_roundtrip() {
+        for (raw, expected) in [
+            (r#"{"show_owner_columns":true}"#, [true, true, true]),
+            (r#"{"show_owner_columns":false}"#, [false, false, false]),
+            (
+                r#"{"show_owner_columns":true,"show_permissions_column":false,"show_uid_column":true,"show_gid_column":false}"#,
+                [false, true, false],
+            ),
+            (
+                r#"{"show_owner_columns":true,"show_uid_column":false}"#,
+                [true, false, true],
+            ),
+            (r#"{}"#, [false, false, false]),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            write(dir.path(), raw);
+            let (s, _) = load(dir.path());
+            assert_eq!(
+                [
+                    s.show_permissions_column,
+                    s.show_uid_column,
+                    s.show_gid_column
+                ],
+                expected
+            );
+            save(dir.path(), &s, false).unwrap();
+            let stored = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+            assert!(!stored.contains("show_owner_columns"));
+            assert_eq!(load(dir.path()).0, s);
         }
     }
 

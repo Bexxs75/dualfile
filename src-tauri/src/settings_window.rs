@@ -216,7 +216,11 @@ struct SettingsProjection {
     #[serde(skip_serializing_if = "Option::is_none")]
     extension_column: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    show_owner_columns: Option<bool>,
+    show_permissions_column: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_uid_column: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_gid_column: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pane_tint_strength: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -272,7 +276,11 @@ pub struct SettingsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     extension_column: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    show_owner_columns: Option<bool>,
+    show_permissions_column: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_uid_column: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_gid_column: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pane_tint_strength: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -331,8 +339,14 @@ impl SettingsPatch {
         if let Some(value) = &self.show_parent_entry {
             settings.show_parent_entry = *value;
         }
-        if let Some(value) = self.show_owner_columns {
-            settings.show_owner_columns = value;
+        if let Some(value) = self.show_permissions_column {
+            settings.show_permissions_column = value;
+        }
+        if let Some(value) = self.show_uid_column {
+            settings.show_uid_column = value;
+        }
+        if let Some(value) = self.show_gid_column {
+            settings.show_gid_column = value;
         }
         if let Some(value) = self.pane_tint_strength {
             settings.pane_tint_strength = value;
@@ -948,7 +962,9 @@ mod tests {
             "showParentEntry",
             "extensionColumn",
             "paneTintStrength",
-            "showOwnerColumns",
+            "showPermissionsColumn",
+            "showUidColumn",
+            "showGidColumn",
             "paneColorLeft",
             "paneColorRight",
             "terminalColors",

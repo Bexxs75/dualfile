@@ -8,7 +8,7 @@ import { activeTabOf, defaultSettings, type AppState } from "./state";
 import { isArchivePath, parseRemotePath } from "../state/paths";
 import { createTranslator } from "../i18n";
 
-export const PROJECTED_KEYS = ["sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarHidden", "sidebarDiscovery", "theme", "accent", "accentAutomatic", "density", "fontSize", "language", "showParentEntry", "paneTintStrength", "showOwnerColumns", "extensionColumn", "paneColorLeft", "paneColorRight", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy", "terminalShell", "trayEnabled", "checkUpdatesOnStart", "lastUpdateCheck", "keybindings"] as const;
+export const PROJECTED_KEYS = ["sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarHidden", "sidebarDiscovery", "theme", "accent", "accentAutomatic", "density", "fontSize", "language", "showParentEntry", "paneTintStrength", "showPermissionsColumn", "showUidColumn", "showGidColumn", "extensionColumn", "paneColorLeft", "paneColorRight", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy", "terminalShell", "trayEnabled", "checkUpdatesOnStart", "lastUpdateCheck", "keybindings"] as const;
 export const PATCH_KEYS = PROJECTED_KEYS.filter(key => key !== "lastUpdateCheck");
 export function project(settings: Settings): SettingsWindowSnapshot["settings"] {
   return Object.fromEntries(PROJECTED_KEYS.filter(key => settings[key] !== undefined).map(key => [key, settings[key]])) as SettingsWindowSnapshot["settings"];

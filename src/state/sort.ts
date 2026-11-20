@@ -1,3 +1,4 @@
+import type { Settings } from "../ipc/types";
 import type { Entry } from "../ipc/types";
 
 export type SortKey = "name" | "size" | "type" | "modified" | "permissions" | "uid" | "gid";
@@ -98,7 +99,7 @@ export function toggleSort(current: SortSpec, key: SortKey): SortSpec {
 }
 
 /** Hidden ownership metadata must not determine the visible order. */
-export function visibleSort(value: string, owners: boolean): SortSpec {
+export function visibleSort(value: string, settings: Pick<Settings, "showPermissionsColumn" | "showUidColumn" | "showGidColumn">): SortSpec {
   const spec = parseSort(value);
-  return !owners && ["permissions", "uid", "gid"].includes(spec.key) ? { ...DEFAULT_SORT } : spec;
+  return ((spec.key === "permissions" && !settings.showPermissionsColumn) || (spec.key === "uid" && !settings.showUidColumn) || (spec.key === "gid" && !settings.showGidColumn)) ? { ...DEFAULT_SORT } : spec;
 }

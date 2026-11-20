@@ -66,7 +66,9 @@ code { font-family: var(--font-mono); font-size: .92em; }
 /* Fenster */
 .panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pane { container-type: inline-size; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; position: relative; }
-.pane[data-tint] { color: var(--fg); }
+.list-body[data-tint] { color: var(--fg); background: var(--panel); }
+.list-body { flex: 1 0 auto; display: flex; flex-direction: column; }
+.list-body > .row { flex-shrink: 0; }
 .pane.active { border-color: var(--accent); box-shadow: none; }
 .pane.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .row.drop-into { outline: 2px dashed var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -92,10 +94,10 @@ code { font-family: var(--font-mono); font-size: .92em; }
 .filter { width: 150px; flex: none; }
 
 /* Liste */
-.list { flex: 1; min-height: 0; overflow: auto; position: relative; }
+.list { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: auto; position: relative; }
 .head, .row { display: grid; grid-template-columns: var(--df-cols, minmax(180px, 1fr) 84px 104px 130px); align-items: center; gap: 6px; padding: 0 10px; }
 .head.ext-split, .row.ext-split { grid-template-columns: var(--df-cols, minmax(180px, 1fr) 56px 84px 130px); }
-.head { position: sticky; top: 0; z-index: 1; height: 26px; background: var(--panel); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--line); }
+.head { flex-shrink: 0; position: sticky; top: 0; z-index: 1; height: 26px; background: var(--panel); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--line); }
 .head button { text-align: left; text-transform: inherit; letter-spacing: inherit; color: inherit; width: 100%; }
 .head button { display: flex; align-items: center; gap: 4px; }
 .head > span { position: relative; }
@@ -645,25 +647,23 @@ html.editor-window-root body { padding: 0; }
 .owner-columns .permissions { font-family: monospace; }
 @container (width < 860px) {
   .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-no-type); }
-  .owner-columns .head:not(.ext-split) > :nth-child(3), .owner-columns .row:not(.ext-split) > :nth-child(3) { display: none; }
+  .owner-columns [data-column="type"] { display: none; }
 }
 @container (width < 700px) {
   .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-no-date); }
-  .owner-columns .head > :nth-child(4), .owner-columns .row > :nth-child(4) { display: none; }
+  .owner-columns [data-column="modified"] { display: none; }
 }
 @container (width < 560px) {
   .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-small); }
-  .owner-columns .head:not(.ext-split) > :nth-child(2), .owner-columns .row:not(.ext-split) > :nth-child(2),
-  .owner-columns .head > :nth-child(3), .owner-columns .row > :nth-child(3) { display: none; }
+  .owner-columns [data-column="size"] { display: none; }
 }
 @container (width < 440px) {
   .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-minimal); }
-  .owner-columns .head > :nth-child(n+6), .owner-columns .row > :nth-child(n+6) { display: none; }
-  .owner-columns .head > :nth-child(2), .owner-columns .row > :nth-child(2) { display: none; }
+  .owner-columns [data-column="ext"] { display: none; }
 }
 
-.pane[data-tint] .row.sel, [data-fm="weiss"] .pane .row.sel { background: var(--sel); }
-.pane[data-tint] .row.cur, .pane[data-tint].active .row.cur.sel,
+.pane [data-tint] .row.sel, [data-fm="weiss"] .pane .row.sel { background: var(--sel); }
+.pane [data-tint] .row.cur, .pane.active [data-tint] .row.cur.sel,
 [data-fm="weiss"] .pane .row.cur, [data-fm="weiss"] .pane.active .row.cur.sel { background: var(--cur); }
-.pane[data-tint] .row.d .nm, .pane[data-tint] .row.d .ico,
+.pane [data-tint] .row.d .nm, .pane [data-tint] .row.d .ico,
 [data-fm="weiss"] .pane .row.d .nm, [data-fm="weiss"] .pane .row.d .ico { color: var(--dir); opacity: 1; }

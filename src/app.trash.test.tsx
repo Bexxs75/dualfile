@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { activeTabOf } from "./app/state";
 import { TRASH_PATH } from "./state/paths";
@@ -59,4 +59,20 @@ describe("Papierkorb-Ansicht", () => {
     fireEvent.click(within(screen.getByRole("navigation", { name: "Orte" })).getByRole("treeitem", { name: /^Papierkorb/ }));
     expect(await screen.findByText("Der Papierkorb ist leer")).toBeInTheDocument();
   });
+});
+
+
+test.each([false, true])("trash tint excludes its header and chrome (empty=%s)", async empty => {
+  const app = empty ? await setupApp() : await trashTwo();
+  if (empty) {
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Orte" })).getByRole("treeitem", { name: /^Papierkorb/ }));
+    await screen.findByText("Der Papierkorb ist leer");
+  }
+  act(() => app.runtime.controller.updateSettings(s => ({ ...s, paneColorLeft: "#aabbcc" })));
+  const pane = app.pane(0);
+  const body = within(pane).getByRole("rowgroup");
+  expect(body).toHaveAttribute("data-tint");
+  expect(body.style.getPropertyValue("--panel")).toBe("#aabbcc");
+  expect(pane).not.toHaveAttribute("data-tint");
+  for (const el of pane.querySelectorAll(".head, .tabs, .crumbs, .trash-bar, .foot")) expect(el.closest("[data-tint]")).toBeNull();
 });

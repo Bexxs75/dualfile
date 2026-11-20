@@ -672,7 +672,11 @@ pub struct SettingsDto {
     #[serde(default)]
     pub extension_column: bool,
     #[serde(default)]
-    pub show_owner_columns: bool,
+    pub show_permissions_column: bool,
+    #[serde(default)]
+    pub show_uid_column: bool,
+    #[serde(default)]
+    pub show_gid_column: bool,
     #[serde(default = "default_pane_tint_strength")]
     pub pane_tint_strength: u8,
     #[serde(default)]
@@ -765,7 +769,9 @@ impl From<&settings::Settings> for SettingsDto {
                 })
                 .collect(),
             extension_column: s.extension_column,
-            show_owner_columns: s.show_owner_columns,
+            show_permissions_column: s.show_permissions_column,
+            show_uid_column: s.show_uid_column,
+            show_gid_column: s.show_gid_column,
             pane_tint_strength: s.pane_tint_strength,
             pane_color_left: s.pane_color_left.clone(),
             pane_color_right: s.pane_color_right.clone(),
@@ -837,7 +843,9 @@ impl From<&SettingsDto> for settings::Settings {
                 })
                 .collect(),
             extension_column: s.extension_column,
-            show_owner_columns: s.show_owner_columns,
+            show_permissions_column: s.show_permissions_column,
+            show_uid_column: s.show_uid_column,
+            show_gid_column: s.show_gid_column,
             pane_tint_strength: s.pane_tint_strength,
             pane_color_left: s.pane_color_left.clone(),
             pane_color_right: s.pane_color_right.clone(),

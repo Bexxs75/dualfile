@@ -183,7 +183,9 @@ export function SettingsPanel({ startTab }: { startTab?: import("../../ipc/types
         </section>
         <label className="fld"><span>{tr("settings.showParentEntry")}</span><input type="checkbox" checked={settings.showParentEntry !== false} onChange={event => set({ showParentEntry: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.extensionColumn")}</span><input type="checkbox" checked={settings.extensionColumn === true} onChange={event => set({ extensionColumn: event.target.checked })} /></label>
-        <label className="fld"><span>{tr("settings.showOwnerColumns")}</span><input type="checkbox" checked={settings.showOwnerColumns === true} onChange={event => set({ showOwnerColumns: event.target.checked })} /></label>
+        <label className="fld"><span>{tr("settings.showPermissionsColumn")}</span><input type="checkbox" checked={settings.showPermissionsColumn === true} onChange={event => set({ showPermissionsColumn: event.target.checked })} /></label>
+        <label className="fld"><span>{tr("settings.showUidColumn")}</span><input type="checkbox" checked={settings.showUidColumn === true} onChange={event => set({ showUidColumn: event.target.checked })} /></label>
+        <label className="fld"><span>{tr("settings.showGidColumn")}</span><input type="checkbox" checked={settings.showGidColumn === true} onChange={event => set({ showGidColumn: event.target.checked })} /></label>
         <div className="fld"><span>{tr("settings.paneColors.title")}</span></div>
         <div className="fld">
           <label htmlFor="pane-color-left">{tr("settings.paneColors.left")}</label>

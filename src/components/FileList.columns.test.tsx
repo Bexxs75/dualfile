@@ -88,7 +88,7 @@ test("arrow keys nudge by 8px and persist on keyup; blur also persists", async (
 test.each([false, true])("ownership columns are optional, sortable and keep three resize handles (ext=%s)", async extensionColumn => {
   const { rt } = await setup({ extensionColumn });
   expect(screen.queryByRole("columnheader", { name: /Permissions/ })).toBeNull();
-  act(() => rt.controller.updateSettings(s => ({ ...s, showOwnerColumns: true })));
+  act(() => rt.controller.updateSettings(s => ({ ...s, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true })));
   expect(screen.getAllByRole("columnheader")).toHaveLength(7);
   expect(screen.getAllByRole("separator")).toHaveLength(3);
   for (const [label, key] of [["Permissions", "permissions"], ["uid", "uid"], ["gid", "gid"]]) {
@@ -99,12 +99,12 @@ test.each([false, true])("ownership columns are optional, sortable and keep thre
     fireEvent.click(header.querySelector("button")!);
     expect(header).toHaveAttribute("aria-sort", "descending");
   }
-  act(() => rt.controller.updateSettings(s => ({ ...s, showOwnerColumns: false })));
+  act(() => rt.controller.updateSettings(s => ({ ...s, showPermissionsColumn: false, showUidColumn: false, showGidColumn: false })));
   expect(screen.getAllByRole("columnheader")).toHaveLength(4);
 });
 
 test.each(["/local", "sftp:server!/remote"])("owner cells use local names only, numeric tooltips and empty missing values: %s", async path => {
-  const { rt } = await setup({ showOwnerColumns: true });
+  const { rt } = await setup({ showPermissionsColumn: true, showUidColumn: true, showGidColumn: true });
   const entries = [{ name: "owned", kind: "file" as const, size: 0, modified: null, mode: 0o7755, uid: 1000, gid: 100, ownerName: "alice", groupName: "staff", hidden: false, linkTarget: null, brokenLink: false, error: null },
     { name: "unknown", kind: "file" as const, size: 0, modified: null, mode: null, uid: 12345, gid: null, hidden: false, linkTarget: null, brokenLink: false, error: null }];
   act(() => rt.store.dispatch({ type: "window", w: 0,
@@ -118,7 +118,7 @@ test.each(["/local", "sftp:server!/remote"])("owner cells use local names only, 
 });
 
 test.each([false, true])("owner layout shares responsive templates and preserves stored widths (ext=%s)", async extensionColumn => {
-  const { rt } = await setup({ extensionColumn, showOwnerColumns: true,
+  const { rt } = await setup({ extensionColumn, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true,
     columnWidths: { normal: [400, 400, 400], ext: [400, 400, 400] } });
   const grid = screen.getByRole("grid");
   expect(grid).toHaveClass("owner-columns");
@@ -131,7 +131,7 @@ test.each([false, true])("owner layout shares responsive templates and preserves
   } else {
     expect(grid.style.getPropertyValue("--df-owner-small")).toBe("minmax(120px, 1fr) 96px 64px 64px");
   }
-  expect(grid.style.getPropertyValue("--df-owner-minimal")).toBe("minmax(120px, 1fr) 96px");
+  expect(grid.style.getPropertyValue("--df-owner-minimal")).toBe("minmax(120px, 1fr) minmax(0, 96px) minmax(0, 64px) minmax(0, 64px)");
   for (const row of grid.querySelectorAll(".head, .row")) {
     expect(row.classList.contains("ext-split")).toBe(extensionColumn);
     expect(row.querySelectorAll(":scope > span")).toHaveLength(7);
@@ -140,10 +140,34 @@ test.each([false, true])("owner layout shares responsive templates and preserves
 });
 
 test("a hidden owner sort reverses the visible name sort on the first click", async () => {
-  const { rt } = await setup({ showOwnerColumns: false });
+  const { rt } = await setup({ showPermissionsColumn: false, showUidColumn: false, showGidColumn: false });
   act(() => rt.store.dispatch({ type: "window", w: 0,
     update: win => ({ ...win, tabs: win.tabs.map((tab, i) => i === win.activeTab ? { ...tab, sort: "uid:desc" } : tab) }) }));
   act(() => rt.controller.sortBy(0, "name"));
   const win = rt.store.getState().windows[0];
   expect(win.tabs[win.activeTab]!.sort).toBe("name:desc");
 });
+
+test("tint belongs only to the row group, including empty space", async () => {
+  await setup({ paneColorLeft: "#aabbcc", paneTintStrength: 100 });
+  const grid = screen.getByRole("grid");
+  const body = screen.getByRole("rowgroup");
+  expect(body).toHaveAttribute("data-tint");
+  expect(body.style.getPropertyValue("--panel")).toBe("#aabbcc");
+  expect(grid).not.toHaveAttribute("data-tint");
+  expect(grid.querySelector(".head")?.closest("[data-tint]")).toBeNull();
+});
+
+for (const extensionColumn of [false, true]) {
+  test.each([[true, false, false], [false, false, true], [false, true, true], [true, true, true]])(
+    `independent owner subset %s/%s/%s (ext=${extensionColumn})`, async (permissions, uid, gid) => {
+      await setup({ extensionColumn, showPermissionsColumn: permissions, showUidColumn: uid, showGidColumn: gid });
+      const grid = screen.getByRole("grid");
+      const count = 4 + [permissions, uid, gid].filter(Boolean).length;
+      for (const row of grid.querySelectorAll(".head, .row")) expect(row.children).toHaveLength(count);
+      const fixed = [permissions ? "minmax(0, 96px)" : "", uid ? "minmax(0, 64px)" : "", gid ? "minmax(0, 64px)" : ""].filter(Boolean).join(" ");
+      expect(grid.style.getPropertyValue("--df-owner-minimal")).toBe(`minmax(120px, 1fr) ${fixed}`);
+      expect(grid.querySelector('.head [data-column="size"]')).not.toBeNull();
+      expect(grid.querySelector('.head [data-column="modified"]')).not.toBeNull();
+    });
+}

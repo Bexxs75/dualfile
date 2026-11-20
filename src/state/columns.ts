@@ -28,10 +28,11 @@ export function columnTemplate(widths: ColumnTriple): string {
 }
 
 /** Cap metadata to the space left after name, owners and gaps; stored widths stay intact. */
-export function ownerColumnTemplates(widths: ColumnTriple, ext: boolean): Record<string, string> {
-  const template = (slots: number[], name = 160, owners = true) => {
-    const fixed = owners ? "96px 64px 64px" : "96px";
-    const reserved = name + (owners ? 224 : 96) + (slots.length + (owners ? 3 : 1)) * 6;
+export function ownerColumnTemplates(widths: ColumnTriple, ext: boolean, enabled: readonly boolean[]): Record<string, string> {
+  const template = (slots: number[], name = 160) => {
+    const active = [96, 64, 64].filter((_, i) => enabled[i]);
+    const fixed = active.map(width => `${width}px`).join(" ");
+    const reserved = name + active.reduce((sum, width) => sum + width, 0) + (slots.length + active.length) * 6;
     const total = slots.reduce((sum, i) => sum + widths[i]!, 0);
     const metadata = slots.map(i => `min(${widths[i]}px, max(0px, calc((100% - ${reserved}px) * ${widths[i]! / total})))`);
     return [`minmax(${name}px, 1fr)`, ...metadata, fixed].join(" ");
@@ -41,6 +42,6 @@ export function ownerColumnTemplates(widths: ColumnTriple, ext: boolean): Record
     "--df-owner-no-type": template(ext ? [0, 1, 2] : [0, 2]),
     "--df-owner-no-date": template(ext ? [0, 1] : [0]),
     "--df-owner-small": template(ext ? [0] : [], 120),
-    "--df-owner-minimal": template([], 120, false),
+    "--df-owner-minimal": `minmax(120px, 1fr) ${[96, 64, 64].filter((_, i) => enabled[i]).map(width => `minmax(0, ${width}px)`).join(" ")}`,
   };
 }

@@ -291,11 +291,27 @@ test("white design and pane opacity update live; opacity needs a pane colour", a
   expect(slider).toHaveAttribute("step", "5");
   fireEvent.change(dlg.getByLabelText("Linkes Fenster"), { target: { value: "#004080" } });
   expect(slider).toBeEnabled();
-  expect(app.pane(0).style.getPropertyValue("--panel")).toBe("#004080");
+  expect(within(app.pane(0)).getByRole("rowgroup").style.getPropertyValue("--panel")).toBe("#004080");
   fireEvent.change(slider, { target: { value: "85" } });
   expect(app.runtime.store.getState().settings.paneTintStrength).toBe(85);
-  expect(app.pane(0).style.getPropertyValue("--panel")).not.toBe("#004080");
+  expect(within(app.pane(0)).getByRole("rowgroup").style.getPropertyValue("--panel")).not.toBe("#004080");
   expect(slider).toHaveAttribute("aria-valuetext", "85%");
-  await app.user.click(dlg.getByRole("checkbox", { name: "Rechte, Besitzer und Gruppe anzeigen" }));
+  await app.user.click(dlg.getByRole("checkbox", { name: "Rechte anzeigen" }));
   for (const w of [0, 1] as const) expect(within(app.pane(w)).getByRole("columnheader", { name: /Rechte/ })).toBeInTheDocument();
+});
+
+
+test("permissions, uid and gid checkboxes update independently", async () => {
+  const app = await setupApp();
+  await app.user.keyboard("{Control>},{/Control}");
+  const dlg = within(app.dialog());
+  for (const [label, key] of [["Rechte anzeigen", "showPermissionsColumn"], ["Besitzer (uid) anzeigen", "showUidColumn"], ["Gruppe (gid) anzeigen", "showGidColumn"]] as const) {
+    const checkbox = dlg.getByRole("checkbox", { name: label });
+    expect(checkbox).not.toBeChecked();
+    await app.user.click(checkbox);
+    expect(app.runtime.store.getState().settings[key]).toBe(true);
+    await app.user.click(checkbox);
+    expect(app.runtime.store.getState().settings[key]).toBe(false);
+  }
+  expect(app.pane(0)).not.toHaveAttribute("data-tint");
 });

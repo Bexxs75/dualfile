@@ -100,32 +100,36 @@ describe("Aufträge und Dialoge", () => {
 });
 
 test.each(["permissions", "uid", "gid"])("hidden %s sorting falls back to name ascending and invalidates cache", key => {
+  const setting = { permissions: "showPermissionsColumn", uid: "showUidColumn", gid: "showGidColumn" }[key]!;
   let state = ready();
   const entries = [entry("a", "file", { mode: 1, uid: 1, gid: 1 }), entry("b", "file", { mode: 2, uid: 2, gid: 2 })];
   state = run(state, { type: "window", w: 0,
     update: win => ({ ...win, tabs: win.tabs.map(tab => ({ ...tab, sort: `${key}:desc` })) }),
     listing: { path: "/a", entries } });
-  state = { ...state, settings: { ...state.settings, showOwnerColumns: true } };
+  state = { ...state, settings: { ...state.settings, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true } };
   expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
-  state = { ...state, settings: { ...state.settings, showOwnerColumns: false } };
+  state = { ...state, settings: { ...state.settings, [setting]: false } };
   expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "a", "b"]);
-  state = { ...state, settings: { ...state.settings, showOwnerColumns: true } };
+  state = { ...state, settings: { ...state.settings, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true } };
   expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
 });
 
-test("toggling owner columns keeps the cursor on the same entry when the hidden sort reorders the list", () => {
+test.each(["permissions", "uid", "gid"])("toggling %s keeps cursor and selection on the same entry", key => {
+  const setting = { permissions: "showPermissionsColumn", uid: "showUidColumn", gid: "showGidColumn" }[key]!;
   let state = ready();
-  const entries = [entry("a", "file", { uid: 1 }), entry("b", "file", { uid: 2 })];
+  const entries = [entry("a", "file", { mode: 1, uid: 1, gid: 1 }), entry("b", "file", { mode: 2, uid: 2, gid: 2 })];
   state = run(state, { type: "window", w: 0,
-    update: win => ({ ...win, tabs: win.tabs.map(tab => ({ ...tab, sort: "uid:desc" })) }),
+    update: win => ({ ...win, tabs: win.tabs.map(tab => ({ ...tab, sort: `${key}:desc` })) }),
     listing: { path: "/a", entries } });
-  state = run(state, { type: "settings", update: s => ({ ...s, showOwnerColumns: true }) });
+  state = run(state, { type: "settings", update: s => ({ ...s, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true }) });
   expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
   state = run(state, { type: "selection", w: 0, update: (sel, e) => click(sel, e, 1) });
-  state = run(state, { type: "settings", update: s => ({ ...s, showOwnerColumns: false }) });
+  state = run(state, { type: "settings", update: s => ({ ...s, [setting]: false }) });
   const focused = () => visibleEntries(state, 0)[activeTab(state.windows[0]).selection.focus]?.name;
   expect(focused()).toBe("b");
+  expect(activeTab(state.windows[0]).selection.selected.has("b")).toBe(true);
   expect(activeTab(state.windows[0]).selection.anchorName).toBe("b");
-  state = run(state, { type: "settings", update: s => ({ ...s, showOwnerColumns: true }) });
+  state = run(state, { type: "settings", update: s => ({ ...s, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true }) });
   expect(focused()).toBe("b");
+  expect(activeTab(state.windows[0]).selection.selected.has("b")).toBe(true);
 });

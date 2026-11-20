@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useAppState, useController, useLanguage, useT } from "../app/context";
 import { activeTabOf, visibleEntries, type WinIdx } from "../app/state";
 import { createTranslator, formatBytes, formatDate, type Language } from "../i18n";
@@ -7,6 +7,7 @@ import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, colu
 import { isArchivePath } from "../state/paths";
 import { fileType, visibleSort, type SortKey } from "../state/sort";
 import { formatPermissions } from "../state/permissions";
+import { ListBody } from "./ListBody";
 import { EntryIcon, Icon } from "./Icon";
 
 const COLUMNS: { key: SortKey; label: "column.name" | "column.size" | "column.type" | "column.ext" | "column.modified" | "column.permissions" | "column.uid" | "column.gid" }[] = [
@@ -49,7 +50,7 @@ interface RowProps {
   current: boolean;
   language: Language;
   extCol: boolean;
-  owners: boolean;
+  owners: readonly boolean[];
   local: boolean;
   dropInto: boolean;
 }
@@ -66,17 +67,17 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
   const nameEnd = Math.min(16, Math.ceil(shown.length / 2));
   const cells = {
     size: (
-      <span key="size" role="gridcell" className="num tabular-nums">
+      <span data-column="size" key="size" role="gridcell" className="num tabular-nums">
         {isDir || entry.name === ".." ? "" : formatBytes(entry.size, language)}
       </span>
     ),
     type: (
-      <span key="type" role="gridcell" className="ex">
+      <span data-column={extCol ? "ext" : "type"} key="type" role="gridcell" className="ex">
         {extCol ? ext : typeLabel(entry, language)}
       </span>
     ),
     modified: (
-      <span key="modified" role="gridcell" className="dt tabular-nums">
+      <span data-column="modified" key="modified" role="gridcell" className="dt tabular-nums">
         {entry.name === ".." ? "" : formatDate(entry.modified, language)}
       </span>
     ),
@@ -132,11 +133,9 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
         {entry.linkTarget ? <span className="lt"> → {entry.linkTarget}</span> : null}
       </span>
       {order.map((key) => cells[key])}
-      {owners ? <>
-        <span role="gridcell" className="owner permissions" title={entry.permissions ?? formatPermissions(entry.mode)}>{entry.name === ".." ? "" : entry.permissions ?? formatPermissions(entry.mode)}</span>
-        <span role="gridcell" className="owner" title={entry.uid == null ? undefined : `uid ${entry.uid}`}>{entry.name === ".." ? "" : (local ? entry.ownerName : null) ?? entry.uid ?? ""}</span>
-        <span role="gridcell" className="owner" title={entry.gid == null ? undefined : `gid ${entry.gid}`}>{entry.name === ".." ? "" : (local ? entry.groupName : null) ?? entry.gid ?? ""}</span>
-      </> : null}
+      {owners[0] ? <span role="gridcell" className="owner permissions" title={entry.permissions ?? formatPermissions(entry.mode)}>{entry.name === ".." ? "" : entry.permissions ?? formatPermissions(entry.mode)}</span> : null}
+      {owners[1] ? <span role="gridcell" className="owner" title={entry.uid == null ? undefined : `uid ${entry.uid}`}>{entry.name === ".." ? "" : (local ? entry.ownerName : null) ?? entry.uid ?? ""}</span> : null}
+      {owners[2] ? <span role="gridcell" className="owner" title={entry.gid == null ? undefined : `gid ${entry.gid}`}>{entry.name === ".." ? "" : (local ? entry.groupName : null) ?? entry.gid ?? ""}</span> : null}
     </div>
   );
 });
@@ -152,7 +151,10 @@ export function FileList({ w }: { w: WinIdx }) {
   const listing = useAppState((state) => state.listings[w]);
   const filter = useAppState((state) => activeTabOf(state, w).filter);
   const active = useAppState((state) => state.active === w);
-  const owners = useAppState(state => state.settings.showOwnerColumns === true);
+  const settings = useAppState(state => state.settings);
+  const owners = useMemo(() => [settings.showPermissionsColumn === true, settings.showUidColumn === true, settings.showGidColumn === true],
+    [settings.showPermissionsColumn, settings.showUidColumn, settings.showGidColumn]);
+  const hasOwners = owners.some(Boolean);
   const extCol = useAppState((state) => state.settings.extensionColumn === true);
   const dropFolder = useAppState((state) => (state.drag?.folder?.w === w ? state.drag.folder.name : null));
   const storedWidths = useAppState((state) => state.settings.columnWidths);
@@ -210,7 +212,7 @@ export function FileList({ w }: { w: WinIdx }) {
     event.stopPropagation();
     setLive(widthAt(slot, (draftRef.current ?? savedWidths)[slot] + delta));
   };
-  const spec = visibleSort(sort, owners);
+  const spec = visibleSort(sort, settings);
   const ref = useRef<HTMLDivElement>(null);
   const focusIndex = Math.min(selection.focus, Math.max(0, entries.length - 1));
 
@@ -256,12 +258,12 @@ export function FileList({ w }: { w: WinIdx }) {
   return (
     <div
       ref={ref}
-      className={owners ? "list owner-columns" : "list"}
+      className={hasOwners ? "list owner-columns" : "list"}
       role="grid"
       tabIndex={0}
       aria-label={`${tr("pane.listLabel")} – ${tr(w === 0 ? "pane.left" : "pane.right")}`}
       aria-multiselectable="true"
-      style={{ "--df-cols": columnTemplate(widths), ...(owners ? ownerColumnTemplates(widths, extCol) : {}) } as CSSProperties}
+      style={{ "--df-cols": columnTemplate(widths), ...(hasOwners ? ownerColumnTemplates(widths, extCol, owners) : {}) } as CSSProperties}
       aria-rowcount={entries.length + 1}
       aria-activedescendant={entries.length > 0 ? rowId(w, focusIndex) : undefined}
       onFocus={() => controller.setActive(w)}
@@ -271,13 +273,14 @@ export function FileList({ w }: { w: WinIdx }) {
       }}
     >
       <div role="row" aria-rowindex={1} className={extCol ? "head ext-split" : "head"}>
-        {[...(extCol ? COLUMNS_EXT : COLUMNS), ...(owners ? OWNER_COLUMNS : [])].map((column, columnIndex) => {
+        {[...(extCol ? COLUMNS_EXT : COLUMNS), ...OWNER_COLUMNS.filter((_, i) => owners[i])].map((column, columnIndex) => {
           const sorted = spec.key === column.key;
           const name = tr(column.label);
           const slot = columnIndex - 1; // Spalte 0 (Name) ist flexibel und nicht ziehbar
           return (
             <span
               key={column.key}
+              data-column={column.key === "type" && extCol ? "ext" : column.key}
               role="columnheader"
               aria-sort={sorted ? (spec.direction === "asc" ? "ascending" : "descending") : "none"}
               className={[sorted ? "s" : "", column.key === "size" || column.key === "modified" ? "numeric tabular-nums" : ""].join(" ")}
@@ -320,33 +323,35 @@ export function FileList({ w }: { w: WinIdx }) {
           );
         })}
       </div>
-      {entries.map((entry, index) => (
-        <Row
-          key={entry.name}
-          w={w}
-          index={index}
-          entry={entry}
-          selected={selection.selected.has(entry.name)}
-          current={index === focusIndex}
-          language={language}
-          extCol={extCol}
-          owners={owners}
-          local={listing.path?.startsWith("/") === true}
-          dropInto={dropFolder === entry.name}
-        />
-      ))}
-      {listing.error ? (
-        <div className="pane-msg error" role="alert">
-          {listing.error}
-          {isArchivePath(listing.path ?? "") ? (
-            <button type="button" className="tb small" onMouseDown={(event) => event.preventDefault()} onClick={() => void controller.goUp(w)}>
-              {tr("archive.leave")}
-            </button>
-          ) : null}
-        </div>
-      ) : message ? (
-        <div className="pane-msg">{message}</div>
-      ) : null}
+      <ListBody w={w}>
+        {entries.map((entry, index) => (
+          <Row
+            key={entry.name}
+            w={w}
+            index={index}
+            entry={entry}
+            selected={selection.selected.has(entry.name)}
+            current={index === focusIndex}
+            language={language}
+            extCol={extCol}
+            owners={owners}
+            local={listing.path?.startsWith("/") === true}
+            dropInto={dropFolder === entry.name}
+          />
+        ))}
+        {listing.error ? (
+          <div className="pane-msg error" role="alert">
+            {listing.error}
+            {isArchivePath(listing.path ?? "") ? (
+              <button type="button" className="tb small" onMouseDown={(event) => event.preventDefault()} onClick={() => void controller.goUp(w)}>
+                {tr("archive.leave")}
+              </button>
+            ) : null}
+          </div>
+        ) : message ? (
+          <div className="pane-msg">{message}</div>
+        ) : null}
+      </ListBody>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useAppState, useController, useLanguage, useRuntime, useT } from "../ap
 import type { WinIdx } from "../app/state";
 import { formatBytes, formatDate } from "../i18n";
 import type { TrashEntry } from "../ipc/types";
+import { ListBody } from "./ListBody";
 import { Icon } from "./Icon";
 
 const COLUMNS = "minmax(0, 1.6fr) minmax(0, 1.6fr) 130px 80px";
@@ -85,15 +86,15 @@ export function TrashView({ w }: { w: WinIdx }) {
         <button type="button" className="tb danger" disabled={!has} onClick={() => controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" })}>{tr("trash.empty")}</button>
         <span className="trash-info" role="status">{info}</span>
       </div>
-      {error ? <div className="trash-empty" role="alert">{tr("sidebar.trashUnavailable")}</div> : null}
-      {empty && !error ? <div className="trash-empty"><div><Icon name="trash" size={28} /><b>{tr("trash.emptyTitle")}</b>{tr("trash.emptyHint")}</div></div> : null}
-      {has ? (
-        <div ref={gridRef} className="list" role="grid" aria-label={tr("trash.title")} aria-multiselectable="true" aria-rowcount={entries.length + 1}
-          aria-activedescendant={`trash-${w}-${cursor}`} tabIndex={0} onKeyDown={onKeyDown} onFocus={() => controller.setActive(w)}>
-          <div role="row" aria-rowindex={1} className="head tv" style={{ "--df-cols": COLUMNS } as React.CSSProperties}>
-            <span role="columnheader">{tr("column.name")}</span><span role="columnheader">{tr("trash.colOriginal")}</span>
-            <span role="columnheader">{tr("trash.colDeleted")}</span><span role="columnheader" className="num">{tr("column.size")}</span>
-          </div>
+      <div ref={gridRef} className="list" role="grid" aria-label={tr("trash.title")} aria-multiselectable="true" aria-rowcount={has ? entries.length + 1 : 0}
+        aria-activedescendant={has ? `trash-${w}-${cursor}` : undefined} tabIndex={0} onKeyDown={onKeyDown} onFocus={() => controller.setActive(w)}>
+        {has ? <div role="row" aria-rowindex={1} className="head tv" style={{ "--df-cols": COLUMNS } as React.CSSProperties}>
+          <span role="columnheader">{tr("column.name")}</span><span role="columnheader">{tr("trash.colOriginal")}</span>
+          <span role="columnheader">{tr("trash.colDeleted")}</span><span role="columnheader" className="num">{tr("column.size")}</span>
+        </div> : null}
+        <ListBody w={w}>
+          {error ? <div className="trash-empty" role="alert">{tr("sidebar.trashUnavailable")}</div> : null}
+          {empty && !error ? <div className="trash-empty"><div><Icon name="trash" size={28} /><b>{tr("trash.emptyTitle")}</b>{tr("trash.emptyHint")}</div></div> : null}
           {entries.map((entry, index) => (
             <div key={entry.id} id={`trash-${w}-${index}`} role="row" aria-rowindex={index + 2} aria-selected={selected.has(entry.id)}
               className={`row tv${entry.isDir ? " d" : ""}${selected.has(entry.id) ? " sel" : ""}${index === cursor && active ? " cur" : ""}`}
@@ -106,8 +107,8 @@ export function TrashView({ w }: { w: WinIdx }) {
               <span role="gridcell" className="num tabular-nums">{entry.size === null ? "" : formatBytes(entry.size, language)}</span>
             </div>
           ))}
-        </div>
-      ) : null}
+        </ListBody>
+      </div>
       {list?.truncated ? <div className="foot" role="status">{tr("trash.truncated", { count: entries.length })}</div> : null}
       {menu ? (
         <div className="menu-backdrop" onMouseDown={closeMenu} onContextMenu={event => { event.preventDefault(); closeMenu(); }}>

@@ -1069,7 +1069,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     dispatch({
       type: "window",
       w,
-      update: (win) => tabs.setSort(win, formatSort(toggleSort(visibleSort(tabs.activeTab(win).sort, get().settings.showOwnerColumns === true), key))),
+      update: (win) => tabs.setSort(win, formatSort(toggleSort(visibleSort(tabs.activeTab(win).sort, get().settings), key))),
     });
   }
   const setFilter = (w: WinIdx, text: string): void => dispatch({ type: "window", w, update: (win) => tabs.setFilter(win, text) });
