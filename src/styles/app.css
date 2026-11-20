@@ -676,7 +676,7 @@ html.editor-window-root body { padding: 0; }
 .settings-side { background: var(--panel2); border-right: 1px solid var(--line); min-height: 0; display: flex; flex-direction: column; padding: 10px; gap: 10px; }
 .settings-search { width: 100%; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 6px; color: var(--fg); font: inherit; }
 .settings-filters { display: flex; gap: 4px; }
-.settings-filters .tb { flex: 1; padding: 4px; }
+.settings-filters .tb { flex: 1 1 auto; padding: 4px 8px; white-space: nowrap; }
 .settings-filters [aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
 .settings-nav { display: flex; flex-direction: column; gap: 3px; overflow: auto; }
 .settings-nav button { display: flex; gap: 8px; align-items: center; border: 0; background: transparent; color: var(--fg); padding: 8px; border-radius: 5px; font: inherit; text-align: left; cursor: pointer; }
