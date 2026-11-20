@@ -171,11 +171,17 @@ export const defaultAccent = (theme: ThemeName): string => (theme === "papier" |
 
 export type ThemeSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize">;
 
+/** Die tatsächlich wirksame Akzentfarbe (automatisch, eigene oder Design-Vorgabe). */
+export function effectiveAccent(settings: Pick<Settings, "theme" | "accent" | "accentAutomatic">): string {
+  const theme: ThemeName = settings.theme in themes ? settings.theme : "schiefer";
+  return settings.accentAutomatic ? defaultAccent(theme) : isValidHex(settings.accent) ? settings.accent.toLowerCase() : themes[theme].accent;
+}
+
 /** Alle CSS-Variablen für die Einstellungen (Namen wie im Mockup). Ungültiges fällt auf Vorgaben zurück. */
 export function themeVariables(settings: ThemeSettings): Record<string, string> {
   const tokens = themes[settings.theme] ?? themes.schiefer;
   const theme: ThemeName = settings.theme in themes ? settings.theme : "schiefer";
-  const accent = settings.accentAutomatic ? defaultAccent(theme) : isValidHex(settings.accent) ? settings.accent.toLowerCase() : tokens.accent;
+  const accent = effectiveAccent(settings);
   const fontSize = Number.isFinite(settings.fontSize)
     ? Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(settings.fontSize)))
     : 13;

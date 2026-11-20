@@ -3,9 +3,9 @@ import { useAppState, useController, useLanguage, useT } from "../app/context";
 import { activeTabOf, visibleEntries, type WinIdx } from "../app/state";
 import { createTranslator, formatBytes, formatDate, type Language } from "../i18n";
 import type { Entry } from "../ipc/types";
-import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, columnTemplate, columnWidthsFor, ownerMinWidth, type ColumnTriple } from "../state/columns";
+import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, columnTemplate, columnWidthsFor, ownerColumnTemplates, type ColumnTriple } from "../state/columns";
 import { isArchivePath } from "../state/paths";
-import { fileType, parseSort, type SortKey } from "../state/sort";
+import { fileType, visibleSort, type SortKey } from "../state/sort";
 import { formatPermissions } from "../state/permissions";
 import { EntryIcon, Icon } from "./Icon";
 
@@ -210,7 +210,7 @@ export function FileList({ w }: { w: WinIdx }) {
     event.stopPropagation();
     setLive(widthAt(slot, (draftRef.current ?? savedWidths)[slot] + delta));
   };
-  const spec = parseSort(sort);
+  const spec = visibleSort(sort, owners);
   const ref = useRef<HTMLDivElement>(null);
   const focusIndex = Math.min(selection.focus, Math.max(0, entries.length - 1));
 
@@ -261,7 +261,7 @@ export function FileList({ w }: { w: WinIdx }) {
       tabIndex={0}
       aria-label={`${tr("pane.listLabel")} – ${tr(w === 0 ? "pane.left" : "pane.right")}`}
       aria-multiselectable="true"
-      style={{ "--df-cols": columnTemplate(widths, owners), ...(owners ? { "--df-min": `${ownerMinWidth(widths)}px` } : {}) } as CSSProperties}
+      style={{ "--df-cols": columnTemplate(widths), ...(owners ? ownerColumnTemplates(widths, extCol) : {}) } as CSSProperties}
       aria-rowcount={entries.length + 1}
       aria-activedescendant={entries.length > 0 ? rowId(w, focusIndex) : undefined}
       onFocus={() => controller.setActive(w)}

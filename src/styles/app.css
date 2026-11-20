@@ -371,13 +371,13 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 
 /* Keep filename space before optional metadata columns. */
 @container (max-width: 620px) {
-  .head:not(.ext-split):not(.tv), .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px 130px; }
-  .head:not(.ext-split):not(.tv) > :nth-child(3), .row:not(.ext-split):not(.tv) > :nth-child(3) { display: none; }
+  .list:not(.owner-columns) .head:not(.ext-split):not(.tv), .list:not(.owner-columns) .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px 130px; }
+  .list:not(.owner-columns) .head:not(.ext-split):not(.tv) > :nth-child(3), .list:not(.owner-columns) .row:not(.ext-split):not(.tv) > :nth-child(3) { display: none; }
 }
 @container (max-width: 500px) {
-  .head:not(.ext-split):not(.tv), .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px; }
-  .head.ext-split, .row.ext-split { grid-template-columns: minmax(180px, 1fr) 56px 84px; }
-  .head:not(.tv) > :nth-child(4), .row:not(.tv) > :nth-child(4) { display: none; }
+  .list:not(.owner-columns) .head:not(.ext-split):not(.tv), .list:not(.owner-columns) .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px; }
+  .list:not(.owner-columns) .head.ext-split, .list:not(.owner-columns) .row.ext-split { grid-template-columns: minmax(180px, 1fr) 56px 84px; }
+  .list:not(.owner-columns) .head:not(.tv) > :nth-child(4), .list:not(.owner-columns) .row:not(.tv) > :nth-child(4) { display: none; }
 }
 .settings .field-help { grid-column: 1 / -1; }
 .warning-slot { height: 1.5em; overflow: auto; }
@@ -635,14 +635,32 @@ html.editor-window-root body { padding: 0; }
 .sidebar-eject:hover, .sidebar-eject:focus-visible { background: color-mix(in srgb, currentColor 12%, transparent); }
 .sidebar-icons .sidebar-eject { right: 0; top: 0; }
 
-/* Ownership columns stay in one grid even under the compact pane breakpoints. */
-.owner-columns { overflow-x: auto; }
-.owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-cols) !important; min-width: var(--df-min); }
-.owner-columns .head > span, .owner-columns .row > span { display: block !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Both grids have identical content boxes, including the row's cursor border. */
+.owner-columns { overflow-x: hidden; }
+.owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-all); }
+.owner-columns .head { border-left: 2px solid transparent; }
+.owner-columns .head > span, .owner-columns .row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .owner-columns .head > span { overflow: visible; }
-.owner-columns .row > .n { display: flex !important; }
 .owner-columns .head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .owner-columns .permissions { font-family: monospace; }
+@container (width < 860px) {
+  .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-no-type); }
+  .owner-columns .head:not(.ext-split) > :nth-child(3), .owner-columns .row:not(.ext-split) > :nth-child(3) { display: none; }
+}
+@container (width < 700px) {
+  .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-no-date); }
+  .owner-columns .head > :nth-child(4), .owner-columns .row > :nth-child(4) { display: none; }
+}
+@container (width < 560px) {
+  .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-small); }
+  .owner-columns .head:not(.ext-split) > :nth-child(2), .owner-columns .row:not(.ext-split) > :nth-child(2),
+  .owner-columns .head > :nth-child(3), .owner-columns .row > :nth-child(3) { display: none; }
+}
+@container (width < 440px) {
+  .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-minimal); }
+  .owner-columns .head > :nth-child(n+6), .owner-columns .row > :nth-child(n+6) { display: none; }
+  .owner-columns .head > :nth-child(2), .owner-columns .row > :nth-child(2) { display: none; }
+}
 
 .pane[data-tint] .row.sel, [data-fm="weiss"] .pane .row.sel { background: var(--sel); }
 .pane[data-tint] .row.cur, .pane[data-tint].active .row.cur.sel,

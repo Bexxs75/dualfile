@@ -22,14 +22,25 @@ export function columnWidthsFor(settings: Pick<Settings, "columnWidths">, mode: 
   return [0, 1, 2].map((i) => clampColumn(Number(stored[i]), defaults[i])) as ColumnTriple;
 }
 
-/** Wert für die CSS-Variable `--df-cols`: Name flexibel, dann die drei festen Spalten. */
-export function columnTemplate(widths: ColumnTriple, owners = false): string {
-  // shortcut: feste Breiten + waagrechtes Scrollen im schmalen Fenster statt Abschneiden
-  if (owners) return `minmax(160px, 1fr) ${widths[0]}px ${widths[1]}px ${widths[2]}px 104px 72px 72px`;
+/** Existing layouts without ownership retain their fixed widths. */
+export function columnTemplate(widths: ColumnTriple): string {
   return `minmax(120px, 1fr) ${widths[0]}px ${widths[1]}px ${widths[2]}px`;
 }
 
-/** Gemeinsame Mindestbreite aller Zeilen mit Besitzer-Spalten, damit die Spalten beim waagrechten Scrollen fluchten. */
-export function ownerMinWidth(widths: ColumnTriple): number {
-  return 160 + widths[0] + widths[1] + widths[2] + 104 + 72 + 72;
+/** Cap metadata to the space left after name, owners and gaps; stored widths stay intact. */
+export function ownerColumnTemplates(widths: ColumnTriple, ext: boolean): Record<string, string> {
+  const template = (slots: number[], name = 160, owners = true) => {
+    const fixed = owners ? "96px 64px 64px" : "96px";
+    const reserved = name + (owners ? 224 : 96) + (slots.length + (owners ? 3 : 1)) * 6;
+    const total = slots.reduce((sum, i) => sum + widths[i]!, 0);
+    const metadata = slots.map(i => `min(${widths[i]}px, max(0px, calc((100% - ${reserved}px) * ${widths[i]! / total})))`);
+    return [`minmax(${name}px, 1fr)`, ...metadata, fixed].join(" ");
+  };
+  return {
+    "--df-owner-all": template([0, 1, 2]),
+    "--df-owner-no-type": template(ext ? [0, 1, 2] : [0, 2]),
+    "--df-owner-no-date": template(ext ? [0, 1] : [0]),
+    "--df-owner-small": template(ext ? [0] : [], 120),
+    "--df-owner-minimal": template([], 120, false),
+  };
 }

@@ -1654,33 +1654,91 @@ pub fn format_permissions(mode: u32) -> String {
     out.into_iter().collect()
 }
 
-/// One immutable process-wide snapshot avoids filesystem I/O per listing or per entry.
+/// Cache successful and failed NSS lookups per ID for the lifetime of the process.
 pub fn local_owner_name(id: u32, group: bool) -> Option<String> {
     use std::collections::HashMap;
-    use std::sync::OnceLock;
-    static USERS: OnceLock<HashMap<u32, String>> = OnceLock::new();
-    static GROUPS: OnceLock<HashMap<u32, String>> = OnceLock::new();
-    let (cache, path) = if group {
-        (&GROUPS, "/etc/group")
-    } else {
-        (&USERS, "/etc/passwd")
-    };
-    cache
-        .get_or_init(|| {
-            std::fs::read_to_string(path)
-                .unwrap_or_default()
-                .lines()
-                .filter_map(|line| {
-                    let mut fields = line.split(':');
-                    let name = fields.next()?;
-                    fields.next()?;
-                    let id = fields.next()?.parse().ok()?;
-                    Some((id, name.to_owned()))
-                })
-                .collect()
-        })
-        .get(&id)
-        .cloned()
+    use std::sync::{Mutex, OnceLock};
+    type OwnerCache = Mutex<HashMap<(u32, bool), Option<String>>>;
+    static CACHE: OnceLock<OwnerCache> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    let lock = || cache.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(hit) = lock().get(&(id, group)) {
+        return hit.clone();
+    }
+    // NSS (LDAP, SSSD) can block; resolve without holding the lock. A racing duplicate lookup is harmless.
+    let name = resolve_owner_name(id, group);
+    lock().entry((id, group)).or_insert(name).clone()
+}
+
+#[cfg(unix)]
+fn resolve_owner_name(id: u32, group: bool) -> Option<String> {
+    let mut buffer = vec![0u8; 1024];
+    loop {
+        // SAFETY: the reentrant NSS functions receive initialized structs and a writable
+        // buffer of the stated length. A successful non-null result owns no memory;
+        // its name is copied while the backing buffer is still alive.
+        let (status, name) = unsafe {
+            if group {
+                let mut record: libc::group = std::mem::zeroed();
+                let mut result = std::ptr::null_mut();
+                let status = libc::getgrgid_r(
+                    id,
+                    &mut record,
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                );
+                (
+                    status,
+                    if status == 0 && !result.is_null() {
+                        record.gr_name
+                    } else {
+                        std::ptr::null_mut()
+                    },
+                )
+            } else {
+                let mut record: libc::passwd = std::mem::zeroed();
+                let mut result = std::ptr::null_mut();
+                let status = libc::getpwuid_r(
+                    id,
+                    &mut record,
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    &mut result,
+                );
+                (
+                    status,
+                    if status == 0 && !result.is_null() {
+                        record.pw_name
+                    } else {
+                        std::ptr::null_mut()
+                    },
+                )
+            }
+        };
+        if status == libc::ERANGE {
+            // Bound memory use even for a broken NSS provider.
+            if buffer.len() >= 16 * 1024 * 1024 {
+                return None;
+            }
+            buffer.resize(buffer.len() * 2, 0);
+            continue;
+        }
+        if status != 0 || name.is_null() {
+            return None;
+        }
+        // SAFETY: NSS returned a successful record whose name lives in buffer.
+        return Some(
+            unsafe { std::ffi::CStr::from_ptr(name) }
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+}
+
+#[cfg(not(unix))]
+fn resolve_owner_name(_id: u32, _group: bool) -> Option<String> {
+    None
 }
 
 #[cfg(test)]
@@ -1711,6 +1769,10 @@ mod owner_tests {
     #[cfg(unix)]
     #[test]
     fn local_listing_has_metadata_ownership() {
+        // SAFETY: these process identity queries have no preconditions.
+        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        assert!(local_owner_name(uid, false).is_some());
+        assert!(local_owner_name(gid, true).is_some());
         use std::os::unix::fs::MetadataExt;
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("owned");

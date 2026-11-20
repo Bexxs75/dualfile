@@ -1,4 +1,4 @@
-import { contrastRatio, isValidHex, themes, type ThemeName } from "./tokens";
+import { contrastRatio, inkForAccent, isValidHex, themes, type ThemeName } from "./tokens";
 
 /** sRGB mixing matches the colour picker: 100% preserves the chosen hex exactly. */
 export function mix(a: string, b: string, fraction: number): string {
@@ -7,7 +7,8 @@ export function mix(a: string, b: string, fraction: number): string {
   ).toString(16).padStart(2, "0")).join("");
 }
 
-export function paneTintVariables(color: string | undefined, strength: number | undefined, theme: ThemeName): Record<string, string> {
+/** `accent` is the effective accent of the app (see effectiveAccent); defaults to the design accent. */
+export function paneTintVariables(color: string | undefined, strength: number | undefined, theme: ThemeName, accent?: string): Record<string, string> {
   if (!color || !isValidHex(color)) return {};
   const amount = Number.isFinite(strength) ? Math.max(80, Math.min(100, strength!)) : 100;
   const panel = mix((themes[theme] ?? themes.schiefer).panel, color, amount / 100);
@@ -21,9 +22,16 @@ export function paneTintVariables(color: string | undefined, strength: number | 
   const current = mix(panel, target, inward ? 0.16 : 0.5);
   const surfaces = [panel, selection, current];
   const readable = (preferred: string) => surfaces.every(bg => contrastRatio(preferred, bg) >= 4.5) ? preferred : ink;
+  const tokens = themes[theme] ?? themes.schiefer;
+  const fg = readable(light ? "#1b1f24" : "#f2f6fa");
+  const wanted = accent && isValidHex(accent) ? accent.toLowerCase() : tokens.accent;
+  const paneAccent = contrastRatio(wanted, panel) >= 3 ? wanted : fg;
   return {
+    "--warn": readable(tokens.warning),
+    "--accent": paneAccent,
+    "--accent-ink": paneAccent === fg ? (light ? "#ffffff" : "#000000") : inkForAccent(paneAccent, theme),
     "--panel": panel, "--bg": panel, "--panel2": selection, "--raised": selection,
-    "--fg": readable(light ? "#1b1f24" : "#f2f6fa"),
+    "--fg": fg,
     "--muted": readable(light ? "#424a53" : "#d6e4ef"),
     "--dir": readable(light ? "#163c70" : "#80ffff"),
     "--sel": selection, "--cur": current, "--accent-soft": selection,

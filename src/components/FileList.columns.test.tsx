@@ -116,3 +116,34 @@ test.each(["/local", "sftp:server!/remote"])("owner cells use local names only, 
   expect(screen.getByTitle("uid 12345")).toHaveTextContent("12345");
   expect(screen.getByText("rwsr-sr-t")).toBeInTheDocument();
 });
+
+test.each([false, true])("owner layout shares responsive templates and preserves stored widths (ext=%s)", async extensionColumn => {
+  const { rt } = await setup({ extensionColumn, showOwnerColumns: true,
+    columnWidths: { normal: [400, 400, 400], ext: [400, 400, 400] } });
+  const grid = screen.getByRole("grid");
+  expect(grid).toHaveClass("owner-columns");
+  expect(grid.style.getPropertyValue("--df-min")).toBe("");
+  expect(grid.style.getPropertyValue("--df-owner-all")).toContain("min(400px");
+  expect(grid.style.getPropertyValue("--df-owner-all")).toContain("96px 64px 64px");
+  if (extensionColumn) {
+    // Ext bleibt im kleinen Layout als eigene Spalte erhalten
+    expect(grid.style.getPropertyValue("--df-owner-small")).toMatch(/^minmax\(120px, 1fr\) min\(400px, .*\) 96px 64px 64px$/);
+  } else {
+    expect(grid.style.getPropertyValue("--df-owner-small")).toBe("minmax(120px, 1fr) 96px 64px 64px");
+  }
+  expect(grid.style.getPropertyValue("--df-owner-minimal")).toBe("minmax(120px, 1fr) 96px");
+  for (const row of grid.querySelectorAll(".head, .row")) {
+    expect(row.classList.contains("ext-split")).toBe(extensionColumn);
+    expect(row.querySelectorAll(":scope > span")).toHaveLength(7);
+  }
+  expect(rt.store.getState().settings.columnWidths).toEqual({ normal: [400, 400, 400], ext: [400, 400, 400] });
+});
+
+test("a hidden owner sort reverses the visible name sort on the first click", async () => {
+  const { rt } = await setup({ showOwnerColumns: false });
+  act(() => rt.store.dispatch({ type: "window", w: 0,
+    update: win => ({ ...win, tabs: win.tabs.map((tab, i) => i === win.activeTab ? { ...tab, sort: "uid:desc" } : tab) }) }));
+  act(() => rt.controller.sortBy(0, "name"));
+  const win = rt.store.getState().windows[0];
+  expect(win.tabs[win.activeTab]!.sort).toBe("name:desc");
+});

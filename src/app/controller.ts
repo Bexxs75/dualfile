@@ -27,7 +27,7 @@ import {
 import { currentRemotePath, parseRemotePath, archiveHostFolder, archiveRootOf, baseName, isArchiveName, isArchivePath, isTrashPath, TRASH_PATH, joinPath, normalizePath, parentPath } from "../state/paths";
 import { suggestPackBase } from "../state/pack";
 import * as sel from "../state/selection";
-import { formatSort, toggleSort, parseSort, type SortKey } from "../state/sort";
+import { formatSort, toggleSort, visibleSort, type SortKey } from "../state/sort";
 import * as tabs from "../state/tabs";
 import { createTypeahead, isTypeaheadKey, typeahead as typeaheadStep } from "../state/typeahead";
 import { accentPresets } from "../themes/tokens";
@@ -1069,7 +1069,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     dispatch({
       type: "window",
       w,
-      update: (win) => tabs.setSort(win, formatSort(toggleSort(parseSort(tabs.activeTab(win).sort), key))),
+      update: (win) => tabs.setSort(win, formatSort(toggleSort(visibleSort(tabs.activeTab(win).sort, get().settings.showOwnerColumns === true), key))),
     });
   }
   const setFilter = (w: WinIdx, text: string): void => dispatch({ type: "window", w, update: (win) => tabs.setFilter(win, text) });

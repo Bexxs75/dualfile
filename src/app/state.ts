@@ -6,7 +6,7 @@ import { filterEntries } from "../state/filter";
 import type { CompareSession, DiffSession } from "../state/compare";
 import { isFinished, jobsReducer, closeJob, emptyJobs, type DeleteDialogModel, type JobsState, type OperationPlan } from "../state/operations";
 import { reconcile, type SelectionState } from "../state/selection";
-import { parseSort, sortEntries } from "../state/sort";
+import { visibleSort, sortEntries } from "../state/sort";
 import { joinPath } from "../state/paths";
 import { activeTab, createWindow, fromSession, setSelection, type WindowState } from "../state/tabs";
 
@@ -229,10 +229,10 @@ export function visibleEntries(state: AppState, w: WinIdx): readonly Entry[] {
   const tab = activeTab(state.windows[w]);
   const listing = state.listings[w];
   if (listing.path !== tab.path) return NONE;
-  const key = `${tab.path}\u0000${tab.sort}\u0000${tab.filter}\u0000${state.showHidden}\u0000${state.settings.showParentEntry !== false}`;
+  const key = `${tab.path}\u0000${tab.sort}\u0000${state.settings.showOwnerColumns === true}\u0000${tab.filter}\u0000${state.showHidden}\u0000${state.settings.showParentEntry !== false}`;
   const cached = caches[w];
   if (cached && cached.raw === listing.entries && cached.key === key) return cached.result;
-  const spec = parseSort(tab.sort);
+  const spec = visibleSort(tab.sort, state.settings.showOwnerColumns === true);
   const base = tab.path === "/" || state.settings.showParentEntry === false ? listing.entries : [UP_ENTRY, ...listing.entries];
   const result = sortEntries(filterEntries(base, tab.filter, state.showHidden), spec.key, spec.direction);
   caches[w] = { raw: listing.entries, key, result };

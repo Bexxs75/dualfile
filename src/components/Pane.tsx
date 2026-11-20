@@ -5,6 +5,7 @@ import { formatBytes } from "../i18n";
 import { baseName, crumbsOf, displayPath, joinPath, isArchivePath, isTrashPath, parseRemotePath } from "../state/paths";
 import { summary } from "../state/selection";
 import { paneTintVariables } from "../themes/paneTint";
+import { effectiveAccent } from "../themes/tokens";
 import { FileList } from "./FileList";
 import { TrashView } from "./TrashView";
 import { QuickView } from "./lister/QuickView";
@@ -281,7 +282,9 @@ export function Pane({ w }: { w: WinIdx }) {
     const entry = focusedEntry(state, source);
     return entry && entry.name !== ".." ? joinPath(folder, entry.name) : folder;
   });
-  const tintSettings = useAppState(state => state.settings);
+  const paneTintStrength = useAppState(state => state.settings.paneTintStrength);
+  const accent = useAppState(state => effectiveAccent(state.settings));
+  const theme = useAppState(state => state.settings.theme);
   const paneColor = useAppState((state) => (w === 0 ? state.settings.paneColorLeft : state.settings.paneColorRight));
   const preview = useAppState((state) => state.quickView && state.active !== w);
   const trashView = useAppState(state => isTrashPath(activeTabOf(state, w).path));
@@ -289,7 +292,7 @@ export function Pane({ w }: { w: WinIdx }) {
     <section
       className={`pane${active ? " active" : ""}${dropTarget ? " drop" : ""}`}
       data-pane={w}
-      {...(paneColor ? { "data-tint": "", style: paneTintVariables(paneColor, tintSettings.paneTintStrength, tintSettings.theme) as React.CSSProperties } : {})}
+      {...(paneColor ? { "data-tint": "", style: paneTintVariables(paneColor, paneTintStrength, theme, accent) as React.CSSProperties } : {})}
       aria-label={tr(w === 0 ? "pane.left" : "pane.right")}
       onMouseDown={() => controller.setActive(w)}
       onDragOver={(event) => {

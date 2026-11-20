@@ -96,3 +96,9 @@ export function toggleSort(current: SortSpec, key: SortKey): SortSpec {
   if (current.key === key) return { key, direction: current.direction === "asc" ? "desc" : "asc" };
   return { key, direction: "asc" };
 }
+
+/** Hidden ownership metadata must not determine the visible order. */
+export function visibleSort(value: string, owners: boolean): SortSpec {
+  const spec = parseSort(value);
+  return !owners && ["permissions", "uid", "gid"].includes(spec.key) ? { ...DEFAULT_SORT } : spec;
+}

@@ -98,3 +98,17 @@ describe("Aufträge und Dialoge", () => {
     expect(state.toasts).toHaveLength(0);
   });
 });
+
+test.each(["permissions", "uid", "gid"])("hidden %s sorting falls back to name ascending and invalidates cache", key => {
+  let state = ready();
+  const entries = [entry("a", "file", { mode: 1, uid: 1, gid: 1 }), entry("b", "file", { mode: 2, uid: 2, gid: 2 })];
+  state = run(state, { type: "window", w: 0,
+    update: win => ({ ...win, tabs: win.tabs.map(tab => ({ ...tab, sort: `${key}:desc` })) }),
+    listing: { path: "/a", entries } });
+  state = { ...state, settings: { ...state.settings, showOwnerColumns: true } };
+  expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
+  state = { ...state, settings: { ...state.settings, showOwnerColumns: false } };
+  expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "a", "b"]);
+  state = { ...state, settings: { ...state.settings, showOwnerColumns: true } };
+  expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
+});
