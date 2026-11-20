@@ -5,6 +5,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-11-20
+
 ### Changed
 
 - Pane colour only tints the file list (#25).

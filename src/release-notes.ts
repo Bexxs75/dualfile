@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.3.10": {
+    date: "2026-11-20",
+    de: {
+      new: [],
+      improved: ["Die Fensterfarbe färbt nur noch die Dateiliste. Tabs, Pfadzeile, Spaltenkopf und Statuszeile bleiben in den normalen Farben.", "Rechte, Besitzer (uid) und Gruppe (gid) lassen sich in den Einstellungen einzeln einblenden."],
+      fixed: [],
+    },
+    en: {
+      new: [],
+      improved: ["The pane colour now tints only the file list. Tabs, path bar, column header and status bar keep the normal colours.", "Permissions, owner (uid) and group (gid) can be shown individually in Settings."],
+      fixed: [],
+    },
+  },
   "0.3.9": {
     date: "2026-11-20",
     de: {
