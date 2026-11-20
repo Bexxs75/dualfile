@@ -58,6 +58,8 @@ export function settingChanged(settings: Settings, id: keyof Settings): boolean 
   if (id === "accentAutomatic") return false;
   if (id === "accent") return !(settings.accentAutomatic ?? defaultSettings.accentAutomatic);
   if ((id === "terminalBg" || id === "terminalFg") && settings.terminalColors !== "custom") return false;
+  // The "network" section can be collapsed in the sidebar but has no control here, so it does not count.
+  if (id === "sidebarCollapsed") return (settings.sidebarCollapsed ?? []).some(section => section !== "network");
   const value = settings[id] ?? settingDefault(id);
   const standard = settingDefault(id);
   if (Array.isArray(value) && Array.isArray(standard)) return JSON.stringify([...value].sort()) !== JSON.stringify([...standard].sort());

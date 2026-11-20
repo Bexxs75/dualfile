@@ -199,7 +199,7 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
     if (!confirmReset) { setConfirmReset(true); return; }
     setConfirmReset(false); setResetError("");
     controller.updateSettings(s => ({ ...catalog.reduce((next, entry) => resetSetting(next, entry.id), s), keybindings: {} }));
-    void system.setTray(false, language);
+    if (settings.trayEnabled) void system.setTray(false, language);
     if (autostartChanged) void resetAutostart();
   };
   const reset = (entry: SettingEntry) => {

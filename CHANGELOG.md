@@ -15,7 +15,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Fixed
 
-- Missing terminal-shell values display the frontend default (`auto`); the backend's existing `login` fallback is unchanged.
+- Missing terminal-shell values now show `login`, the same fallback the backend uses; the settings dialog's defaults match the backend's.
 - Unset pane colours show an empty swatch; tint opacity is disabled until a colour is selected.
 - Accent hex input accepts values without a leading `#`.
 - Sidebar width is constrained to 160–400 px with a slider, and restoring hidden entries reports when nothing is hidden.

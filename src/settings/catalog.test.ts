@@ -5,6 +5,10 @@ import { createTranslator } from "../i18n";
 import { catalog, normalizeSearch, resetSetting, resolveSection, settingChanged, settingSearch } from "./catalog";
 
 describe("settings catalog", () => {
+  test("a collapsed network section alone is not a modified value", () => {
+    expect(settingChanged({ ...defaultSettings, sidebarCollapsed: ["network"] }, "sidebarCollapsed")).toBe(false);
+    expect(settingChanged({ ...defaultSettings, sidebarCollapsed: ["network", "devices"] }, "sidebarCollapsed")).toBe(true);
+  });
   test("contains every editable Settings field exactly once", () => {
     const expected = ["language", "trayEnabled", "checkUpdatesOnStart", "theme", "accentAutomatic", "accent", "fontSize", "density", "showParentEntry", "extensionColumn", "showPermissionsColumn", "showUidColumn", "showGidColumn", "paneColorLeft", "paneColorRight", "paneTintStrength", "sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarDiscovery", "sidebarHidden", "terminalShell", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy"];
     expect(catalog.map(e => e.id).sort()).toEqual(expected.sort());

@@ -62,7 +62,7 @@ export function SystemSettings({ field, query = "", onReset }: { field?: "autost
           <p id="autostart-help" className="field-help"><Highlight text={tr("system.autostartHelp")} query={query} /></p>
           {(autostart.error || state.status?.autostartError) && <p role="alert" className="field-error">{tr("system.autostartFailed", { message: autostart.error || state.status?.autostartError || "" })}</p>}
         </div>
-        {onReset && <div className="setting-reset"><span className="modified-dot" title={tr("settings.changed")}>●</span><button className="link" onClick={onReset}>{tr("settings.reset")}</button></div>}
+        {onReset && <div className="setting-reset"><span className="modified-dot" title={tr("settings.changed")}><span aria-hidden="true">●</span><span className="sr-only"> {tr("settings.changed")}</span></span><button className="link" type="button" aria-label={`${tr("settings.reset")}: ${tr("system.autostart")}`} onClick={onReset}>{tr("settings.reset")}</button></div>}
       </div>}
     </section>
   </>;
