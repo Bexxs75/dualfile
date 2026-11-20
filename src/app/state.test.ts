@@ -112,3 +112,20 @@ test.each(["permissions", "uid", "gid"])("hidden %s sorting falls back to name a
   state = { ...state, settings: { ...state.settings, showOwnerColumns: true } };
   expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
 });
+
+test("toggling owner columns keeps the cursor on the same entry when the hidden sort reorders the list", () => {
+  let state = ready();
+  const entries = [entry("a", "file", { uid: 1 }), entry("b", "file", { uid: 2 })];
+  state = run(state, { type: "window", w: 0,
+    update: win => ({ ...win, tabs: win.tabs.map(tab => ({ ...tab, sort: "uid:desc" })) }),
+    listing: { path: "/a", entries } });
+  state = run(state, { type: "settings", update: s => ({ ...s, showOwnerColumns: true }) });
+  expect(visibleEntries(state, 0).map(e => e.name)).toEqual(["..", "b", "a"]);
+  state = run(state, { type: "selection", w: 0, update: (sel, e) => click(sel, e, 1) });
+  state = run(state, { type: "settings", update: s => ({ ...s, showOwnerColumns: false }) });
+  const focused = () => visibleEntries(state, 0)[activeTab(state.windows[0]).selection.focus]?.name;
+  expect(focused()).toBe("b");
+  expect(activeTab(state.windows[0]).selection.anchorName).toBe("b");
+  state = run(state, { type: "settings", update: s => ({ ...s, showOwnerColumns: true }) });
+  expect(focused()).toBe("b");
+});

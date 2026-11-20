@@ -396,8 +396,10 @@ export function reducer(state: AppState, action: Action): AppState {
     case "saveError": return { ...state, saveError: action.error };
     case "settings": {
       const next = { ...state, settings: action.update(state.settings) };
-      return (next.settings.showParentEntry !== false) === (state.settings.showParentEntry !== false)
-        ? next : reconcileWindow(reconcileWindow(next, 0), 1);
+      // Both settings change the visible order (".." entry, hidden owner sort), so cursor and selection follow by name.
+      const same = (next.settings.showParentEntry !== false) === (state.settings.showParentEntry !== false)
+        && (next.settings.showOwnerColumns === true) === (state.settings.showOwnerColumns === true);
+      return same ? next : reconcileWindow(reconcileWindow(next, 0), 1);
     }
     case "toggleHidden": {
       const next = { ...state, showHidden: !state.showHidden };
