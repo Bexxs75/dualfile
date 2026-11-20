@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.0": {
+    date: "2026-11-20",
+    de: {
+      new: ["Neue Einstellungen: acht Bereiche in einer Seitenleiste, eine Suche über alle Einstellungen und der Filter „Geändert“, der nur zeigt, was vom Standard abweicht.", "Jede Einstellung lässt sich einzeln zurücksetzen, „Alles auf Standard …“ fragt vorher nach.", "Bei Darstellung und Dateiliste zeigt eine Vorschau sofort, wie die Dateiliste aussieht.", "Unter Info & Hilfe öffnet ein Knopf das Handbuch (Wiki)."],
+      improved: ["Eine nicht gesetzte Fensterfarbe zeigt „keine“, die Deckkraft ist erst mit einer Farbe einstellbar.", "Die Akzentfarbe nimmt Werte auch ohne führendes # an."],
+      fixed: [],
+    },
+    en: {
+      new: ["New settings: eight sections in a sidebar, a search across all settings and a Modified filter that shows only what differs from the defaults.", "Every setting can be reset on its own; \u201cReset everything \u2026\u201d asks first.", "Appearance and File list show a live preview of the file list.", "Info & Help has a button that opens the manual (wiki)."],
+      improved: ["An unset pane colour shows \u201cnone\u201d; opacity can only be set once a colour is chosen.", "The accent colour accepts values without a leading #."],
+      fixed: [],
+    },
+  },
   "0.3.10": {
     date: "2026-11-20",
     de: {

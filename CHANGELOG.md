@@ -5,6 +5,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-20
+
 ### Changed
 
 - Settings reorganised into eight sections with a sidebar, search, a Modified filter, per-setting reset and a live file-list preview (#27).

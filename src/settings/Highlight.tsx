@@ -23,4 +23,3 @@ export function Highlight({ text, query }: { text: string; query: string }) {
   }
   return <>{pieces}{text.slice(sourceCursor)}</>;
 }
-
