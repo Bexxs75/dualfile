@@ -448,7 +448,7 @@ export interface Settings {
   showParentEntry?: boolean;
   /** Höhe (px) des eingebetteten Terminals; fehlt der Wert, gilt 260. */
   terminalHeight?: number;
-  /** Shell des eingebetteten Terminals: "auto" (fish mit Vorschlägen, sonst bash/sh), "bash" (immer schlichte bash/sh) oder "login" (eigene $SHELL mit Konfiguration). Fehlt der Wert, gilt "auto". */
+  /** Shell des eingebetteten Terminals: "auto" (fish mit Vorschlägen, sonst bash/sh), "bash" (immer schlichte bash/sh) oder "login" (eigene $SHELL mit Konfiguration). Fehlt der Wert, gilt "login". */
   terminalShell?: "auto" | "bash" | "login";
   /** Farben des Terminals: "theme" (aus dem Design), "classic", "green", "amber", "light" oder "custom" (terminalBg/terminalFg). Fehlt der Wert, gilt "green". */
   terminalColors?: "theme" | "classic" | "green" | "amber" | "light" | "custom";

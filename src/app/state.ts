@@ -132,14 +132,14 @@ export interface AppState {
 
 export const defaultSettings: Settings = {
   sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [], sidebarDiscovery: false,
-  version: 5,
+  version: 6,
   verifyPolicy: "auto",
   theme: "schiefer",
-  accent: "#e0a45c",
+  accent: "#4f8cff",
   accentAutomatic: true,
   showParentEntry: true,
   terminalHeight: 260,
-  terminalShell: "auto",
+  terminalShell: "login",
   terminalColors: "green",
   terminalBg: "#102030",
   terminalFg: "#f0e6d2",
@@ -157,10 +157,20 @@ export const defaultSettings: Settings = {
   lastUpdateCheck: null,
   lastSeenVersion: null,
   density: "normal",
-  fontSize: 13,
+  fontSize: 14,
   language: "auto",
   bookmarks: [],
-  session: { windows: [], activeWindow: 0 },
+  paneColorLeft: "",
+  paneColorRight: "",
+  keybindings: {},
+  columnWidths: {},
+  session: {
+    windows: [
+      { tabs: [{ path: "", sort: "name", filter: "" }], activeTab: 0 },
+      { tabs: [{ path: "", sort: "name", filter: "" }], activeTab: 0 },
+    ],
+    activeWindow: 0,
+  },
 };
 
 const emptyListing: PaneListing = { path: null, entries: [], error: null, loading: false };

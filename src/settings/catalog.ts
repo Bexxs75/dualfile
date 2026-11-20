@@ -22,7 +22,7 @@ export const catalog: readonly SettingEntry[] = [
   { id: "checkUpdatesOnStart", section: "allgemein", group: "updates", label: "updates.onStart", help: "updates.onStartHelp", kind: "switch" },
   { id: "theme", section: "darstellung", group: "design", label: "settings.theme", kind: "custom", options: ["schiefer", "papier", "werkstatt", "weiss"] },
   { id: "accentAutomatic", section: "darstellung", group: "design", label: "settings.accent.default", kind: "custom" },
-  { id: "accent", section: "darstellung", group: "design", label: "settings.accent", kind: "custom" },
+  { id: "accent", section: "darstellung", group: "design", label: "settings.accent", kind: "custom", keywords: ["settings.accent.default"] },
   { id: "fontSize", section: "darstellung", group: "text", label: "settings.fontSize", kind: "range", min: 10, max: 24, step: 1 },
   { id: "density", section: "darstellung", group: "text", label: "settings.density", kind: "segment", options: ["compact", "normal", "comfortable"] },
   { id: "showParentEntry", section: "dateiliste", group: "content", label: "settings.showParentEntry", kind: "switch" },
@@ -31,7 +31,7 @@ export const catalog: readonly SettingEntry[] = [
   ...(["Left", "Right"] as const).map(side => ({ id: `paneColor${side}` as keyof Settings, section: "dateiliste" as const, group: "paneColors", label: `settings.paneColors.${side.toLowerCase()}` as TranslationKey, kind: "custom" as const })),
   { id: "paneTintStrength", section: "dateiliste", group: "paneColors", label: "settings.paneTintStrength", kind: "range", min: 80, max: 100, step: 5, rare: true },
   { id: "sidebarMode", section: "seitenleiste", group: "display", label: "sidebar.mode", kind: "segment", options: ["hidden", "icons", "full"], optionPrefix: "sidebar" },
-  { id: "sidebarWidth", section: "seitenleiste", group: "display", label: "sidebar.width", kind: "range", min: 160, max: 400, step: 10, rare: true },
+  { id: "sidebarWidth", section: "seitenleiste", group: "display", label: "sidebar.width", kind: "range", min: 160, max: 400, step: 1, rare: true },
   { id: "sidebarCollapsed", section: "seitenleiste", group: "areas", label: "settings.areas", kind: "custom", keywords: ["sidebar.places", "sidebar.remote", "places.drives"] },
   { id: "sidebarDiscovery", section: "seitenleiste", group: "areas", label: "sidebar.discovery", help: "sidebar.discoveryHelp", kind: "switch", rare: true },
   { id: "sidebarHidden", section: "seitenleiste", group: "areas", label: "sidebar.resetHidden", help: "sidebar.desktopHelp", kind: "custom", rare: true },
@@ -54,12 +54,22 @@ export function settingDefault(id: keyof Settings): Settings[keyof Settings] {
   return defaultSettings[id] ?? (id === "paneColorLeft" || id === "paneColorRight" ? "" : undefined);
 }
 export function settingChanged(settings: Settings, id: keyof Settings): boolean {
+  // The automatic flag belongs to the accent row, not a second changed value.
+  if (id === "accentAutomatic") return false;
+  if (id === "accent") return !(settings.accentAutomatic ?? defaultSettings.accentAutomatic);
+  if ((id === "terminalBg" || id === "terminalFg") && settings.terminalColors !== "custom") return false;
   const value = settings[id] ?? settingDefault(id);
   const standard = settingDefault(id);
   if (Array.isArray(value) && Array.isArray(standard)) return JSON.stringify([...value].sort()) !== JSON.stringify([...standard].sort());
   return value !== standard;
 }
-export function resetSetting(settings: Settings, id: keyof Settings): Settings { return { ...settings, [id]: settingDefault(id) }; }
+export function resetSetting(settings: Settings, id: keyof Settings): Settings {
+  if (id === "accent" || id === "accentAutomatic") return { ...settings, accent: defaultSettings.accent, accentAutomatic: defaultSettings.accentAutomatic };
+  return { ...settings, [id]: settingDefault(id) };
+}
+export function settingVisible(settings: Settings, id: keyof Settings): boolean {
+  return id !== "accentAutomatic" && (!["terminalBg", "terminalFg"].includes(id) || settings.terminalColors === "custom");
+}
 export function settingSearch(entry: SettingEntry, tr: (key: TranslationKey) => string): string {
   return [...(entry.keywords ?? []).map(tr), tr(entry.label), entry.help ? tr(entry.help) : "", tr(`settings.section.${entry.section}` as TranslationKey), tr(`settings.group.${entry.group}` as TranslationKey), ...(entry.options ?? []).map(option => tr(`${entry.optionPrefix ?? entry.label}.${option}` as TranslationKey))].join(" ");
 }

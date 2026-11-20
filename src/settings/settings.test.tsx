@@ -19,13 +19,13 @@ test("search matches options/help across sections, highlights, counts and naviga
   const search = app.dlg.getByRole("searchbox");
   await app.user.type(search, "Papier");
   expect(app.dlg.getByRole("radio", { name: "Papier" }).querySelector("mark")).toHaveTextContent("Papier");
-  expect(app.dlg.getByRole("tab", { name: "Darstellung" })).toHaveTextContent("1");
-  expect(app.dlg.getByRole("tab", { name: "Terminal" })).toHaveClass("dim");
+  expect(app.dlg.getByRole("tab", { name: "Darstellung 1" })).toHaveTextContent("1");
+  expect(app.dlg.getByRole("tab", { name: "Terminal 0" })).toHaveClass("dim");
   await app.user.click(app.dlg.getByRole("radio", { name: "Papier" }));
   expect(app.state().theme).toBe("papier");
   await app.user.click(app.dlg.getByRole("button", { name: "Darstellung" }));
   expect(search).toHaveValue("");
-  expect(app.dlg.getByRole("tab", { name: "Darstellung" })).toHaveAttribute("aria-selected", "true");
+  expect(app.dlg.getByRole("tab", { name: "Darstellung geändert" })).toHaveAttribute("aria-selected", "true");
   await app.user.type(search, "Avahi");
   expect(app.dlg.getByRole("switch", { name: "Dienste im lokalen Netzwerk suchen" })).toBeInTheDocument();
   expect(app.dialog().querySelector("mark")).toHaveTextContent("Avahi");
@@ -129,15 +129,15 @@ test("preview tracks real design, accent, density, font, tint and extra columns"
   expect(head()).toHaveClass("ext-split");
 });
 
-test("missing shell is auto, accent accepts bare hex, sidebar slider is bounded and hidden state explicit", async () => {
+test("missing shell is login, accent accepts bare hex, sidebar slider is bounded and hidden state explicit", async () => {
   const app = await setup({ terminalShell: undefined });
   fireEvent.change(app.dlg.getByLabelText("Eigener Farbwert (#rrggbb)"), { target: { value: "112233" } });
   expect(app.state()).toMatchObject({ accent: "#112233", accentAutomatic: false });
   await app.user.click(app.dlg.getByRole("tab", { name: "Terminal" }));
-  expect(app.dlg.getByRole("combobox", { name: "Terminal-Shell" })).toHaveValue("auto");
+  expect(app.dlg.getByRole("combobox", { name: "Terminal-Shell" })).toHaveValue("login");
   await app.user.click(app.dlg.getByRole("tab", { name: "Seitenleiste" }));
   const width = app.dlg.getByRole("slider", { name: "Breite der Seitenleiste" });
-  expect(width).toHaveAttribute("min", "160"); expect(width).toHaveAttribute("max", "400"); expect(width).toHaveAttribute("step", "10");
+  expect(width).toHaveAttribute("min", "160"); expect(width).toHaveAttribute("max", "400"); expect(width).toHaveAttribute("step", "1");
   expect(app.dlg.getByText("Nichts ausgeblendet")).toBeInTheDocument();
 });
 
@@ -187,4 +187,49 @@ test("English search uses translated options and help", async () => {
   await app.user.clear(app.dlg.getByRole("searchbox"));
   await app.user.type(app.dlg.getByRole("searchbox"), "Avahi");
   expect(app.dlg.getByRole("switch")).toBeInTheDocument();
+});
+
+
+test("accent counts once in filter, footer and accessible tab, and resets together", async () => {
+  const app = await setup({ accentAutomatic: false, accent: "#123456" });
+  expect(app.dlg.getByRole("tab", { name: "Darstellung geändert" })).toBeInTheDocument();
+  expect(app.dialog().querySelector(".settings-footer")).toHaveTextContent("1 Werte");
+  await app.user.click(app.dlg.getByRole("button", { name: "Geändert (1)" }));
+  expect(app.dialog().querySelectorAll("[data-setting]")).toHaveLength(1);
+  await app.user.click(app.dlg.getByRole("button", { name: "Zurücksetzen: Akzentfarbe" }));
+  expect(app.state()).toMatchObject({ accentAutomatic: true, accent: defaultSettings.accent });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+});
+
+test("segment row is named by its visible label", async () => {
+  const app = await setup();
+  const group = app.dlg.getByRole("radiogroup", { name: "Zeilenhöhe" });
+  expect(group).toHaveAttribute("aria-labelledby", "label-density");
+  expect(within(group).getByRole("radio", { name: "Normal" })).toBeInTheDocument();
+});
+
+test("dragged sidebar width is rounded and the slider preserves every pixel", async () => {
+  const app = await setup();
+  act(() => app.runtime.controller.setSidebarWidth(237.4));
+  await app.user.click(app.dlg.getByRole("tab", { name: /Seitenleiste/ }));
+  const slider = app.dlg.getByRole("slider", { name: "Breite der Seitenleiste" });
+  expect(slider).toHaveValue("237");
+  expect(slider).toHaveAttribute("step", "1");
+  expect(app.dlg.getByText("237 px")).toBeInTheDocument();
+  fireEvent.change(slider, { target: { value: "238" } });
+  expect(app.state().sidebarWidth).toBe(238);
+});
+
+
+test("automatic accent and hidden terminal colours leave counters and tabs at defaults", async () => {
+  const app = await setup({ accent: "#123456", terminalBg: "#000000", terminalFg: "#ffffff" });
+  expect(app.dlg.getByRole("tab", { name: "Darstellung" })).toBeInTheDocument();
+  expect(app.dlg.getByRole("tab", { name: "Terminal" })).toBeInTheDocument();
+  await app.user.click(app.dlg.getByRole("button", { name: "Geändert (0)" }));
+  expect(app.dlg.getByRole("status")).toHaveTextContent("Alles steht auf Standard.");
+  await app.user.click(app.dlg.getByRole("tab", { name: "Terminal 0" }));
+  await app.user.click(app.dlg.getByRole("button", { name: /Eigene/ }));
+  expect(app.dlg.getByRole("button", { name: "Geändert (3)" })).toBeInTheDocument();
+  await app.user.click(app.dlg.getByRole("button", { name: "Geändert (3)" }));
+  expect(app.dialog().querySelectorAll("[data-setting]")).toHaveLength(3);
 });

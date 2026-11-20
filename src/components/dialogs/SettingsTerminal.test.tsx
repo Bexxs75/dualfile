@@ -17,7 +17,7 @@ async function setup(initial: Settings = { ...defaultSettings, language: "de" })
   runtimes.push(rt);
   await rt.controller.start();
   render(<RuntimeProvider runtime={rt}><SettingsDialog /></RuntimeProvider>);
-  await userEvent.setup().click(screen.getByRole("tab", { name: "Terminal" }));
+  await userEvent.setup().click(screen.getByRole("tab", { name: /^Terminal(?: geändert)?$/ }));
   return { api, rt, user: userEvent.setup(), save: vi.spyOn(api, "saveSettings") };
 }
 const contrast = () => screen.getAllByRole("status").find(e => e.textContent?.includes(": 1"))!;

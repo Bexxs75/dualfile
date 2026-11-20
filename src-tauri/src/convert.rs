@@ -1068,6 +1068,15 @@ pub fn system_mount_error(error: dualfile_remote::system_mount::MountError) -> U
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backend_defaults_match_frontend_fixture() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../src/settings/backend-defaults.json")).unwrap();
+        let defaults = SettingsDto::from(&settings::Settings::default());
+        assert_eq!(serde_json::to_value(defaults).unwrap(), fixture);
+    }
+
     use dualfile_core::vfs::VPath;
     use serde_json::json;
     use std::path::PathBuf;

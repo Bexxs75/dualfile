@@ -23,7 +23,7 @@ import {
 } from "../../themes/terminal";
 import { AboutSettings, SystemSettings, TroubleshootSettings, UpdateSettings, useSystem } from "./SystemDialogs";
 import { KeybindingsSettings } from "./KeybindingsSettings";
-import { actionCatalog, catalog, sections, sectionIcons, resolveSection, normalizeSearch, settingChanged, settingDefault, resetSetting, settingSearch, type SettingEntry, type Section } from "../../settings/catalog";
+import { actionCatalog, catalog, sections, sectionIcons, resolveSection, normalizeSearch, settingChanged, settingVisible, settingDefault, resetSetting, settingSearch, type SettingEntry, type Section } from "../../settings/catalog";
 import { REBINDABLE, REBINDABLE_COMMANDS, effectiveBindings } from "../../state/keymap";
 import { SettingsPreview } from "../../settings/SettingsPreview";
 import { Highlight } from "../../settings/Highlight";
@@ -31,20 +31,20 @@ import { Icon } from "../Icon";
 import { Modal } from "../Modal";
 
 function Segmented<V extends string>({
-  label,
+  labelledBy,
   value,
   options,
   onChange,
   query = "",
 }: {
-  label: string;
+  labelledBy: string;
   query?: string;
   value: V;
   options: { value: V; text: string }[];
   onChange: (value: V) => void;
 }) {
   return (
-    <div className="seg" role="radiogroup" aria-label={label}>
+    <div className="seg" role="radiogroup" aria-labelledby={labelledBy}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -150,12 +150,11 @@ function SettingControl({ entry, query }: { entry: SettingEntry; query: string }
     const disabled = id === "paneTintStrength" && !settings.paneColorLeft && !settings.paneColorRight;
     return <><div className="range"><input id={`setting-${id}`} type="range" min={entry.min} max={entry.max} step={entry.step} value={Number(value)} disabled={disabled} aria-valuetext={`${value}${id === "paneTintStrength" ? "%" : " px"}`} onChange={e => change(Number(e.target.value))} /><output htmlFor={`setting-${id}`}>{String(value)}{id === "paneTintStrength" ? "%" : " px"}</output></div>{disabled && <p className="field-help">{tr("settings.choosePaneColor")}</p>}</>;
   }
-  if (entry.kind === "segment") return id === "verifyPolicy" ? <div className="settings-radios" role="radiogroup" aria-label={label} aria-describedby="verify-help">{entry.options!.map(option => <label key={option}><input type="radio" name={id} checked={value === option} onChange={() => change(option)} /><Highlight text={optionText(option)} query={query} /></label>)}</div> : <Segmented query={query} label={label} value={String(value)} options={entry.options!.map(option => ({ value: option, text: optionText(option) }))} onChange={change} />;
+  if (entry.kind === "segment") return id === "verifyPolicy" ? <div className="settings-radios" role="radiogroup" aria-labelledby={`label-${id}`} aria-describedby="verify-help">{entry.options!.map(option => <label key={option}><input type="radio" name={id} checked={value === option} onChange={() => change(option)} /><Highlight text={optionText(option)} query={query} /></label>)}</div> : <Segmented query={query} labelledBy={`label-${id}`} value={String(value)} options={entry.options!.map(option => ({ value: option, text: optionText(option) }))} onChange={change} />;
   if (entry.kind === "select") return <select id={`setting-${id}`} aria-describedby={entry.help ? `help-${id}` : undefined} value={String(value)} onChange={e => change(e.target.value)}>{entry.options!.map(option => <option key={option} value={option}>{optionText(option)}</option>)}</select>;
   switch (id) {
-    case "accentAutomatic": return <button type="button" className="tb" aria-pressed={!!settings.accentAutomatic} onClick={() => set({ accentAutomatic: true })}>{label}</button>;
-    case "theme": return <div className="settings-themes" role="radiogroup" aria-label={label}>{themeNames.map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} onClick={() => set({ theme })}><i aria-hidden="true" style={{ background: themes[theme].panel, borderColor: themes[theme].line, color: themes[theme].fg }}><span style={{ background: themes[theme].accent }} /></i><Highlight text={tr(`settings.theme.${theme}`)} query={query} /></button>)}</div>;
-    case "accent": return <><div className="accent"><div role="group" aria-label={tr("ui.settings.accentPresets")} className="swatches">{accentPresets.map(preset => <button key={preset} type="button" className="swatch" style={{ background: preset }} aria-label={preset} aria-pressed={currentAccent.toLowerCase() === preset} onClick={() => set({ accent: preset, accentAutomatic: false })} />)}</div><input className="hex" aria-label={tr("settings.accent.custom")} value={hex} maxLength={7} spellCheck={false} aria-invalid={warnings.includes("invalid")} onChange={e => { const raw = e.target.value.trim(); const next = raw && !raw.startsWith("#") ? `#${raw}` : raw; setHex(next); if (isValidHex(next)) set({ accent: next.toLowerCase(), accentAutomatic: false }); }} /></div><div className="warning-slot">{warnings.length > 0 && <ul className="field-error warnings" role="alert">{warnings.map(warning => <li key={warning}>{tr(accentWarningKeys[warning])}</li>)}</ul>}</div></>;
+    case "theme": return <div className="settings-themes" role="radiogroup" aria-labelledby={`label-${id}`}>{themeNames.map(theme => <button key={theme} type="button" role="radio" aria-checked={settings.theme === theme} onClick={() => set({ theme })}><i aria-hidden="true" style={{ background: themes[theme].panel, borderColor: themes[theme].line, color: themes[theme].fg }}><span style={{ background: themes[theme].accent }} /></i><Highlight text={tr(`settings.theme.${theme}`)} query={query} /></button>)}</div>;
+    case "accent": return <><button type="button" className="tb" aria-pressed={!!settings.accentAutomatic} onClick={() => set({ accentAutomatic: true })}>{tr("settings.accent.default")}</button><div className="accent"><div role="group" aria-label={tr("ui.settings.accentPresets")} className="swatches">{accentPresets.map(preset => <button key={preset} type="button" className="swatch" style={{ background: preset }} aria-label={preset} aria-pressed={currentAccent.toLowerCase() === preset} onClick={() => set({ accent: preset, accentAutomatic: false })} />)}</div><input className="hex" aria-label={tr("settings.accent.custom")} value={hex} maxLength={7} spellCheck={false} aria-invalid={warnings.includes("invalid")} onChange={e => { const raw = e.target.value.trim(); const next = raw && !raw.startsWith("#") ? `#${raw}` : raw; setHex(next); if (isValidHex(next)) set({ accent: next.toLowerCase(), accentAutomatic: false }); }} /></div><div className="warning-slot">{warnings.length > 0 && <ul className="field-error warnings" role="alert">{warnings.map(warning => <li key={warning}>{tr(accentWarningKeys[warning])}</li>)}</ul>}</div></>;
     case "paneColorLeft": case "paneColorRight": return <div className="settings-color"><span className={value ? "color-box" : "color-box none"} style={value ? { background: String(value) } : undefined}><input id={`setting-${id}`} type="color" value={String(value || "#000000")} onChange={e => change(e.target.value)} /></span>{!value && <span>{tr("settings.none")}</span>}<button type="button" className="tb" disabled={!value} onClick={() => change("")}>{tr("settings.paneColors.clear")}</button></div>;
     case "sidebarCollapsed": return <div className="settings-checks">{(["places", "remote", "devices"] as const).map(area => <label key={area}><input type="checkbox" checked={!(settings.sidebarCollapsed ?? []).includes(area)} onChange={e => change(e.target.checked ? (settings.sidebarCollapsed ?? []).filter(v => v !== area) : [...(settings.sidebarCollapsed ?? []), area])} /><Highlight text={tr(area === "devices" ? "places.drives" : `sidebar.${area}`)} query={query} /></label>)}</div>;
     case "sidebarHidden": return <><button type="button" className="tb" onClick={() => change([])}>{label}</button><p className="field-help" role="status">{tr(settings.sidebarHidden?.length ? "settings.hiddenCount" : "settings.nothingHidden", { n: settings.sidebarHidden?.length ?? 0 })}</p></>;
@@ -187,7 +186,7 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
   const count = changed.length + changedKeys.length + Number(autostartChanged);
   const needle = normalizeSearch(query.trim()), filtering = !!needle || modified;
   const matches = (text: string) => normalizeSearch(text).includes(needle);
-  const entries = catalog.filter(entry => (!modified || settingChanged(settings, entry.id)) && matches(settingSearch(entry, tr)));
+  const entries = catalog.filter(entry => settingVisible(settings, entry.id) && (!modified || settingChanged(settings, entry.id)) && matches(settingSearch(entry, tr)));
   const commands = REBINDABLE_COMMANDS.filter(command => (!modified || changedKeys.includes(command)) && matches(`${tr("settings.section.tastatur")} ${tr("settings.keys.help")} ${tr(`keys.cmd.${command}` as TranslationKey)} ${bindings[command]}`));
   const actions = actionCatalog.filter(action =>
     (!modified || action.id === "autostart" && autostartChanged) &&
@@ -207,15 +206,21 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
     controller.updateSettings(s => resetSetting(s, entry.id));
     if (entry.id === "trayEnabled") void system.setTray(false, language);
   };
-  const dot = <span className="modified-dot" title={tr("settings.changed")} aria-label={tr("settings.changed")}>●</span>;
-  const row = (entry: SettingEntry) => <div className="setting-row" key={entry.id} data-setting={entry.id}>
-    <label htmlFor={`setting-${entry.id}`}><Highlight text={tr(entry.label)} query={query} />{entry.rare && <small className="rare" aria-hidden="true">{tr("settings.rare")}</small>}</label>
-    <div className="setting-control"><SettingControl entry={entry} query={query} />{entry.help && <p id={entry.id === "verifyPolicy" ? "verify-help" : `help-${entry.id}`} className="field-help"><Highlight text={tr(entry.help)} query={query} /></p>}</div>
-    <div className="setting-reset">{settingChanged(settings, entry.id) && <>{dot}<button className="link" type="button" aria-label={`${tr("settings.reset")}: ${tr(entry.label)}`} onClick={() => reset(entry)}>{tr("settings.reset")}</button></>}</div>
-  </div>;
+  const sectionChanged = (section: Section) => changed.some(e => e.section === section) || section === "tastatur" && changedKeys.length > 0 || section === "allgemein" && autostartChanged;
+  const dot = <span className="modified-dot" title={tr("settings.changed")}><span aria-hidden="true">●</span><span className="sr-only"> {tr("settings.changed")}</span></span>;
+  const row = (entry: SettingEntry) => {
+    const labelledControl = ["switch", "check", "range", "select"].includes(entry.kind) || ["paneColorLeft", "paneColorRight", "terminalBg", "terminalFg"].includes(entry.id);
+    const groupedControl = !labelledControl && entry.kind !== "segment" && entry.id !== "theme";
+    const label = <><Highlight text={tr(entry.label)} query={query} />{entry.rare && <small className="rare" aria-hidden="true">{tr("settings.rare")}</small>}</>;
+    return <div className="setting-row" key={entry.id} data-setting={entry.id} role={groupedControl ? "group" : undefined} aria-labelledby={groupedControl ? `label-${entry.id}` : undefined}>
+      {labelledControl ? <label htmlFor={`setting-${entry.id}`}>{label}</label> : <span className="setting-label" id={`label-${entry.id}`}>{label}</span>}
+      <div className="setting-control"><SettingControl entry={entry} query={query} />{entry.help && <p id={entry.id === "verifyPolicy" ? "verify-help" : `help-${entry.id}`} className="field-help"><Highlight text={tr(entry.help)} query={query} /></p>}</div>
+      <div className="setting-reset">{settingChanged(settings, entry.id) && <>{dot}<button className="link" type="button" aria-label={`${tr("settings.reset")}: ${tr(entry.label)}`} onClick={() => reset(entry)}>{tr("settings.reset")}</button></>}</div>
+    </div>;
+  };
   const renderAction = (id: string) => <div key={id} className="settings-action">{id === "autostart" || id === "startMenu" ? <SystemSettings field={id} query={query} onReset={id === "autostart" && autostartChanged ? () => void resetAutostart() : undefined} /> : id === "about" ? <AboutSettings query={query} /> : id === "updates" ? <UpdateSettings query={query} /> : <TroubleshootSettings query={query} />}</div>;
   const renderSection = (section: Section) => {
-    const selected = entries.filter(e => e.section === section && (filtering || settings.terminalColors === "custom" || !["terminalBg", "terminalFg"].includes(e.id)));
+    const selected = entries.filter(e => e.section === section);
     return <section key={section} className="settings-page">
       {filtering ? <h2><button className="link" onClick={() => open(section)}><Highlight text={tr(`settings.section.${section}`)} query={query} /></button></h2> : <><h2>{tr(`settings.section.${section}`)}</h2><p className="muted">{tr(`settings.sub.${section}`)}</p></>}
       {!filtering && (section === "darstellung" || section === "dateiliste") && <SettingsPreview />}
@@ -228,10 +233,10 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
     <div className="settings-layout"><aside className="settings-side">
       <input ref={searchRef} className="settings-search" type="search" aria-label={tr("settings.search")} placeholder={tr("settings.search")} value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === "Escape" && query) { e.preventDefault(); e.stopPropagation(); setQuery(""); } }} />
       <div className="settings-filters"><button className="tb" aria-pressed={!modified} onClick={() => setModified(false)}>{tr("settings.all")}</button><button className="tb" aria-pressed={modified} onClick={() => setModified(true)}>{tr("settings.modified", { n: count })}</button></div>
-      <div className="settings-nav" role="tablist" aria-label={tr("settings.tabs")} aria-orientation="vertical">{sections.map((section, index) => <button key={section} type="button" role="tab" aria-label={tr(`settings.section.${section}`)} id={`settings-tab-${section}`} aria-controls="settings-panel" aria-selected={!filtering && tab === section} tabIndex={tab === section ? 0 : -1} className={filtering && !hits(section) ? "dim" : undefined} onClick={() => open(section)} onKeyDown={e => {
+      <div className="settings-nav" role="tablist" aria-label={tr("settings.tabs")} aria-orientation="vertical">{sections.map((section, index) => <button key={section} type="button" role="tab" aria-label={[tr(`settings.section.${section}`), sectionChanged(section) ? tr("settings.changed") : "", filtering ? hits(section) : ""].filter(value => value !== "").join(" ")} id={`settings-tab-${section}`} aria-controls="settings-panel" aria-selected={!filtering && tab === section} tabIndex={tab === section ? 0 : -1} className={filtering && !hits(section) ? "dim" : undefined} onClick={() => open(section)} onKeyDown={e => {
         const next = e.key === "Home" ? 0 : e.key === "End" ? sections.length - 1 : e.key === "ArrowDown" || e.key === "ArrowRight" ? (index + 1) % sections.length : e.key === "ArrowUp" || e.key === "ArrowLeft" ? (index + sections.length - 1) % sections.length : -1;
         if (next >= 0) { e.preventDefault(); open(sections[next]!); document.getElementById(`settings-tab-${sections[next]}`)?.focus(); }
-      }}><Icon name={sectionIcons[section]} /><span>{tr(`settings.section.${section}`)}</span>{(changed.some(e => e.section === section) || section === "tastatur" && changedKeys.length > 0 || section === "allgemein" && autostartChanged) && dot}{filtering && <span className="settings-hit-count">{hits(section)}</span>}</button>)}</div>
+      }}><Icon name={sectionIcons[section]} /><span>{tr(`settings.section.${section}`)}</span>{sectionChanged(section) && dot}{filtering && <span className="settings-hit-count"> {hits(section)}</span>}</button>)}</div>
     </aside><div ref={contentRef} className="settings-content" id="settings-panel" role="tabpanel" tabIndex={0} aria-label={filtering ? tr("settings.results") : tr(`settings.section.${tab}`)}>
       {filtering ? sections.some(section => hits(section) > 0) ? sections.filter(section => hits(section) > 0).map(renderSection) : <p role="status">{tr(needle ? "settings.emptySearch" : "settings.emptyModified")}</p> : renderSection(tab)}
     </div></div>

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import defaultsJson from "./backend-defaults.json?raw";
 import { defaultSettings } from "../app/state";
 import { createTranslator } from "../i18n";
 import { catalog, normalizeSearch, resetSetting, resolveSection, settingChanged, settingSearch } from "./catalog";
@@ -24,4 +25,24 @@ describe("settings catalog", () => {
     expect(normalizeSearch("GRÖẞE Ändern")).toBe("grosse andern");
   });
   test.each([["appearance", "darstellung"], ["system", "allgemein"], ["keyboard", "tastatur"], ["info", "info"], ["dateiliste", "dateiliste"], ["unknown", "darstellung"]])("resolves %s", (input, result) => expect(resolveSection(input)).toBe(result));
+});
+
+test("frontend defaults equal the complete backend SettingsDto fixture", () => {
+  expect(defaultSettings).toEqual(JSON.parse(defaultsJson));
+});
+
+test("accent is one logical setting and reset restores both fields", () => {
+  for (const accentAutomatic of [true, false]) {
+    const settings = { ...defaultSettings, accentAutomatic, accent: "#123456" };
+    expect(catalog.filter(e => settingChanged(settings, e.id)).map(e => e.id)).toEqual(accentAutomatic ? [] : ["accent"]);
+    expect(resetSetting(settings, "accent")).toEqual(defaultSettings);
+  }
+});
+
+test("hidden terminal colours only count in custom mode", () => {
+  for (const terminalColors of ["green", "custom"] as const) {
+    const settings = { ...defaultSettings, terminalColors, terminalBg: "#000000", terminalFg: "#ffffff" };
+    expect(settingChanged(settings, "terminalBg")).toBe(terminalColors === "custom");
+    expect(settingChanged(settings, "terminalFg")).toBe(terminalColors === "custom");
+  }
 });

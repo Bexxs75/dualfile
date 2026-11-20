@@ -92,9 +92,11 @@ test("client orders invokes, rebases optimistic patches and resets missing optio
   client.runtime.controller.updateSettings(s => ({ ...s, trayEnabled: true }));
   void client.runtime.system.setTray(true, "en"); await tick();
   expect(send).toHaveBeenCalledTimes(1);
-  deliver({ kind: "snapshot", snapshot: testSnapshot() });
+  const missingColor = testSnapshot();
+  delete missingColor.settings.paneColorLeft;
+  deliver({ kind: "snapshot", snapshot: missingColor });
   expect(rt.store.getState().settings.fontSize).toBe(18);
-  expect(rt.store.getState().settings.paneColorLeft).toBeUndefined();
+  expect(rt.store.getState().settings.paneColorLeft).toBe("");
   release(); await tick();
   expect(send.mock.calls.map(([m]) => m.kind)).toEqual(["patch", "patch", "setTray"]);
   deliver({ kind: "snapshot", snapshot: testSnapshot({ session: "old", ack: 99 }) });
@@ -125,7 +127,7 @@ test("a rejected send rolls back its optimistic patch and displays its error", a
   const client = createSettingsWindowClient(api, rt); await client.attach();
   deliver({ kind: "session", session: "s1" }); deliver({ kind: "snapshot", snapshot: testSnapshot() });
   client.runtime.controller.updateSettings(s => ({ ...s, fontSize: 33 })); await tick();
-  expect(rt.store.getState().settings.fontSize).toBe(13);
+  expect(rt.store.getState().settings.fontSize).toBe(14);
   expect(client.getSnapshot().error).toBe("invalid patch");
 });
 test("install waits for the native settings close acknowledgement", async () => {

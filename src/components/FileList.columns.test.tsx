@@ -77,7 +77,7 @@ test("arrow keys nudge by 8px and persist on keyup; blur also persists", async (
   fireEvent.keyDown(size, { key: "ArrowLeft" });
   fireEvent.keyDown(size, { key: "ArrowLeft" });
   expect(cols()).toBe("minmax(120px, 1fr) 100px 104px 130px");
-  expect(rt.store.getState().settings.columnWidths).toBeUndefined();
+  expect(rt.store.getState().settings.columnWidths).toEqual({});
   fireEvent.keyUp(size, { key: "ArrowLeft" });
   expect(rt.store.getState().settings.columnWidths?.normal).toEqual([100, 104, 130]);
   fireEvent.keyDown(size, { key: "ArrowRight" });

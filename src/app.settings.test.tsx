@@ -136,7 +136,7 @@ describe("Einstellungen", () => {
     const app = await setupApp();
     expect(screen.getByRole("button", { name: /F5/ })).toHaveTextContent("Kopieren");
     await app.user.keyboard("{Control>},{/Control}");
-    await app.user.click(within(app.dialog()).getByRole("tab", { name: "Allgemein" }));
+    await app.user.click(within(app.dialog()).getByRole("tab", { name: "Allgemein geändert" }));
     await app.user.click(within(app.dialog()).getByRole("radio", { name: "English" }));
     expect(root().lang).toBe("en");
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Settings");
