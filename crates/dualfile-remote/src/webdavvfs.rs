@@ -464,6 +464,8 @@ fn parse_multistatus(xml: &[u8]) -> Result<(Vec<DavResponse>, bool)> {
 
 fn entry_from(name: String, is_collection: bool, size: u64) -> Entry {
     Entry {
+        uid: None,
+        gid: None,
         name,
         kind: if is_collection {
             EntryKind::Dir

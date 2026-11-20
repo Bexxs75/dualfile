@@ -80,6 +80,8 @@ fn raw(name: &str, kind: crate::sftp_transport::RawKind) -> crate::sftp_transpor
     crate::sftp_transport::RawEntry {
         name: name.into(),
         attrs: crate::sftp_transport::RawAttrs {
+            uid: None,
+            gid: None,
             kind,
             size: Some(1),
             mtime: None,
@@ -102,6 +104,7 @@ fn lists_and_stats_files_dirs_and_links() {
     assert_eq!(list.len(), 3, "'.' and '..' are not entries: {names:?}");
     let a = list.iter().find(|e| e.name == "a.txt").unwrap();
     assert_eq!((a.kind, a.size), (EntryKind::File, 5));
+    assert_eq!((a.uid, a.gid), (Some(1000), Some(100)));
     assert!(a.modified.is_some() && a.error.is_none());
     let sub = list.iter().find(|e| e.name == "sub").unwrap();
     assert_eq!(sub.kind, EntryKind::Dir);

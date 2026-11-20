@@ -1,6 +1,10 @@
 //! Type conversion between `dualfile-core` and the web UI contract (`src/ipc/types.ts`).
 //! Everything here is a pure function or a plain data type, so it is unit-tested without Tauri.
 
+fn default_pane_tint_strength() -> u8 {
+    100
+}
+
 use dualfile_core::archive::{Format, TarCompression};
 use dualfile_core::compare::{MSG_BINARY, MSG_TOO_LARGE};
 use dualfile_core::jobs::{JobState, JobStatus};
@@ -263,6 +267,11 @@ pub struct EntryDto {
     pub size: u64,
     pub modified: Option<i64>,
     pub mode: Option<u32>,
+    pub uid: Option<u32>,
+    pub gid: Option<u32>,
+    pub owner_name: Option<String>,
+    pub group_name: Option<String>,
+    pub permissions: Option<String>,
     pub hidden: bool,
     pub link_target: Option<String>,
     pub broken_link: bool,
@@ -299,6 +308,11 @@ pub fn entry_dto(entry: &Entry) -> EntryDto {
         size: entry.size,
         modified: entry.modified.map(millis),
         mode: entry.mode,
+        uid: entry.uid,
+        gid: entry.gid,
+        owner_name: None,
+        group_name: None,
+        permissions: entry.mode.map(dualfile_core::vfs::format_permissions),
         hidden: entry.hidden,
         link_target: entry.link_target.clone(),
         broken_link: entry.broken_link,
@@ -658,6 +672,10 @@ pub struct SettingsDto {
     #[serde(default)]
     pub extension_column: bool,
     #[serde(default)]
+    pub show_owner_columns: bool,
+    #[serde(default = "default_pane_tint_strength")]
+    pub pane_tint_strength: u8,
+    #[serde(default)]
     pub pane_color_left: String,
     #[serde(default)]
     pub pane_color_right: String,
@@ -747,6 +765,8 @@ impl From<&settings::Settings> for SettingsDto {
                 })
                 .collect(),
             extension_column: s.extension_column,
+            show_owner_columns: s.show_owner_columns,
+            pane_tint_strength: s.pane_tint_strength,
             pane_color_left: s.pane_color_left.clone(),
             pane_color_right: s.pane_color_right.clone(),
             keybindings: s.keybindings.clone(),
@@ -817,6 +837,8 @@ impl From<&SettingsDto> for settings::Settings {
                 })
                 .collect(),
             extension_column: s.extension_column,
+            show_owner_columns: s.show_owner_columns,
+            pane_tint_strength: s.pane_tint_strength,
             pane_color_left: s.pane_color_left.clone(),
             pane_color_right: s.pane_color_right.clone(),
             keybindings: s.keybindings.clone(),
@@ -1044,6 +1066,8 @@ mod tests {
 
     fn entry(name: &str, kind: EntryKind) -> Entry {
         Entry {
+            uid: None,
+            gid: None,
             name: name.into(),
             kind,
             size: 12,
@@ -1094,7 +1118,8 @@ mod tests {
             value,
             json!({
                 "name": ".x", "kind": "symlink", "size": 12, "modified": 1500, "mode": 420,
-                "hidden": true, "linkTarget": "../y", "brokenLink": true, "error": null
+                "hidden": true, "linkTarget": "../y", "brokenLink": true, "error": null,
+                "uid": null, "gid": null, "ownerName": null, "groupName": null, "permissions": "rw-r--r--"
             })
         );
     }

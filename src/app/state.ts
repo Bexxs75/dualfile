@@ -144,6 +144,8 @@ export const defaultSettings: Settings = {
   terminalBg: "#102030",
   terminalFg: "#f0e6d2",
   extensionColumn: false,
+  showOwnerColumns: false,
+  paneTintStrength: 100,
   checkUpdatesOnStart: true,
   trayEnabled: false,
   startMenuPrompted: false,

@@ -140,6 +140,8 @@ fn time(t: &nfs3::nfstime3) -> Option<SystemTime> {
 
 fn attrs(a: &nfs3::fattr3) -> RawAttrs {
     RawAttrs {
+        uid: Some(a.uid),
+        gid: Some(a.gid),
         kind: match a.type_ {
             nfs3::ftype3::NF3REG => RawKind::File,
             nfs3::ftype3::NF3DIR => RawKind::Dir,

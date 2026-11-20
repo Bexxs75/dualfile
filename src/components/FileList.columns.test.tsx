@@ -84,3 +84,35 @@ test("arrow keys nudge by 8px and persist on keyup; blur also persists", async (
   fireEvent.blur(size);
   expect(rt.store.getState().settings.columnWidths?.normal).toEqual([92, 104, 130]);
 });
+
+test.each([false, true])("ownership columns are optional, sortable and keep three resize handles (ext=%s)", async extensionColumn => {
+  const { rt } = await setup({ extensionColumn });
+  expect(screen.queryByRole("columnheader", { name: /Permissions/ })).toBeNull();
+  act(() => rt.controller.updateSettings(s => ({ ...s, showOwnerColumns: true })));
+  expect(screen.getAllByRole("columnheader")).toHaveLength(7);
+  expect(screen.getAllByRole("separator")).toHaveLength(3);
+  for (const [label, key] of [["Permissions", "permissions"], ["uid", "uid"], ["gid", "gid"]]) {
+    const header = screen.getByRole("columnheader", { name: new RegExp(label!) });
+    fireEvent.click(header.querySelector("button")!);
+    expect(header).toHaveAttribute("aria-sort", "ascending");
+    expect(rt.store.getState().windows[0].tabs[0]!.sort).toBe(`${key}:asc`);
+    fireEvent.click(header.querySelector("button")!);
+    expect(header).toHaveAttribute("aria-sort", "descending");
+  }
+  act(() => rt.controller.updateSettings(s => ({ ...s, showOwnerColumns: false })));
+  expect(screen.getAllByRole("columnheader")).toHaveLength(4);
+});
+
+test.each(["/local", "sftp:server!/remote"])("owner cells use local names only, numeric tooltips and empty missing values: %s", async path => {
+  const { rt } = await setup({ showOwnerColumns: true });
+  const entries = [{ name: "owned", kind: "file" as const, size: 0, modified: null, mode: 0o7755, uid: 1000, gid: 100, ownerName: "alice", groupName: "staff", hidden: false, linkTarget: null, brokenLink: false, error: null },
+    { name: "unknown", kind: "file" as const, size: 0, modified: null, mode: null, uid: 12345, gid: null, hidden: false, linkTarget: null, brokenLink: false, error: null }];
+  act(() => rt.store.dispatch({ type: "window", w: 0,
+    update: win => ({ ...win, tabs: win.tabs.map((tab, i) => i === win.activeTab ? { ...tab, path } : tab) }),
+    listing: { path, entries },
+  }));
+  expect(screen.getByTitle("uid 1000")).toHaveTextContent(path.startsWith("/") ? "alice" : "1000");
+  expect(screen.getByTitle("gid 100")).toHaveTextContent(path.startsWith("/") ? "staff" : "100");
+  expect(screen.getByTitle("uid 12345")).toHaveTextContent("12345");
+  expect(screen.getByText("rwsr-sr-t")).toBeInTheDocument();
+});

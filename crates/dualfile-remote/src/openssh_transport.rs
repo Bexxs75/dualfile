@@ -86,6 +86,8 @@ fn raw_attrs(attrs: &FileAttributes) -> RawAttrs {
         Some(_) => RawKind::Other,
     };
     RawAttrs {
+        uid: attrs.uid,
+        gid: attrs.gid,
         kind,
         size: attrs.size,
         mtime: to_time(attrs.mtime),

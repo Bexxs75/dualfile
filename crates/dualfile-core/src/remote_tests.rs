@@ -88,6 +88,8 @@ impl MemServer {
             Node::File(data, time) => (EntryKind::File, data.len() as u64, Some(*time)),
         };
         Entry {
+            uid: None,
+            gid: None,
             name: name.into(),
             kind,
             size,

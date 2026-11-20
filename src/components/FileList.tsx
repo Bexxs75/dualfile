@@ -3,12 +3,13 @@ import { useAppState, useController, useLanguage, useT } from "../app/context";
 import { activeTabOf, visibleEntries, type WinIdx } from "../app/state";
 import { createTranslator, formatBytes, formatDate, type Language } from "../i18n";
 import type { Entry } from "../ipc/types";
-import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, columnTemplate, columnWidthsFor, type ColumnTriple } from "../state/columns";
+import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, columnTemplate, columnWidthsFor, ownerMinWidth, type ColumnTriple } from "../state/columns";
 import { isArchivePath } from "../state/paths";
 import { fileType, parseSort, type SortKey } from "../state/sort";
+import { formatPermissions } from "../state/permissions";
 import { EntryIcon, Icon } from "./Icon";
 
-const COLUMNS: { key: SortKey; label: "column.name" | "column.size" | "column.type" | "column.ext" | "column.modified" }[] = [
+const COLUMNS: { key: SortKey; label: "column.name" | "column.size" | "column.type" | "column.ext" | "column.modified" | "column.permissions" | "column.uid" | "column.gid" }[] = [
   { key: "name", label: "column.name" },
   { key: "size", label: "column.size" },
   { key: "type", label: "column.type" },
@@ -21,6 +22,12 @@ const COLUMNS_EXT: typeof COLUMNS = [
   { key: "type", label: "column.ext" },
   { key: "size", label: "column.size" },
   { key: "modified", label: "column.modified" },
+];
+
+const OWNER_COLUMNS: typeof COLUMNS = [
+  { key: "permissions", label: "column.permissions" },
+  { key: "uid", label: "column.uid" },
+  { key: "gid", label: "column.gid" },
 ];
 
 export const rowId = (w: WinIdx, index: number): string => `pane${w}-row-${index}`;
@@ -42,10 +49,12 @@ interface RowProps {
   current: boolean;
   language: Language;
   extCol: boolean;
+  owners: boolean;
+  local: boolean;
   dropInto: boolean;
 }
 
-const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, dropInto }: RowProps) {
+const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, owners, local, dropInto }: RowProps) {
   const controller = useController();
   const isDir = entry.kind === "dir";
   const classes = ["row", entry.name === ".." ? "parent-entry" : "", isDir ? "d" : "", entry.kind === "symlink" ? "l" : "", entry.brokenLink ? "broken" : "", entry.hidden ? "hid" : "", entry.error ? "err" : "", selected ? "sel" : "", current ? "cur" : "", extCol ? "ext-split" : "", dropInto ? "drop-into" : ""]
@@ -123,6 +132,11 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
         {entry.linkTarget ? <span className="lt"> → {entry.linkTarget}</span> : null}
       </span>
       {order.map((key) => cells[key])}
+      {owners ? <>
+        <span role="gridcell" className="owner permissions" title={entry.permissions ?? formatPermissions(entry.mode)}>{entry.name === ".." ? "" : entry.permissions ?? formatPermissions(entry.mode)}</span>
+        <span role="gridcell" className="owner" title={entry.uid == null ? undefined : `uid ${entry.uid}`}>{entry.name === ".." ? "" : (local ? entry.ownerName : null) ?? entry.uid ?? ""}</span>
+        <span role="gridcell" className="owner" title={entry.gid == null ? undefined : `gid ${entry.gid}`}>{entry.name === ".." ? "" : (local ? entry.groupName : null) ?? entry.gid ?? ""}</span>
+      </> : null}
     </div>
   );
 });
@@ -138,6 +152,7 @@ export function FileList({ w }: { w: WinIdx }) {
   const listing = useAppState((state) => state.listings[w]);
   const filter = useAppState((state) => activeTabOf(state, w).filter);
   const active = useAppState((state) => state.active === w);
+  const owners = useAppState(state => state.settings.showOwnerColumns === true);
   const extCol = useAppState((state) => state.settings.extensionColumn === true);
   const dropFolder = useAppState((state) => (state.drag?.folder?.w === w ? state.drag.folder.name : null));
   const storedWidths = useAppState((state) => state.settings.columnWidths);
@@ -241,12 +256,12 @@ export function FileList({ w }: { w: WinIdx }) {
   return (
     <div
       ref={ref}
-      className="list"
+      className={owners ? "list owner-columns" : "list"}
       role="grid"
       tabIndex={0}
       aria-label={`${tr("pane.listLabel")} – ${tr(w === 0 ? "pane.left" : "pane.right")}`}
       aria-multiselectable="true"
-      style={{ "--df-cols": columnTemplate(widths) } as CSSProperties}
+      style={{ "--df-cols": columnTemplate(widths, owners), ...(owners ? { "--df-min": `${ownerMinWidth(widths)}px` } : {}) } as CSSProperties}
       aria-rowcount={entries.length + 1}
       aria-activedescendant={entries.length > 0 ? rowId(w, focusIndex) : undefined}
       onFocus={() => controller.setActive(w)}
@@ -256,7 +271,7 @@ export function FileList({ w }: { w: WinIdx }) {
       }}
     >
       <div role="row" aria-rowindex={1} className={extCol ? "head ext-split" : "head"}>
-        {(extCol ? COLUMNS_EXT : COLUMNS).map((column, columnIndex) => {
+        {[...(extCol ? COLUMNS_EXT : COLUMNS), ...(owners ? OWNER_COLUMNS : [])].map((column, columnIndex) => {
           const sorted = spec.key === column.key;
           const name = tr(column.label);
           const slot = columnIndex - 1; // Spalte 0 (Name) ist flexibel und nicht ziehbar
@@ -277,7 +292,7 @@ export function FileList({ w }: { w: WinIdx }) {
                 {name}
                 {sorted ? <Icon name={spec.direction === "asc" ? "sortUp" : "down"} size={12} className="arrow" /> : null}
               </button>
-              {slot >= 0 ? (
+              {slot >= 0 && slot < 3 ? (
                 <span
                   role="separator"
                   aria-orientation="vertical"
@@ -315,6 +330,8 @@ export function FileList({ w }: { w: WinIdx }) {
           current={index === focusIndex}
           language={language}
           extCol={extCol}
+          owners={owners}
+          local={listing.path?.startsWith("/") === true}
           dropInto={dropFolder === entry.name}
         />
       ))}

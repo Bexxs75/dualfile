@@ -3555,6 +3555,8 @@ mod tests {
         }
         fn stat(&self, p: &VPath) -> Result<Entry> {
             Ok(Entry {
+                uid: None,
+                gid: None,
                 name: p
                     .path()
                     .file_name()

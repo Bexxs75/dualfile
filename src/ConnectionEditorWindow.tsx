@@ -48,7 +48,7 @@ export function parseAppearance(search: string): EditorAppearance {
   const pick = <T extends string>(value: string | null, allowed: readonly T[], fallback: T): T => allowed.includes(value as T) ? value as T : fallback;
   const size = Number(q.get("fontSize"));
   return {
-    theme: pick(q.get("theme"), ["schiefer", "papier", "werkstatt"], "schiefer"),
+    theme: pick(q.get("theme"), ["schiefer", "papier", "werkstatt", "weiss"], "schiefer"),
     accent: q.get("accent") ?? "",
     accentAutomatic: q.get("accentAutomatic") === "1",
     density: pick(q.get("density"), ["compact", "normal", "comfortable"], "normal"),

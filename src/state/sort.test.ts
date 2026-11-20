@@ -102,3 +102,10 @@ describe("parseSort / formatSort", () => {
     expect(toggleSort({ key: "name", direction: "desc" }, "size")).toEqual({ key: "size", direction: "asc" });
   });
 });
+
+it.each(["permissions", "uid", "gid"] as const)("sorts %s numerically, preserves parent/directories, and restores saved sort", key => {
+  const entries = [entry("high", { mode: 0o4755, uid: 1000, gid: 1000 }), entry("low", { mode: 0o644, uid: 20, gid: 20 }), entry("unknown"), entry("dir", { kind: "dir" }), entry("..", { kind: "dir" })];
+  expect(names(sortEntries(entries, key))).toEqual(["..", "dir", "unknown", "low", "high"]);
+  expect(names(sortEntries(entries, key, "desc"))).toEqual(["..", "dir", "high", "low", "unknown"]);
+  expect(parseSort(formatSort({ key, direction: "desc" }))).toEqual({ key, direction: "desc" });
+});

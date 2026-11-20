@@ -57,7 +57,7 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   for (const [action, key] of [["import", "ssh.import"], ["system", "system.import"]] as const) {
     add(action, key, "import", "", () => controller.openDialog({ kind: "connections", entry: { action } }));
   }
-  for (const theme of ["schiefer", "papier", "werkstatt"] as const) {
+  for (const theme of ["schiefer", "papier", "werkstatt", "weiss"] as const) {
     add(`theme:${theme}`, `settings.theme.${theme}`, "settings", "", () => controller.updateSettings(s => ({ ...s, theme })));
     result[result.length - 1]!.title = `${tr("palette.theme")}: ${tr(`settings.theme.${theme}`)}`;
   }

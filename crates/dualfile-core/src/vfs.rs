@@ -429,20 +429,24 @@ pub fn parse_ipc_path(text: &str) -> Result<VPath> {
     parse(text, 0)
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum EntryKind {
     File,
     Dir,
     Symlink,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct Entry {
     pub name: String,
     pub kind: EntryKind,
     pub size: u64,
     pub modified: Option<SystemTime>,
     pub mode: Option<u32>,
+    #[serde(default)]
+    pub uid: Option<u32>,
+    #[serde(default)]
+    pub gid: Option<u32>,
     pub hidden: bool,
     pub link_target: Option<String>,
     pub broken_link: bool,
@@ -676,7 +680,16 @@ impl LocalVfs {
         };
         #[cfg(not(unix))]
         let mode = None;
+        #[cfg(unix)]
+        let (uid, gid) = {
+            use std::os::unix::fs::MetadataExt;
+            (Some(metadata.uid()), Some(metadata.gid()))
+        };
+        #[cfg(not(unix))]
+        let (uid, gid) = (None, None);
         Ok(Entry {
+            uid,
+            gid,
             hidden: name.starts_with('.') && name != "." && name != "..",
             name,
             kind,
@@ -969,6 +982,8 @@ impl Vfs for LocalVfs {
                     }) {
                         Ok(entry) => entries.push(entry),
                         Err(error) => entries.push(Entry {
+                            uid: None,
+                            gid: None,
                             name: item.file_name().to_string_lossy().into_owned(),
                             kind: EntryKind::File,
                             size: 0,
@@ -982,6 +997,8 @@ impl Vfs for LocalVfs {
                     }
                 }
                 Err(error) => entries.push(Entry {
+                    uid: None,
+                    gid: None,
                     name: String::new(),
                     kind: EntryKind::File,
                     size: 0,
@@ -1611,5 +1628,97 @@ mod space_tests {
         assert!(LocalVfs
             .space_free(&VPath::local(dir.path().join("missing")).unwrap())
             .is_none());
+    }
+}
+
+/// POSIX access bits, including setuid/setgid/sticky with and without execute.
+pub fn format_permissions(mode: u32) -> String {
+    let mut out = ['-'; 9];
+    for (i, c) in ['r', 'w', 'x', 'r', 'w', 'x', 'r', 'w', 'x']
+        .into_iter()
+        .enumerate()
+    {
+        if mode & (1 << (8 - i)) != 0 {
+            out[i] = c;
+        }
+    }
+    for (index, bit, lower, upper) in [
+        (2, 0o4000, 's', 'S'),
+        (5, 0o2000, 's', 'S'),
+        (8, 0o1000, 't', 'T'),
+    ] {
+        if mode & bit != 0 {
+            out[index] = if out[index] == 'x' { lower } else { upper };
+        }
+    }
+    out.into_iter().collect()
+}
+
+/// One immutable process-wide snapshot avoids filesystem I/O per listing or per entry.
+pub fn local_owner_name(id: u32, group: bool) -> Option<String> {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    static USERS: OnceLock<HashMap<u32, String>> = OnceLock::new();
+    static GROUPS: OnceLock<HashMap<u32, String>> = OnceLock::new();
+    let (cache, path) = if group {
+        (&GROUPS, "/etc/group")
+    } else {
+        (&USERS, "/etc/passwd")
+    };
+    cache
+        .get_or_init(|| {
+            std::fs::read_to_string(path)
+                .unwrap_or_default()
+                .lines()
+                .filter_map(|line| {
+                    let mut fields = line.split(':');
+                    let name = fields.next()?;
+                    fields.next()?;
+                    let id = fields.next()?.parse().ok()?;
+                    Some((id, name.to_owned()))
+                })
+                .collect()
+        })
+        .get(&id)
+        .cloned()
+}
+
+#[cfg(test)]
+mod owner_tests {
+    use super::*;
+    #[test]
+    fn old_entries_deserialize_without_ownership() {
+        let entry: Entry = serde_json::from_value(serde_json::json!({
+            "name": "old", "kind": "File", "size": 0, "modified": null,
+            "mode": null, "hidden": false, "link_target": null, "broken_link": false, "error": null
+        }))
+        .unwrap();
+        assert_eq!((entry.uid, entry.gid), (None, None));
+        assert_eq!(local_owner_name(u32::MAX, false), None);
+        assert_eq!(local_owner_name(u32::MAX, true), None);
+    }
+    #[test]
+    fn permissions_include_special_bits() {
+        for (mode, expected) in [
+            (0o755, "rwxr-xr-x"),
+            (0, "---------"),
+            (0o7777, "rwsrwsrwt"),
+            (0o7644, "rwSr-Sr-T"),
+        ] {
+            assert_eq!(format_permissions(mode), expected);
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn local_listing_has_metadata_ownership() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("owned");
+        std::fs::write(&file, b"test").unwrap();
+        let meta = std::fs::metadata(&file).unwrap();
+        let entries = LocalVfs.list(&VPath::local(dir.path()).unwrap()).unwrap();
+        let entry = entries.iter().find(|entry| entry.name == "owned").unwrap();
+        assert_eq!(entry.uid, Some(meta.uid()));
+        assert_eq!(entry.gid, Some(meta.gid()));
     }
 }

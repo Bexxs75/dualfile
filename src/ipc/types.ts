@@ -18,6 +18,11 @@ export interface Entry {
   /** Millisekunden seit 1970, null wenn unbekannt. */
   modified: number | null;
   mode: number | null;
+  uid?: number | null;
+  gid?: number | null;
+  ownerName?: string | null;
+  groupName?: string | null;
+  permissions?: string | null;
   hidden: boolean;
   linkTarget: string | null;
   brokenLink: boolean;
@@ -437,7 +442,7 @@ export interface Settings {
   sidebarDiscovery?: boolean;
   verifyPolicy: VerifyPolicy;
   version: number;
-  theme: "schiefer" | "papier" | "werkstatt";
+  theme: "schiefer" | "papier" | "werkstatt" | "weiss";
   accent: string;
   accentAutomatic?: boolean;
   showParentEntry?: boolean;
@@ -451,6 +456,8 @@ export interface Settings {
   terminalBg?: string;
   terminalFg?: string;
   extensionColumn?: boolean;
+  showOwnerColumns?: boolean;
+  paneTintStrength?: number;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
   /** Optional tint (hex) per window; missing/empty = no tint. */
@@ -737,7 +744,7 @@ export interface SystemPlace {
 }
 
 export type SettingsTab = "appearance" | "system" | "info" | "keyboard";
-export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showOwnerColumns" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |

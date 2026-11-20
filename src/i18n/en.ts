@@ -604,6 +604,12 @@ const en: Record<keyof typeof de, string> = {
   // Status line
   "status.selected": "{selected} of {total} selected",
   "settings.showParentEntry": "Show “..” entry",
+  "settings.theme.weiss": "White",
+  "settings.paneTintStrength": "Pane colour opacity",
+  "settings.showOwnerColumns": "Show permissions, owner and group",
+  "column.permissions": "Permissions",
+  "column.uid": "uid",
+  "column.gid": "gid",
   "settings.extensionColumn": "File extension in its own column",
   "settings.paneColors.title": "Pane colors",
   "settings.paneColors.left": "Left pane",

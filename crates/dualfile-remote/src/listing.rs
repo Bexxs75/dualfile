@@ -15,6 +15,8 @@ pub struct ListedEntry {
     pub modified: Option<SystemTime>,
     /// Permission bits (`rwxr-xr-x` of `LIST`, `UNIX.mode` of `MLSD`).
     pub mode: Option<u32>,
+    pub uid: Option<u32>,
+    pub gid: Option<u32>,
     /// Target of a link; only shown, never followed.
     pub link_target: Option<String>,
 }
@@ -155,6 +157,8 @@ pub fn parse_mlsd(lines: &[String], limits: &Limits) -> Parsed {
             continue;
         };
         out.entries.push(ListedEntry {
+            uid: None,
+            gid: None,
             name: name.to_owned(),
             kind,
             size: if kind == EntryKind::File { size } else { 0 },
@@ -308,6 +312,8 @@ fn parse_list_line(line: &str, now_secs: i64, now_year: i64) -> Option<ListedEnt
         return None;
     }
     Some(ListedEntry {
+        uid: None,
+        gid: None,
         name,
         kind,
         size: if kind == EntryKind::File { size } else { 0 },

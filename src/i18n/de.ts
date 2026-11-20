@@ -601,6 +601,12 @@ const de = {
   // Statuszeile
   "status.selected": "{selected} von {total} markiert",
   "settings.showParentEntry": "Eintrag „..“ anzeigen",
+  "settings.theme.weiss": "Weiß",
+  "settings.paneTintStrength": "Deckung der Fensterfarbe",
+  "settings.showOwnerColumns": "Rechte, Besitzer und Gruppe anzeigen",
+  "column.permissions": "Rechte",
+  "column.uid": "uid",
+  "column.gid": "gid",
   "settings.extensionColumn": "Dateiendung in eigener Spalte",
   "settings.paneColors.title": "Fensterfarben",
   "settings.paneColors.left": "Linkes Fenster",

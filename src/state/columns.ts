@@ -23,6 +23,13 @@ export function columnWidthsFor(settings: Pick<Settings, "columnWidths">, mode: 
 }
 
 /** Wert für die CSS-Variable `--df-cols`: Name flexibel, dann die drei festen Spalten. */
-export function columnTemplate(widths: ColumnTriple): string {
+export function columnTemplate(widths: ColumnTriple, owners = false): string {
+  // shortcut: feste Breiten + waagrechtes Scrollen im schmalen Fenster statt Abschneiden
+  if (owners) return `minmax(160px, 1fr) ${widths[0]}px ${widths[1]}px ${widths[2]}px 104px 72px 72px`;
   return `minmax(120px, 1fr) ${widths[0]}px ${widths[1]}px ${widths[2]}px`;
+}
+
+/** Gemeinsame Mindestbreite aller Zeilen mit Besitzer-Spalten, damit die Spalten beim waagrechten Scrollen fluchten. */
+export function ownerMinWidth(widths: ColumnTriple): number {
+  return 160 + widths[0] + widths[1] + widths[2] + 104 + 72 + 72;
 }

@@ -276,3 +276,26 @@ describe("Speichern und Hinweise", () => {
     expect(saveSettings).not.toHaveBeenCalled();
   });
 });
+
+test("white design and pane opacity update live; opacity needs a pane colour", async () => {
+  const app = await setupApp();
+  await app.user.keyboard("{Control>},{/Control}");
+  const dlg = within(app.dialog());
+  await app.user.click(dlg.getByRole("radio", { name: "Weiß" }));
+  expect(root().dataset.fm).toBe("weiss");
+  const slider = dlg.getByRole("slider", { name: "Deckung der Fensterfarbe" });
+  expect(slider).toBeDisabled();
+  expect(slider).toHaveValue("100");
+  expect(slider).toHaveAttribute("min", "80");
+  expect(slider).toHaveAttribute("max", "100");
+  expect(slider).toHaveAttribute("step", "5");
+  fireEvent.change(dlg.getByLabelText("Linkes Fenster"), { target: { value: "#004080" } });
+  expect(slider).toBeEnabled();
+  expect(app.pane(0).style.getPropertyValue("--panel")).toBe("#004080");
+  fireEvent.change(slider, { target: { value: "85" } });
+  expect(app.runtime.store.getState().settings.paneTintStrength).toBe(85);
+  expect(app.pane(0).style.getPropertyValue("--panel")).not.toBe("#004080");
+  expect(slider).toHaveAttribute("aria-valuetext", "85%");
+  await app.user.click(dlg.getByRole("checkbox", { name: "Rechte, Besitzer und Gruppe anzeigen" }));
+  for (const w of [0, 1] as const) expect(within(app.pane(w)).getByRole("columnheader", { name: /Rechte/ })).toBeInTheDocument();
+});

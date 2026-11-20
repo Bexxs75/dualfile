@@ -153,6 +153,8 @@ fn file_name(path: &VPath) -> String {
 
 fn entry_from(listed: &PluginEntry, problem: Option<&'static str>) -> Entry {
     Entry {
+        uid: None,
+        gid: None,
         name: display_name(&listed.name),
         kind: listed.kind,
         size: listed.size,

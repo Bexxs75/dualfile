@@ -1,4 +1,4 @@
-// Zentrale Farbwerte der drei Themes; Kopfbereich nach dem Redesign-Mockup.
+// Zentrale Farbwerte der vier Themes; Kopfbereich nach dem Redesign-Mockup.
 // Gedämpfte Textfarben erfüllen auch auf abgesetzten Kopfflächen WCAG AA.
 import type { Settings } from "../ipc/types";
 import type { TranslationKey } from "../i18n";
@@ -31,7 +31,7 @@ export interface ThemeTokens {
   colorScheme: "dark" | "light";
 }
 
-export const themeNames: readonly ThemeName[] = ["schiefer", "papier", "werkstatt"];
+export const themeNames: readonly ThemeName[] = ["schiefer", "papier", "werkstatt", "weiss"];
 
 export const themes: Record<ThemeName, ThemeTokens> = {
   schiefer: {
@@ -53,6 +53,13 @@ export const themes: Record<ThemeName, ThemeTokens> = {
     warning: "#e07a5f",
     success: "#7bc08a",
     colorScheme: "dark",
+  },
+  weiss: {
+    bg: "#f4f5f7", panel: "#ffffff", panel2: "#f7f8fa", raised: "#f7f8fa",
+    lineSoft: "#eceef1", line: "#d9dde3", fg: "#1b1f24", muted: "#505966",
+    accent: "#2563eb", accentInk: "#ffffff", selection: "#dbe7fd", current: "#c3d6fb",
+    directory: "#1d4ed8", warning: "#b4441f", success: "#1f7a3a",
+    connectionWarning: "#8a6100", accentSoft: "#e3ecfd", colorScheme: "light",
   },
   papier: {
     bg: "#ece8df",
@@ -159,8 +166,8 @@ export const accentWarningKeys: Record<AccentWarning, TranslationKey> = {
 
 // ---------------------------------------------------------------- Anwenden
 
-/** Keep the application's blue default outside Paper. */
-export const defaultAccent = (theme: ThemeName): string => theme === "papier" ? themes.papier.accent : "#4f8cff";
+/** Paper and White use their own accent; dark designs keep the application blue. */
+export const defaultAccent = (theme: ThemeName): string => (theme === "papier" || theme === "weiss") ? themes[theme].accent : "#4f8cff";
 
 export type ThemeSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize">;
 

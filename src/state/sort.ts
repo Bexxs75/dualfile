@@ -1,6 +1,6 @@
 import type { Entry } from "../ipc/types";
 
-export type SortKey = "name" | "size" | "type" | "modified";
+export type SortKey = "name" | "size" | "type" | "modified" | "permissions" | "uid" | "gid";
 export type SortDirection = "asc" | "desc";
 export interface SortSpec {
   key: SortKey;
@@ -41,6 +41,11 @@ function compareByKey(a: Entry, b: Entry, key: SortKey): number {
       return compareNumbers(a.size, b.size);
     case "type":
       return naturalCompare(fileType(a.name), fileType(b.name));
+    case "permissions":
+      return compareNumbers(a.mode === null ? null : a.mode & 0o7777, b.mode === null ? null : b.mode & 0o7777);
+    case "uid":
+    case "gid":
+      return compareNumbers(a[key] ?? null, b[key] ?? null);
     case "modified":
       return compareNumbers(a.modified, b.modified);
   }
@@ -76,7 +81,7 @@ export function sortEntries<T extends Entry>(
 
 /** Sitzungsstring → Spezifikation; Ungültiges ergibt die Standardsortierung. */
 export function parseSort(value: string): SortSpec {
-  const match = /^(name|size|type|modified)(?::(asc|desc))?$/.exec(value);
+  const match = /^(name|size|type|modified|permissions|uid|gid)(?::(asc|desc))?$/.exec(value);
   if (!match) return { ...DEFAULT_SORT };
   return { key: match[1] as SortKey, direction: (match[2] as SortDirection | undefined) ?? "asc" };
 }

@@ -66,7 +66,7 @@ code { font-family: var(--font-mono); font-size: .92em; }
 /* Fenster */
 .panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pane { container-type: inline-size; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; position: relative; }
-.pane[data-tint] { --panel: color-mix(in srgb, var(--panel-raw) 80%, var(--tint)); }
+.pane[data-tint] { color: var(--fg); }
 .pane.active { border-color: var(--accent); box-shadow: none; }
 .pane.drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .row.drop-into { outline: 2px dashed var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -634,3 +634,18 @@ html.editor-window-root body { padding: 0; }
 .sidebar-eject { position: absolute; right: 3px; top: 4px; padding: 2px; border: 0; background: transparent; color: inherit; border-radius: 3px; }
 .sidebar-eject:hover, .sidebar-eject:focus-visible { background: color-mix(in srgb, currentColor 12%, transparent); }
 .sidebar-icons .sidebar-eject { right: 0; top: 0; }
+
+/* Ownership columns stay in one grid even under the compact pane breakpoints. */
+.owner-columns { overflow-x: auto; }
+.owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-cols) !important; min-width: var(--df-min); }
+.owner-columns .head > span, .owner-columns .row > span { display: block !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owner-columns .head > span { overflow: visible; }
+.owner-columns .row > .n { display: flex !important; }
+.owner-columns .head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.owner-columns .permissions { font-family: monospace; }
+
+.pane[data-tint] .row.sel, [data-fm="weiss"] .pane .row.sel { background: var(--sel); }
+.pane[data-tint] .row.cur, .pane[data-tint].active .row.cur.sel,
+[data-fm="weiss"] .pane .row.cur, [data-fm="weiss"] .pane.active .row.cur.sel { background: var(--cur); }
+.pane[data-tint] .row.d .nm, .pane[data-tint] .row.d .ico,
+[data-fm="weiss"] .pane .row.d .nm, [data-fm="weiss"] .pane .row.d .ico { color: var(--dir); opacity: 1; }

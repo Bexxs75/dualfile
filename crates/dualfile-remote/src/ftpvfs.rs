@@ -294,6 +294,8 @@ pub(crate) fn join_wire(dir: &str, name: &str) -> String {
 pub(crate) fn entry_from(listed: &ListedEntry, problem: Option<&'static str>) -> Entry {
     let hidden = listed.name.starts_with('.');
     Entry {
+        uid: listed.uid,
+        gid: listed.gid,
         name: display_name(&listed.name),
         kind: listed.kind,
         size: listed.size,
@@ -352,6 +354,8 @@ fn lookup_on<T: FtpTransport>(
 ) -> TResult<Option<ListedEntry>> {
     if path == "/" {
         return Ok(Some(ListedEntry {
+            uid: None,
+            gid: None,
             name: "/".into(),
             kind: EntryKind::Dir,
             size: 0,
@@ -532,6 +536,8 @@ impl<T: FtpTransport> FtpVfs<T> {
         let wire_path = wire(path)?;
         if wire_path == "/" {
             return Ok(Some(Entry {
+                uid: None,
+                gid: None,
                 name: "/".into(),
                 kind: EntryKind::Dir,
                 size: 0,

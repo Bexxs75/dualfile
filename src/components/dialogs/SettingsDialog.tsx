@@ -183,6 +183,7 @@ export function SettingsPanel({ startTab }: { startTab?: import("../../ipc/types
         </section>
         <label className="fld"><span>{tr("settings.showParentEntry")}</span><input type="checkbox" checked={settings.showParentEntry !== false} onChange={event => set({ showParentEntry: event.target.checked })} /></label>
         <label className="fld"><span>{tr("settings.extensionColumn")}</span><input type="checkbox" checked={settings.extensionColumn === true} onChange={event => set({ extensionColumn: event.target.checked })} /></label>
+        <label className="fld"><span>{tr("settings.showOwnerColumns")}</span><input type="checkbox" checked={settings.showOwnerColumns === true} onChange={event => set({ showOwnerColumns: event.target.checked })} /></label>
         <div className="fld"><span>{tr("settings.paneColors.title")}</span></div>
         <div className="fld">
           <label htmlFor="pane-color-left">{tr("settings.paneColors.left")}</label>
@@ -193,6 +194,11 @@ export function SettingsPanel({ startTab }: { startTab?: import("../../ipc/types
           <label htmlFor="pane-color-right">{tr("settings.paneColors.right")}</label>
           <input id="pane-color-right" type="color" value={settings.paneColorRight || themes[settings.theme].panel} onChange={e => set({ paneColorRight: e.target.value })} />
           <button type="button" className="tb" disabled={!settings.paneColorRight} onClick={() => set({ paneColorRight: "" })}>{tr("settings.paneColors.clear")}</button>
+        </div>
+        <div className="fld">
+          <label htmlFor="pane-tint-strength">{tr("settings.paneTintStrength")}</label>
+          <input id="pane-tint-strength" type="range" min={80} max={100} step={5} value={settings.paneTintStrength ?? 100} disabled={!settings.paneColorLeft && !settings.paneColorRight} aria-valuetext={`${settings.paneTintStrength ?? 100}%`} onChange={e => set({ paneTintStrength: Number(e.target.value) })} />
+          <output htmlFor="pane-tint-strength">{settings.paneTintStrength ?? 100}%</output>
         </div>
         <div className="fld">
           <span id="set-theme">{tr("settings.theme")}</span>

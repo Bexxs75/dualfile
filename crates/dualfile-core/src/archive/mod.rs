@@ -410,6 +410,8 @@ impl ArchiveVfs {
             node.name.clone()
         };
         Entry {
+            uid: None,
+            gid: None,
             hidden: index != 0 && name.starts_with('.'),
             name,
             kind: node.kind,

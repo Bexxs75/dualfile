@@ -759,7 +759,21 @@ impl AppState {
         let entries = self.vfs(&path)?.list(&path)?;
         Ok(ListingDto {
             path: vpath_text(&path),
-            entries: entries.iter().map(entry_dto).collect(),
+            entries: entries
+                .iter()
+                .map(|entry| {
+                    let mut dto = entry_dto(entry);
+                    if path.scheme() == dualfile_core::vfs::Scheme::Local {
+                        dto.owner_name = entry
+                            .uid
+                            .and_then(|id| dualfile_core::vfs::local_owner_name(id, false));
+                        dto.group_name = entry
+                            .gid
+                            .and_then(|id| dualfile_core::vfs::local_owner_name(id, true));
+                    }
+                    dto
+                })
+                .collect(),
         })
     }
 
@@ -1572,6 +1586,8 @@ mod tests {
             }
             fn stat(&self, _p: &VPath) -> CoreResult<Entry> {
                 Ok(Entry {
+                    uid: None,
+                    gid: None,
                     name: "x".into(),
                     kind: EntryKind::File,
                     size: self.size,

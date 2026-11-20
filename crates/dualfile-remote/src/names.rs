@@ -73,6 +73,8 @@ mod tests {
 
     fn entry(name: &str) -> ListedEntry {
         ListedEntry {
+            uid: None,
+            gid: None,
             name: name.into(),
             kind: EntryKind::File,
             size: 0,

@@ -139,6 +139,8 @@ mod tests {
 
     fn entry() -> Entry {
         Entry {
+            uid: None,
+            gid: None,
             name: "a".into(),
             kind: EntryKind::File,
             size: 1,

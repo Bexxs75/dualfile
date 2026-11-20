@@ -1,3 +1,6 @@
+fn default_pane_tint_strength() -> u8 {
+    100
+}
 use crate::connections::{validate_connections, ConnectionProfile, MAX_CONNECTIONS};
 use crate::error::{from_io, Error, Result};
 use crate::plugins::{validate_plugins, PluginEntry, MAX_PLUGINS};
@@ -65,6 +68,10 @@ pub struct Settings {
     pub plugins: Vec<PluginEntry>,
     /// Show a separate file-extension column in the list (off by default).
     pub extension_column: bool,
+    #[serde(default)]
+    pub show_owner_columns: bool,
+    #[serde(default = "default_pane_tint_strength")]
+    pub pane_tint_strength: u8,
     /// Optional tint colour (hex) per window; empty means no tint.
     pub pane_color_left: String,
     pub pane_color_right: String,
@@ -119,6 +126,8 @@ impl Default for Settings {
             connections: vec![],
             plugins: vec![],
             extension_column: false,
+            show_owner_columns: false,
+            pane_tint_strength: 100,
             pane_color_left: String::new(),
             pane_color_right: String::new(),
             keybindings: BTreeMap::new(),
@@ -366,6 +375,10 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
 
     let d = Settings::default();
     let mut fixes: Vec<String> = Vec::new();
+    let tint_strength = field::<i64>(&mut obj, "pane_tint_strength", 100, &mut fixes);
+    if !(80..=100).contains(&tint_strength) {
+        fixes.push("pane_tint_strength".into());
+    }
     let mut s = Settings {
         version: SETTINGS_VERSION,
         verify_policy: field(&mut obj, "verify_policy", d.verify_policy, &mut fixes),
@@ -414,6 +427,8 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         session: field(&mut obj, "session", d.session.clone(), &mut fixes),
         connections: Vec::new(),
         plugins: Vec::new(),
+        show_owner_columns: field(&mut obj, "show_owner_columns", false, &mut fixes),
+        pane_tint_strength: tint_strength.clamp(80, 100) as u8,
         extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
         keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
         column_widths: field(
@@ -563,7 +578,7 @@ pub fn valid_seen_version(s: &str) -> bool {
 }
 
 fn valid_theme(s: &str) -> bool {
-    ["schiefer", "papier", "werkstatt"].contains(&s)
+    ["schiefer", "papier", "werkstatt", "weiss"].contains(&s)
 }
 
 /// Genau `#rrggbb` (sechs Hexziffern, keine Kurzform, kein Alpha).
@@ -753,6 +768,36 @@ mod tests {
         assert!(
             matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_shell".to_string()))
         );
+    }
+
+    #[test]
+    fn ownership_and_tint_defaults_roundtrip_and_repair() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), r#"{"version":6}"#);
+        let (mut s, _) = load(dir.path());
+        assert_eq!(s.pane_tint_strength, 100);
+        assert!(!s.show_owner_columns);
+        s.theme = "weiss".into();
+        s.pane_tint_strength = 85;
+        s.show_owner_columns = true;
+        save(dir.path(), &s, false).unwrap();
+        assert_eq!(load(dir.path()).0, s);
+        for (raw, expected) in [
+            ("-1", 80),
+            ("79", 80),
+            ("101", 100),
+            ("999", 100),
+            ("85.5", 100),
+            ("null", 100),
+        ] {
+            write(
+                dir.path(),
+                &format!(r#"{{"version":6,"pane_tint_strength":{raw}}}"#),
+            );
+            let (s, result) = load(dir.path());
+            assert_eq!(s.pane_tint_strength, expected);
+            assert!(matches!(result, LoadOutcome::Repaired(_)));
+        }
     }
 
     fn sample() -> Settings {

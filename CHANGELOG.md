@@ -5,6 +5,15 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- Pure white design with its own blue accent and light terminal palette. (#21)
+- Optional sortable permissions, uid and gid columns in both file-list layouts; local owner/group names are cached, while SFTP and NFS show numeric IDs. (#23)
+
+### Changed
+
+- Pane colours default to full opacity, with a live 80–100% slider and automatically contrasting text, selection and cursor colours. (#22)
+
 ## [0.3.8] - 2026-11-18
 
 ### Added

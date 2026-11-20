@@ -129,6 +129,8 @@ fn share_error(error: TransportError) -> TransportError {
 
 fn attrs(info: &smb2::FileInfo) -> RawAttrs {
     RawAttrs {
+        uid: None,
+        gid: None,
         kind: if info.is_link() {
             RawKind::Symlink
         } else if info.is_directory {
@@ -144,6 +146,8 @@ fn attrs(info: &smb2::FileInfo) -> RawAttrs {
 }
 fn dir_attrs() -> RawAttrs {
     RawAttrs {
+        uid: None,
+        gid: None,
         kind: RawKind::Dir,
         size: Some(0),
         mtime: None,
@@ -313,6 +317,8 @@ impl SftpTransport for SmbTransport {
                     RawEntry {
                         name: e.name,
                         attrs: RawAttrs {
+                            uid: None,
+                            gid: None,
                             kind,
                             size: Some(e.size),
                             mtime: e.modified.to_system_time(),

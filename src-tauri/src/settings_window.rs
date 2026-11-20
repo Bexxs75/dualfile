@@ -216,6 +216,10 @@ struct SettingsProjection {
     #[serde(skip_serializing_if = "Option::is_none")]
     extension_column: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    show_owner_columns: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pane_tint_strength: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pane_color_left: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pane_color_right: Option<String>,
@@ -267,6 +271,10 @@ pub struct SettingsPatch {
     show_parent_entry: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     extension_column: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    show_owner_columns: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pane_tint_strength: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pane_color_left: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -322,6 +330,12 @@ impl SettingsPatch {
         }
         if let Some(value) = &self.show_parent_entry {
             settings.show_parent_entry = *value;
+        }
+        if let Some(value) = self.show_owner_columns {
+            settings.show_owner_columns = value;
+        }
+        if let Some(value) = self.pane_tint_strength {
+            settings.pane_tint_strength = value;
         }
         if let Some(value) = &self.extension_column {
             settings.extension_column = *value;
@@ -933,6 +947,8 @@ mod tests {
             "language",
             "showParentEntry",
             "extensionColumn",
+            "paneTintStrength",
+            "showOwnerColumns",
             "paneColorLeft",
             "paneColorRight",
             "terminalColors",

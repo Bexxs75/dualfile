@@ -230,7 +230,7 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     {
         return Err(bad_settings("last_seen_version"));
     }
-    if !["schiefer", "papier", "werkstatt"].contains(&s.theme.as_str()) {
+    if !["schiefer", "papier", "werkstatt", "weiss"].contains(&s.theme.as_str()) {
         return Err(bad_settings("Theme"));
     }
     if !["compact", "normal", "comfortable"].contains(&s.density.as_str()) {
@@ -266,6 +266,9 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
         {
             return Err(bad_settings("Lesezeichen"));
         }
+    }
+    if !(80..=100).contains(&s.pane_tint_strength) {
+        return Err(bad_settings("pane_tint_strength"));
     }
     for c in [&s.pane_color_left, &s.pane_color_right] {
         if !c.is_empty() && !valid_color(c) {
@@ -524,6 +527,31 @@ mod tests {
         assert!(check_name("ok name.txt").is_ok());
     }
 
+    #[test]
+    fn white_and_owner_settings_validate_and_roundtrip() {
+        let mut s = settings();
+        s.theme = "weiss".into();
+        s.show_owner_columns = true;
+        for strength in [80, 85, 100] {
+            s.pane_tint_strength = strength;
+            validate_settings(&s).unwrap();
+            let core = dualfile_core::settings::Settings::from(&s);
+            let dto = SettingsDto::from(&core);
+            assert_eq!(dto.pane_tint_strength, strength);
+            assert!(dto.show_owner_columns);
+        }
+        for strength in [0, 79, 101, 255] {
+            s.pane_tint_strength = strength;
+            assert!(validate_settings(&s).is_err());
+        }
+        let mut old = serde_json::to_value(settings()).unwrap();
+        old.as_object_mut().unwrap().remove("paneTintStrength");
+        old.as_object_mut().unwrap().remove("showOwnerColumns");
+        let dto: SettingsDto = serde_json::from_value(old).unwrap();
+        assert_eq!(dto.pane_tint_strength, 100);
+        assert!(!dto.show_owner_columns);
+    }
+
     fn settings() -> SettingsDto {
         SettingsDto {
             sidebar_mode: "full".into(),
@@ -560,6 +588,8 @@ mod tests {
                 order: 0,
             }],
             extension_column: false,
+            show_owner_columns: false,
+            pane_tint_strength: 100,
             pane_color_left: String::new(),
             pane_color_right: String::new(),
             keybindings: Default::default(),

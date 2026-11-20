@@ -301,6 +301,8 @@ fn plain(path: &str) -> TResult<&str> {
 fn attrs_of(node: &SNode) -> RawAttrs {
     match node {
         SNode::Dir => RawAttrs {
+            uid: Some(1000),
+            gid: Some(100),
             kind: RawKind::Dir,
             size: Some(4096),
             mtime: Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000)),
@@ -308,6 +310,8 @@ fn attrs_of(node: &SNode) -> RawAttrs {
             permissions: Some(0o755),
         },
         SNode::File { data, mtime, mode } => RawAttrs {
+            uid: Some(1000),
+            gid: Some(100),
             kind: RawKind::File,
             size: Some(data.len() as u64),
             mtime: Some(UNIX_EPOCH + Duration::from_secs(*mtime)),
@@ -315,6 +319,8 @@ fn attrs_of(node: &SNode) -> RawAttrs {
             permissions: Some(*mode),
         },
         SNode::Link { target } => RawAttrs {
+            uid: Some(1000),
+            gid: Some(100),
             kind: RawKind::Symlink,
             size: Some(target.len() as u64),
             mtime: Some(UNIX_EPOCH + Duration::from_secs(1_700_000_000)),

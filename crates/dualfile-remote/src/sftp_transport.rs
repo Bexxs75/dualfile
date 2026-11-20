@@ -30,6 +30,8 @@ pub struct RawAttrs {
     pub atime: Option<SystemTime>,
     /// The permission bits (`0o7777` part only).
     pub permissions: Option<u32>,
+    pub uid: Option<u32>,
+    pub gid: Option<u32>,
 }
 
 /// One name of a directory listing, as received (not checked yet).

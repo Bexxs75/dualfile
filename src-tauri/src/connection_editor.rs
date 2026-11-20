@@ -11,7 +11,7 @@ use tauri::{Manager, Url, WebviewUrl, WebviewWindowBuilder};
 pub(crate) const EDITOR_LABEL: &str = "connection-editor";
 const MAX_TITLE_CHARS: usize = 120;
 const MAX_ID_BYTES: usize = 128;
-const THEMES: [&str; 3] = ["schiefer", "papier", "werkstatt"];
+const THEMES: [&str; 4] = ["schiefer", "papier", "werkstatt", "weiss"];
 const DENSITIES: [&str; 3] = ["compact", "normal", "comfortable"];
 
 /// Held across "does it exist?" and "build it", so two quick clicks cannot both create it.

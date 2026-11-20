@@ -28,7 +28,10 @@ export interface TerminalColorSettings {
 
 export function terminalColorsFor(settings: TerminalColorSettings): TerminalColors {
   const mode = settings.terminalColors ?? DEFAULT_TERMINAL_COLORS;
-  if (mode === "theme") return { bg: themes[settings.theme].panel, fg: themes[settings.theme].fg };
+  if (mode === "theme") {
+    const theme = themes[settings.theme] ?? themes.schiefer;
+    return { bg: theme.panel, fg: theme.fg };
+  }
   if (mode === "custom") return { bg: settings.terminalBg ?? DEFAULT_TERMINAL_BG, fg: settings.terminalFg ?? DEFAULT_TERMINAL_FG };
   return presets[mode];
 }

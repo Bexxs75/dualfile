@@ -37,3 +37,9 @@ test("every ANSI color is readable on the presets that use its palette", () => {
   check("#fbfaf6");
   for (const bg of ["#000000", "#0a120a", "#160f05"]) check(bg);
 });
+
+test("white design uses the light terminal palette", () => {
+  const colors = terminalColorsFor({ theme: "weiss", terminalColors: "theme" });
+  expect(colors).toEqual({ bg: "#ffffff", fg: "#1b1f24" });
+  expect(xtermTheme(colors).blue).toBe("#0a5bb5");
+});

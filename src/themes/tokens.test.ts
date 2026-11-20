@@ -16,9 +16,9 @@ import {
 const base: ThemeSettings = { theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13 };
 
 describe("Tokens", () => {
-  test("es gibt genau die drei Themes Schiefer, Papier und Werkstatt", () => {
-    expect([...themeNames].sort()).toEqual(["papier", "schiefer", "werkstatt"]);
-    expect(Object.keys(themes).sort()).toEqual(["papier", "schiefer", "werkstatt"]);
+  test("es gibt genau die vier Themes Schiefer, Papier, Werkstatt und Weiß", () => {
+    expect([...themeNames].sort()).toEqual(["papier", "schiefer", "weiss", "werkstatt"]);
+    expect(Object.keys(themes).sort()).toEqual(["papier", "schiefer", "weiss", "werkstatt"]);
   });
 
   test("jedes Theme hat alle Token als gültige Farbwerte", () => {

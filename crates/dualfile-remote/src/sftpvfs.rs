@@ -329,6 +329,8 @@ fn clean_target(text: &str) -> String {
 
 fn listed_from(raw: &RawEntry, link_target: Option<String>) -> ListedEntry {
     ListedEntry {
+        uid: raw.attrs.uid,
+        gid: raw.attrs.gid,
         name: raw.name.clone(),
         kind: kind_of(&raw.attrs),
         size: raw.attrs.size.unwrap_or(0),
@@ -557,6 +559,8 @@ impl<T: SftpTransport> SftpVfs<T> {
         let text = path_text(path)?;
         if text == "/" {
             return Ok(Some(Entry {
+                uid: None,
+                gid: None,
                 name: "/".into(),
                 kind: EntryKind::Dir,
                 size: 0,
