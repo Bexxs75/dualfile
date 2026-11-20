@@ -928,7 +928,8 @@ pub enum CoreEventDto {
     },
     UndoChanged,
     Job {
-        status: JobStatusDto,
+        // Boxed like Conflict to keep the event enum small (clippy::large_enum_variant).
+        status: Box<JobStatusDto>,
     },
     Conflict {
         // Boxed: the DTO carries entry metadata and would bloat every event (clippy::large_enum_variant).
@@ -1420,7 +1421,7 @@ mod tests {
             report: None,
         };
         let value = serde_json::to_value(CoreEventDto::Job {
-            status: job_status_dto(1, "n", &status),
+            status: Box::new(job_status_dto(1, "n", &status)),
         })
         .unwrap();
         assert_eq!(value["type"], "job");

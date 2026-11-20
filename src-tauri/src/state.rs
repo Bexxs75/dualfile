@@ -153,7 +153,7 @@ impl Shared {
     }
     fn emit_status(&self, id: u64, status: &JobStatus) {
         self.sink.emit(CoreEventDto::Job {
-            status: self.status_dto(id, status),
+            status: Box::new(self.status_dto(id, status)),
         });
     }
 
@@ -1980,7 +1980,7 @@ mod tests {
         let jobs: Vec<&JobStatusDto> = events
             .iter()
             .filter_map(|e| match e {
-                CoreEventDto::Job { status } => Some(status),
+                CoreEventDto::Job { status } => Some(status.as_ref()),
                 _ => None,
             })
             .collect();
