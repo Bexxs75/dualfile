@@ -67,6 +67,8 @@ export function settingChanged(settings: Settings, id: keyof Settings): boolean 
 }
 export function resetSetting(settings: Settings, id: keyof Settings): Settings {
   if (id === "accent" || id === "accentAutomatic") return { ...settings, accent: defaultSettings.accent, accentAutomatic: defaultSettings.accentAutomatic };
+  // Keep the network section's state: it is collapsed in the sidebar only, not in this dialog.
+  if (id === "sidebarCollapsed") return { ...settings, sidebarCollapsed: (settings.sidebarCollapsed ?? []).filter(section => section === "network") };
   return { ...settings, [id]: settingDefault(id) };
 }
 export function settingVisible(settings: Settings, id: keyof Settings): boolean {
