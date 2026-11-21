@@ -41,7 +41,10 @@ pub fn plugin() -> TauriPlugin<Wry> {
         .setup(|app, _| {
             let new = app.path().app_config_dir()?;
             let old = app.path().config_dir()?.join(OLD_ID);
-            copy_window_state(&old, &new)?;
+            // A failed copy only loses the old window geometry; never block startup over it.
+            if let Err(e) = copy_window_state(&old, &new) {
+                log::warn!("Window-state migration failed: {e}");
+            }
             let exe = desktop_entry::executable()?;
             // Integration failures remain recoverable and are retried/reported by system_status.
             if let Err(e) = Autostart::from_env().and_then(|entry| entry.migrate(&exe)) {

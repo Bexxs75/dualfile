@@ -74,19 +74,11 @@ pub fn plugin() -> TauriPlugin<Wry> {
                     app.cleanup_before_exit();
                     std::process::exit(0);
                 },
+                // Without a usable session bus the regular single-instance plugin cannot
+                // work either; starting is safer than locking the user out of the app.
                 Err(e) => {
-                    let message = format!("Dualfile could not safely check for an existing instance. Please close other Dualfile instances and check the session bus before trying again.\n\n{e}");
-                    log::error!("{message}");
-                    eprintln!("{message}");
-                    use gtk::prelude::*;
-                    let dialog = gtk::MessageDialog::builder()
-                        .message_type(gtk::MessageType::Error)
-                        .buttons(gtk::ButtonsType::Close)
-                        .text(&message)
-                        .build();
-                    dialog.run();
-                    dialog.close();
-                    Err(message.into())
+                    log::warn!("Legacy single-instance check unavailable, continuing: {e}");
+                    Ok(())
                 }
             }
         })
