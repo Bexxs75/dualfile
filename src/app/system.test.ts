@@ -266,9 +266,10 @@ describe("autostart status follows the disk", () => {
   });
 });
 
- test("Flatpak never checks/installs updates or touches the AppImage starter", async () => {
+ test("known Flatpak never checks/installs updates or touches the AppImage starter", async () => {
   const f = fixture();
   vi.mocked(f.api.systemStatus).mockResolvedValue({ packaging: "flatpak", appImage: false, startMenuExists: false, autostart: "off" });
+  await f.controller.refreshStatus();
   await f.controller.start("de");
   await f.controller.check(true);
   await f.controller.setStartMenu(true);
@@ -279,4 +280,19 @@ describe("autostart status follows the disk", () => {
   expect(f.api.startMenuSet).not.toHaveBeenCalled();
   expect(f.controller.getSnapshot().prompt).toBe(false);
   expect(f.settings().startMenuPromptCount).toBe(0);
+ });
+
+ test("failed status loading does not block the startup update check", async () => {
+  const f = fixture();
+  vi.mocked(f.api.systemStatus).mockRejectedValue(new Error("Status unavailable"));
+  await f.controller.start("en");
+  expect(f.api.updateCheck).toHaveBeenCalledOnce();
+  expect(f.controller.getSnapshot()).toMatchObject({ status: null, check: "available" });
+ });
+ test("pending status loading does not delay the startup update check", async () => {
+  const f = fixture();
+  vi.mocked(f.api.systemStatus).mockImplementation(() => new Promise(() => {}));
+  void f.controller.start("en");
+  await vi.waitFor(() => expect(f.api.updateCheck).toHaveBeenCalledOnce());
+  expect(f.controller.getSnapshot().status).toBeNull();
  });

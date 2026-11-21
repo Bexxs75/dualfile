@@ -66,7 +66,7 @@ pub fn desktop_dir(home: &Path, key: &str, fallback: &str) -> PathBuf {
 pub fn host_command_with(kind: Packaging, program: impl AsRef<OsStr>) -> Command {
     if kind == Packaging::Flatpak {
         let mut command = Command::new("flatpak-spawn");
-        command.arg("--host");
+        command.args(["--host", "--watch-bus"]);
         if Path::new(program.as_ref()).file_name().is_some_and(|name| {
             ["mount", "umount", "gio", "lsblk", "udisksctl", "eject"]
                 .iter()
@@ -86,14 +86,36 @@ pub fn host_command(program: impl AsRef<OsStr>) -> Command {
 
 /// Read control files in the host mount namespace. Bound both output and runtime.
 pub fn read_host_file(path: &Path, cap: u64) -> std::io::Result<String> {
+    use std::time::{Duration, Instant};
+    if packaging() != Packaging::Flatpak {
+        return std::fs::read_to_string(path);
+    }
+    // Share mount snapshots across polling callers; never cache failed reads.
+    if matches!(path.to_str(), Some("/proc/mounts" | "/proc/self/mountinfo")) {
+        type Cache = std::collections::HashMap<(PathBuf, u64), (Instant, String)>;
+        static CACHE: std::sync::OnceLock<std::sync::Mutex<Cache>> = std::sync::OnceLock::new();
+        let mut cache = CACHE
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        cache.retain(|_, (at, _)| at.elapsed() < Duration::from_secs(1));
+        let key = (path.to_owned(), cap);
+        if let Some((_, text)) = cache.get(&key) {
+            return Ok(text.clone());
+        }
+        let text = read_host_file_uncached(path, cap)?;
+        cache.insert(key, (Instant::now(), text.clone()));
+        return Ok(text);
+    }
+    read_host_file_uncached(path, cap)
+}
+
+fn read_host_file_uncached(path: &Path, cap: u64) -> std::io::Result<String> {
     use std::{
         io::{self, Read},
         process::Stdio,
         time::{Duration, Instant},
     };
-    if packaging() != Packaging::Flatpak {
-        return std::fs::read_to_string(path);
-    }
     let mut child = host_command("head")
         .args([
             OsStr::new("-c"),
@@ -189,6 +211,10 @@ mod tests {
             let mut c = host_command_with(Packaging::Flatpak, program);
             c.arg("a b;$x");
             assert_eq!(c.get_program(), "flatpak-spawn");
+            assert_eq!(
+                c.get_args().take(2).collect::<Vec<_>>(),
+                ["--host", "--watch-bus"]
+            );
             assert_eq!(c.get_args().last().unwrap(), "a b;$x");
             assert_eq!(
                 host_command_with(Packaging::Plain, program).get_program(),

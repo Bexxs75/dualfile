@@ -10,10 +10,13 @@ Core und separater Tauri-Workspace verwenden diese Pfadabhängigkeit.
 
 Changes / Änderungen:
 
-- `freedesktop.rs`: under Flatpak, resolve the home trash through the shared host
-  data directory and read the host mount table through `dualfile-platform`.
-  Im Flatpak: Home-Papierkorb über den gemeinsamen Host-Datenpfad auflösen und
-  Host-Mounttabelle über `dualfile-platform` lesen.
+- `freedesktop.rs::home_trash()`: the added `packaging() == Flatpak` branch
+  resolves the home trash through the shared host data directory.
+  Der ergänzte Flatpak-Zweig löst den Home-Papierkorb über den Host-Datenpfad auf.
+- `freedesktop.rs::get_mount_points()` (Linux): the added `packaging() == Flatpak`
+  branch reads and parses the host mount table through `dualfile-platform`.
+  Der ergänzte Flatpak-Zweig liest und parst die Host-Mountliste über
+  `dualfile-platform`. Beide Ergänzungen gelten ausschließlich für Flatpak.
 - `Cargo.toml`: local dependency on `dualfile-platform`.
   Lokale Abhängigkeit von `dualfile-platform`.
 - The default `freedesktop` feature remains enabled. The separate portal feature

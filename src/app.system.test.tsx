@@ -312,7 +312,23 @@ test("Flatpak hides start menu and updater actions and reports portal opening er
   await app.user.click(dlg.getByRole("tab", { name: "Info & Hilfe" }));
   expect(dlg.getByText("Updates kommen über Flathub/Software-Center")).toBeInTheDocument();
   expect(dlg.queryByRole("button", { name: "Jetzt prüfen" })).toBeNull();
-  expect(check).not.toHaveBeenCalled();
+  const calls = check.mock.calls.length;
+  await act(async () => app.runtime.system.check(true));
+  expect(check).toHaveBeenCalledTimes(calls);
   await app.user.click(dlg.getByRole("button", { name: "Projekt auf GitHub" }));
   expect(await dlg.findByRole("alert")).toHaveTextContent("Portal denied");
+});
+
+test("unknown status hides start-menu and update controls", async () => {
+  const app = await setupApp({ wrap: api => ({ ...api,
+    systemStatus: () => new Promise(() => {}),
+    updateCheck: async () => available,
+  }) });
+  const dlg = await settingsDialog(app);
+  await app.user.click(dlg.getByRole("tab", { name: /Allgemein/ }));
+  expect(dlg.queryByText("Startmenü-Eintrag:")).toBeNull();
+  expect(dlg.queryByRole("button", { name: "Eintragen" })).toBeNull();
+  await app.user.click(dlg.getByRole("tab", { name: "Info & Hilfe" }));
+  expect(dlg.queryByRole("button", { name: "Jetzt prüfen" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "Update verfügbar" })).toBeNull();
 });

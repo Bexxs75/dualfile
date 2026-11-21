@@ -79,9 +79,7 @@ export function createSystemController(api: SystemApi, getSettings: () => Settin
   const set = (next: Partial<SystemState>) => { state = { ...state, ...next }; listeners.forEach(fn => fn()); };
   const errorText = (e: unknown) => e instanceof Error ? e.message : String(e);
   async function check(manual = false): Promise<void> {
-    try {
-      if ((state.status ?? await queued(reload)).packaging === "flatpak") return;
-    } catch (e) { set({ check: "error", error: errorText(e) }); return; }
+    if (state.status?.packaging === "flatpak") return;
     if (checking || state.installing) return checking ?? Promise.resolve();
     set({ check: "checking", error: "" });
     checking = (async () => {
@@ -114,9 +112,9 @@ export function createSystemController(api: SystemApi, getSettings: () => Settin
       started = true;
       const settings = getSettings();
       void setTray(settings.trayEnabled ?? false, language);
+      if (settings.checkUpdatesOnStart !== false) void check();
       try {
         const status = await queued(reload);
-        if (settings.checkUpdatesOnStart !== false) void check();
         if (status.packaging !== "flatpak" && !status.startMenuExists && !status.startMenuError && shouldPrompt(getSettings())) {
           const count = Math.min(3, (getSettings().startMenuPromptCount ?? 0) + 1);
           patch({ startMenuPromptCount: count });

@@ -460,7 +460,9 @@ pub async fn trash_open_system(window: tauri::WebviewWindow) -> Result<(), UiErr
     main_only(window.label())?;
     tauri::async_runtime::spawn_blocking(|| {
         if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak {
-            return crate::state::open_with_system(std::path::Path::new("trash:/"));
+            let mut command = dualfile_core::packaging::host_command("gio");
+            command.args(["open", "trash:///"]);
+            return crate::state::open_flatpak_reporting(command);
         }
         let mut command = std::process::Command::new("xdg-open");
         command.arg("trash:/");
