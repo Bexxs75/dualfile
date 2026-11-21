@@ -50,35 +50,80 @@ pub fn plugin() -> TauriPlugin<Wry> {
             let result = (|| -> zbus::Result<bool> {
                 let name = format!("{OLD_ID}.SingleInstance");
                 let path = format!("/{}", name.replace('.', "/"));
-                let connection = Connection::session()?;
-                connection.object_server().at(path.as_str(), LegacyEndpoint(app.clone()))?;
+                // Without any session bus the regular single-instance plugin cannot work
+                // either, so only this case may continue; every later failure stops below.
+                let connection = match Connection::session() {
+                    Ok(connection) => connection,
+                    Err(e) => {
+                        log::warn!("No session bus, skipping the legacy instance check: {e}");
+                        eprintln!("No session bus, skipping the legacy instance check: {e}");
+                        return Ok(true);
+                    }
+                };
+                connection
+                    .object_server()
+                    .at(path.as_str(), LegacyEndpoint(app.clone()))?;
                 let primary = acquire_or_forward(
                     || Ok(DBusProxy::new(&connection)?.name_has_owner(name.as_str().try_into()?)?),
-                    || connection.request_name_with_flags(name.as_str(), zbus::fdo::RequestNameFlags::DoNotQueue.into()).map(|_| ()),
+                    || {
+                        connection
+                            .request_name_with_flags(
+                                name.as_str(),
+                                zbus::fdo::RequestNameFlags::DoNotQueue.into(),
+                            )
+                            .map(|_| ())
+                    },
                     || {
                         connection.call_method(
-                            Some(name.as_str()), path.as_str(), Some("org.SingleInstance.DBus"), "ExecuteCallback",
-                            &(std::env::args_os().map(|arg| arg.to_string_lossy().into_owned()).collect::<Vec<_>>(), std::env::current_dir().unwrap_or_default().to_string_lossy().into_owned()),
+                            Some(name.as_str()),
+                            path.as_str(),
+                            Some("org.SingleInstance.DBus"),
+                            "ExecuteCallback",
+                            &(
+                                std::env::args_os()
+                                    .map(|arg| arg.to_string_lossy().into_owned())
+                                    .collect::<Vec<_>>(),
+                                std::env::current_dir()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .into_owned(),
+                            ),
                         )?;
                         Ok(())
                     },
                 )?;
-                if primary { app.resources_table().add(LegacyLock(connection)); }
+                if primary {
+                    app.resources_table().add(LegacyLock(connection));
+                }
                 Ok(primary)
             })();
             match result {
                 Ok(true) => Ok(()),
                 Ok(false) => {
-                    log::info!("Activated the running Dualfile instance; stopping before migration.");
-                    eprintln!("Activated the running Dualfile instance; stopping before migration.");
+                    log::info!(
+                        "Activated the running Dualfile instance; stopping before migration."
+                    );
+                    eprintln!(
+                        "Activated the running Dualfile instance; stopping before migration."
+                    );
                     app.cleanup_before_exit();
                     std::process::exit(0);
-                },
-                // Without a usable session bus the regular single-instance plugin cannot
-                // work either; starting is safer than locking the user out of the app.
+                }
+                // A confirmed or unknown old owner must never run beside us: both would write
+                // the same settings.json with only process-local locks.
                 Err(e) => {
-                    log::warn!("Legacy single-instance check unavailable, continuing: {e}");
-                    Ok(())
+                    let message = format!("Dualfile could not hand over to an already running Dualfile. Please close other Dualfile windows (also in the tray) and start again.\n\n{e}");
+                    log::error!("{message}");
+                    eprintln!("{message}");
+                    use gtk::prelude::*;
+                    let dialog = gtk::MessageDialog::builder()
+                        .message_type(gtk::MessageType::Error)
+                        .buttons(gtk::ButtonsType::Close)
+                        .text(&message)
+                        .build();
+                    dialog.run();
+                    dialog.close();
+                    Err(message.into())
                 }
             }
         })
