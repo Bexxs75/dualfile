@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.2": {
+    date: "2026-11-21",
+    de: {
+      new: ["Dateiliste: Trenner, Breite und Reihenfolge der Spalten Rechte, UID und GID lassen sich anpassen (Reihenfolge per Maus oder Alt+Links/Rechts, Zurücksetzen mit Alt+Pos1).", "Kontextmenüs sind vervollständigt und gruppiert, Kürzel stehen rechts, bei ausgegrauten Einträgen wird der Grund genannt."],
+      improved: ["Menü-Begriffe sind vereinheitlicht, doppelte Einträge entfernt, das Werkzeuge-Menü ist gruppiert."],
+      fixed: ["In hellen Designs färbt die Akzentfarbe jetzt Auswahl, Cursorzeile und Ordner."],
+    },
+    en: {
+      new: ["File list: separators, width and order of the Permissions, UID and GID columns are adjustable (reorder by mouse or Alt+Left/Right, reset with Alt+Home).", "Context menus are completed and grouped, shortcuts sit on the right, disabled entries state the reason."],
+      improved: ["Menu terms are unified, duplicate entries removed, the Tools menu is grouped."],
+      fixed: ["In light themes the accent colour now tints selection, cursor row and folders."],
+    },
+  },
   "0.4.1": {
     date: "2026-11-21",
     de: {

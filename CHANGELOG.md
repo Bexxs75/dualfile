@@ -5,6 +5,17 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-21
+
+### Added
+
+- File list: separators, width and order of the Permissions, UID and GID columns are adjustable; reorder by mouse or Alt+Left/Right, reset with Alt+Home (#34).
+- Context menus completed and grouped (flat layout, shortcuts on the right, reason shown for disabled entries); duplicate entries and terms unified, Tools menu grouped (#35).
+
+### Fixed
+
+- Light themes: the accent colour now tints selection, cursor row and folders; presets are judged against the displayed accent (#33).
+
 ## [0.4.1] - 2026-11-21
 
 ### Changed
