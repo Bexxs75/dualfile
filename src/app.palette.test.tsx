@@ -60,7 +60,7 @@ describe("Befehlspalette R3", () => {
   test("dynamic bookmarks and tabs navigate using existing controller", async () => {
     const app = await setupApp({ settings: { bookmarks: [{ name: "Arbeit", path: DOCS, color: "#ffffff", order: 0 }] } });
     const bookmark = vi.spyOn(app.runtime.controller, "openBookmark");
-    open(); search("Orte Arbeit");
+    open(); search("Lesezeichen Arbeit");
     await app.user.keyboard("{Enter}");
     expect(bookmark).toHaveBeenCalledWith(DOCS);
     await waitFor(() => expect(app.runtime.store.getState().windows[0].tabs[0]?.path).toBe(DOCS));

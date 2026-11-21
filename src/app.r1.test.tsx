@@ -29,7 +29,7 @@ test.each(["de", "en"] as const)("tools menu keyboard, wrap, activation and focu
 
 test("panel pin toggles its own folder; empty bookmarks disappear; filter shortcut and panel switch", async () => {
   const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { sidebarMode: "hidden" } });
-  expect(screen.queryByRole("toolbar", { name: "Orte" })).toBeNull();
+  expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
   expect(app.pane(0)).toHaveClass("active");
   expect(app.pane(1)).not.toHaveClass("active");
   await app.user.keyboard("{Tab}/");
@@ -39,15 +39,15 @@ test("panel pin toggles its own folder; empty bookmarks disappear; filter shortc
   await app.user.type(filter, "abc");
   await app.user.click(within(app.pane(1)).getByRole("button", { name: "Filter löschen" }));
   expect(filter).toHaveValue("");
-  const pin = within(app.pane(0)).getByRole("button", { name: "Zu Orten hinzufügen" });
+  const pin = within(app.pane(0)).getByRole("button", { name: "Ordner merken …" });
   expect(pin).toHaveAttribute("aria-pressed", "false");
   await app.user.click(pin);
   expect(pin).toHaveAttribute("aria-pressed", "true");
   expect(app.runtime.store.getState().settings.bookmarks.map(b => b.path)).toEqual([DOCS]);
-  expect(screen.getByRole("toolbar", { name: "Orte" })).toBeVisible();
+  expect(screen.getByRole("toolbar", { name: "Lesezeichen" })).toBeVisible();
   await app.user.click(pin);
   expect(pin).toHaveAttribute("aria-pressed", "false");
-  expect(screen.queryByRole("toolbar", { name: "Orte" })).toBeNull();
+  expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
 });
 
 test("connection chip empty, disconnected, connected and targeted dialog entries", async () => {

@@ -59,10 +59,10 @@ test.each([["de", "Speicherbelegung"], ["en", "Disk usage"]] as const)("B11 %s d
 test("B13 bookmark tooltip follows pinned state", async () => {
   const app = await setupApp({ left: DOCS });
   const bar = within(app.pane(0));
-  const pin = bar.getByRole("button", { name: /Zu Orten hinzufügen/ });
-  expect(pin).toHaveAttribute("title", "Aktuellen Ordner zu Orten hinzufügen (Ctrl+D)");
+  const pin = bar.getByRole("button", { name: /Ordner merken/ });
+  expect(pin).toHaveAttribute("title", "Aktuellen Ordner als Lesezeichen merken (Ctrl+D)");
   await app.user.click(pin);
-  expect(bar.getByRole("button", { name: "Aus Orten entfernen" })).toHaveAttribute("title", "Aus Orten entfernen (Ctrl+D)");
+  expect(bar.getByRole("button", { name: "Lesezeichen lösen" })).toHaveAttribute("title", "Lesezeichen lösen (Ctrl+D)");
 });
 
 test("B14 German design group and names", async () => {
