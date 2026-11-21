@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.dualfileapp.Dualfile</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Dualfile</name>
+  <name xml:lang="de">Dualfile</name>
+  <summary>Browse and manage files in two panes</summary>
+  <summary xml:lang="de">Dateien in zwei Fenstern durchsuchen und verwalten</summary>
+  <description>
+    <p>Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and background file jobs. Browse local folders, archives and remote servers, and move files between them.</p>
+    <p xml:lang="de">Dualfile ist ein Zwei-Fenster-Dateimanager für Linux mit Tabs, Tastatursteuerung und Dateioperationen im Hintergrund. Durchsuche lokale Ordner, Archive und entfernte Server und übertrage Dateien zwischen ihnen.</p>
+    <p>Connect to SFTP, FTP/FTPS and SMB locations, compare and synchronize folders, or rename multiple files with a preview. The interface is available in English and German.</p>
+    <p xml:lang="de">Verbinde dich mit SFTP-, FTP/FTPS- und SMB-Zielen, vergleiche und synchronisiere Ordner oder benenne mehrere Dateien mit Vorschau um. Die Oberfläche ist auf Deutsch und Englisch verfügbar.</p>
+  </description>
+  <developer id="com.dualfileapp">
+    <name>Dualfile contributors</name>
+  </developer>
+  <url type="homepage">https://dualfileapp.com</url>
+  <url type="bugtracker">https://github.com/Bexxs75/dualfile/issues</url>
+  <launchable type="desktop-id">com.dualfileapp.Dualfile.desktop</launchable>
+  <provides><binary>dualfile</binary></provides>
+  <categories><category>Utility</category><category>FileManager</category></categories>
+  <content_rating type="oars-1.1"/>
+  <!-- TODO: URL nach Upload der Screenshots auf dualfileapp.com -->
+  <!-- BEGIN GENERATED RELEASES -->
+  <releases>
+    <release version="0.4.1" date="2026-11-21">
+      <description>
+        <ul>
+          <li>Linux application ID is now com.dualfileapp.Dualfile in preparation for Flatpak (#29). Existing window state, managed autostart modes and start-menu entries are migrated without overwriting newer state or removing foreign files. A legacy D-Bus endpoint prevents old and new versions from running together.</li>
+          <li>Autostart help now points to Settings → General / Einstellungen → Allgemein (#32).</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.4.0" date="2026-11-20">
+      <description>
+        <ul>
+          <li>Settings reorganised into eight sections with a sidebar, search, a Modified filter, per-setting reset and a live file-list preview (#27).</li>
+          <li>Link to the manual (wiki) under Info &amp; Help, following the effective interface language.</li>
+          <li>Missing terminal-shell values now show login, the same fallback the backend uses; the settings dialog&apos;s defaults match the backend&apos;s.</li>
+          <li>Unset pane colours show an empty swatch; tint opacity is disabled until a colour is selected.</li>
+          <li>Accent hex input accepts values without a leading #.</li>
+          <li>Sidebar width is constrained to 160–400 px with a slider, and restoring hidden entries reports when nothing is hidden.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.3.10" date="2026-11-20">
+      <description>
+        <ul>
+          <li>Pane colour only tints the file list (#25).</li>
+          <li>Permissions, uid and gid columns can be shown individually (#26).</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+  <!-- END GENERATED RELEASES -->
+</component>

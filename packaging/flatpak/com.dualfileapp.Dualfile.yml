@@ -1,0 +1,64 @@
+# Draft only: resolve all TODOs and generate both source lists before building.
+app-id: com.dualfileapp.Dualfile
+runtime: org.gnome.Platform
+runtime-version: 'TODO_GNOME_VERSION' # TODO: aktuell stabile GNOME-Version vor dem Bau prüfen
+sdk: org.gnome.Sdk
+sdk-extensions:
+  # TODO: compatible extension branch/version for the chosen GNOME SDK.
+  - org.freedesktop.Sdk.Extension.rust-stable
+  # TODO: compatible branch/version; Node 20 must be >=20.19 for locked Vite.
+  - org.freedesktop.Sdk.Extension.node20
+command: dualfile
+finish-args:
+  # File manager: browse, modify and trash user-accessible host files/mounts.
+  - --filesystem=host
+  # SFTP, FTP/FTPS, SMB and network discovery.
+  - --share=network
+  # Native Wayland windows.
+  - --socket=wayland
+  # X11 only as fallback when Wayland is unavailable.
+  - --socket=fallback-x11
+  # WebKitGTK rendering through the GPU.
+  - --device=dri
+  # SFTP authentication using the user's SSH agent.
+  - --socket=ssh-auth
+  # Stage 2 terminal/device helpers invoke flatpak-spawn --host.
+  - --talk-name=org.freedesktop.Flatpak
+  # Persist remote credentials through the desktop Secret Service.
+  - --talk-name=org.freedesktop.secrets
+  # Optional tray registration on desktops supporting StatusNotifier.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # TODO: no direct UDisks2 access: stage 2 uses host helpers. If needed later,
+  # justify system-bus access separately; --talk-name would target the wrong bus.
+  # - --talk-name=org.freedesktop.UDisks2
+  # Background and OpenURI use the standard portal access supplied by Flatpak;
+  # no broad session/system bus permission or additional portal grant needed.
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node20/bin
+  env:
+    CARGO_HOME: /run/build/dualfile/cargo
+    CARGO_NET_OFFLINE: 'true'
+    npm_config_cache: /run/build/dualfile/flatpak-node/npm-cache
+    npm_config_audit: 'false'
+    npm_config_fund: 'false'
+modules:
+  - name: dualfile
+    buildsystem: simple
+    build-commands:
+      - npm ci --offline
+      - npm run build
+      # Dependency feature ensures embedded frontend assets, without changing app code.
+      - cd src-tauri && cargo build --release --offline --locked --features tauri/custom-protocol
+      - install -Dm755 src-tauri/target/release/dualfile /app/bin/dualfile
+      - install -Dm644 packaging/flatpak/com.dualfileapp.Dualfile.desktop /app/share/applications/com.dualfileapp.Dualfile.desktop
+      - install -Dm644 packaging/flatpak/com.dualfileapp.Dualfile.metainfo.xml /app/share/metainfo/com.dualfileapp.Dualfile.metainfo.xml
+      - install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.dualfileapp.Dualfile.png
+      - install -Dm644 src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/com.dualfileapp.Dualfile.png
+      - install -Dm644 src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/com.dualfileapp.Dualfile.png
+    sources:
+      # TODO: replace with a clean source directory, relative to this manifest.
+      # For submission use the repo's public Git URL and an immutable commit.
+      - type: dir
+        path: TODO_SOURCE_CHECKOUT
+      - generated-sources.json
+      - node-sources.json

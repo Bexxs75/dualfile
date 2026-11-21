@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Dualfile
+Name[de]=Dualfile
+Comment=Two-pane file manager
+Comment[de]=Zwei-Fenster-Dateimanager
+Exec=dualfile
+Icon=com.dualfileapp.Dualfile
+Terminal=false
+Categories=Utility;FileManager;
+StartupWMClass=com.dualfileapp.Dualfile
