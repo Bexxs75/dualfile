@@ -183,16 +183,20 @@ impl Parser<'_> {
         self.at += 1;
         let mut out = String::new();
         loop {
-            let rest = std::str::from_utf8(&self.bytes[self.at..])
-                .ok()
-                .or_else(|| {
-                    // a multi-byte character cut by the end: take the valid prefix
-                    let end = self.bytes.len() - self.at;
-                    (0..end)
-                        .rev()
-                        .find_map(|n| std::str::from_utf8(&self.bytes[self.at..self.at + n]).ok())
-                })?;
-            let ch = rest.chars().next()?;
+            // Validate only the current character: checking the whole rest per character was
+            // quadratic and made 256 KiB write chunks take seconds.
+            let first = *self.bytes.get(self.at)?;
+            let width = match first {
+                0x00..=0x7f => 1,
+                0xc0..=0xdf => 2,
+                0xe0..=0xef => 3,
+                0xf0..=0xf7 => 4,
+                _ => return None,
+            };
+            let ch = std::str::from_utf8(self.bytes.get(self.at..self.at + width)?)
+                .ok()?
+                .chars()
+                .next()?;
             self.at += ch.len_utf8();
             match ch {
                 '"' => return Some(out),
