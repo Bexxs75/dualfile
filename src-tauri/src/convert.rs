@@ -687,6 +687,10 @@ pub struct SettingsDto {
     pub keybindings: std::collections::BTreeMap<String, String>,
     #[serde(default)]
     pub column_widths: settings::ColumnWidths,
+    #[serde(default)]
+    pub owner_column_widths: settings::ColumnWidths,
+    #[serde(default)]
+    pub column_order: std::collections::BTreeMap<String, Vec<String>>,
     pub session: SessionDto,
 }
 
@@ -777,6 +781,8 @@ impl From<&settings::Settings> for SettingsDto {
             pane_color_right: s.pane_color_right.clone(),
             keybindings: s.keybindings.clone(),
             column_widths: s.column_widths.clone(),
+            owner_column_widths: s.owner_column_widths.clone(),
+            column_order: s.column_order.clone(),
             session: SessionDto {
                 windows: s
                     .session
@@ -851,6 +857,8 @@ impl From<&SettingsDto> for settings::Settings {
             pane_color_right: s.pane_color_right.clone(),
             keybindings: s.keybindings.clone(),
             column_widths: s.column_widths.clone(),
+            owner_column_widths: s.owner_column_widths.clone(),
+            column_order: s.column_order.clone(),
             session: settings::Session {
                 windows: s
                     .session
@@ -1466,6 +1474,9 @@ mod tests {
             terminal_colors: "amber".into(),
             ..settings::Settings::default()
         };
+        core.owner_column_widths.normal = Some([120, 80, 72]);
+        core.column_order
+            .insert("ext".into(), vec!["uid".into(), "type".into()]);
         core.bookmarks.push(settings::Bookmark {
             name: "Doku".into(),
             path: "/home/x/Doku".into(),
