@@ -297,3 +297,22 @@ test("an existing autostart entry is never asked about", async () => {
   await waitFor(() => expect(app.runtime.store.getState().settings.autostartPrompted).toBe(true));
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+test("Flatpak hides start menu and updater actions and reports portal opening errors", async () => {
+  const check = vi.fn(async () => available);
+  const app = await setupApp({ wrap: api => ({ ...api,
+    systemStatus: async () => ({ packaging: "flatpak", appImage: false, startMenuExists: false, autostart: "off" }),
+    updateCheck: check,
+    openUrl: async () => { throw new Error("Portal denied"); },
+  }) });
+  const dlg = await settingsDialog(app);
+  await app.user.click(dlg.getByRole("tab", { name: /Allgemein/ }));
+  expect(dlg.queryByText("Startmenü-Eintrag:")).toBeNull();
+  expect(dlg.queryByRole("button", { name: "Eintragen" })).toBeNull();
+  await app.user.click(dlg.getByRole("tab", { name: "Info & Hilfe" }));
+  expect(dlg.getByText("Updates kommen über Flathub/Software-Center")).toBeInTheDocument();
+  expect(dlg.queryByRole("button", { name: "Jetzt prüfen" })).toBeNull();
+  expect(check).not.toHaveBeenCalled();
+  await app.user.click(dlg.getByRole("button", { name: "Projekt auf GitHub" }));
+  expect(await dlg.findByRole("alert")).toHaveTextContent("Portal denied");
+});

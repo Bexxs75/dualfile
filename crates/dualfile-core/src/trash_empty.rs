@@ -216,7 +216,10 @@ fn invalidate_sizes(root: &File) -> std::io::Result<()> {
     Ok(())
 }
 fn purge(path: &Path, job: &JobHandle, progress: &ProgressWatchdog) -> std::io::Result<OpReport> {
-    let table = std::fs::read_to_string("/proc/self/mountinfo")?;
+    let table = crate::packaging::read_host_file(
+        std::path::Path::new("/proc/self/mountinfo"),
+        4 * 1024 * 1024,
+    )?;
     purge_with_table(path, job, &table, progress)
 }
 fn purge_with_table(

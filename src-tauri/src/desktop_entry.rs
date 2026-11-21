@@ -1,4 +1,5 @@
 //! User-local desktop integration. Never replace or remove an unrelated entry.
+use dualfile_core::packaging::{packaging, Packaging};
 use std::{
     fs,
     io::{self, Write},
@@ -83,14 +84,19 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 pub struct DesktopEntry {
     home: PathBuf,
+    packaging: Packaging,
 }
 impl DesktopEntry {
     pub fn new(home: PathBuf) -> io::Result<Self> {
+        Self::with_packaging(home, packaging())
+    }
+    fn with_packaging(home: PathBuf, packaging: Packaging) -> io::Result<Self> {
         if !home.is_absolute() {
             return Err(invalid("Home must be absolute"));
         }
         Ok(Self {
             home: fs::canonicalize(home)?,
+            packaging,
         })
     }
     fn entry(&self) -> PathBuf {
@@ -144,6 +150,9 @@ impl DesktopEntry {
         write_atomic(path, bytes)
     }
     pub fn install(&self, exe: &Path) -> io::Result<()> {
+        if self.packaging == Packaging::Flatpak {
+            return Ok(());
+        }
         let text = render(exe)?;
         if self.contents()?.is_some_and(|s| !Self::owned(&s)) {
             return Err(invalid("Desktop entry belongs to another application"));
@@ -162,6 +171,9 @@ impl DesktopEntry {
     }
     /// Publish the new entry before removing a marked legacy entry. Unknown icons survive.
     pub fn migrate(&self, exe: &Path) -> io::Result<()> {
+        if self.packaging == Packaging::Flatpak {
+            return Ok(());
+        }
         let old_entry = self.entry().with_file_name(format!("{OLD_ID}.desktop"));
         let old_icon = self.icon().with_file_name(format!("{OLD_ID}.png"));
         self.safe(&old_entry)?;
@@ -200,6 +212,9 @@ impl DesktopEntry {
     }
 
     pub fn refresh(&self, exe: &Path) -> io::Result<()> {
+        if self.packaging == Packaging::Flatpak {
+            return Ok(());
+        }
         self.migrate(exe)?;
         if let Some(s) = self.contents()? {
             if Self::owned(&s) && s != render(exe)? {
@@ -209,6 +224,9 @@ impl DesktopEntry {
         Ok(())
     }
     pub fn remove(&self) -> io::Result<()> {
+        if self.packaging == Packaging::Flatpak {
+            return Ok(());
+        }
         if let Some(s) = self.contents()? {
             if !Self::owned(&s) {
                 return Err(invalid("Desktop entry belongs to another application"));
@@ -241,6 +259,30 @@ impl DesktopEntry {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn flatpak_start_keeps_appimage_starters_unchanged() {
+        let home = tempfile::tempdir().unwrap();
+        let native =
+            super::DesktopEntry::with_packaging(home.path().into(), super::Packaging::AppImage)
+                .unwrap();
+        native
+            .install(std::path::Path::new("/opt/Dualfile.AppImage"))
+            .unwrap();
+        let before = std::fs::read(native.entry()).unwrap();
+        let flatpak =
+            super::DesktopEntry::with_packaging(home.path().into(), super::Packaging::Flatpak)
+                .unwrap();
+        for operation in [
+            super::DesktopEntry::refresh,
+            super::DesktopEntry::install,
+            super::DesktopEntry::migrate,
+        ] {
+            operation(&flatpak, std::path::Path::new("/app/bin/dualfile")).unwrap();
+        }
+        flatpak.remove().unwrap();
+        assert_eq!(std::fs::read(native.entry()).unwrap(), before);
+    }
+
     use super::*;
     #[test]
     fn removal_also_clears_a_managed_legacy_entry_but_not_a_foreign_one() {

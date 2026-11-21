@@ -5,6 +5,7 @@ mod anonymize;
 #[cfg(target_os = "linux")]
 mod app_id_migration;
 mod autostart;
+mod background_portal;
 mod close;
 mod close_policy;
 mod commands;

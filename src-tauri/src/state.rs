@@ -339,6 +339,20 @@ pub fn xdg_open_command(path: &Path) -> Command {
 /// discarded, so a failed open produced no feedback at all. A handler that keeps running — the
 /// normal case — is detached after a short grace, exactly as before.
 pub(crate) fn open_with_system(path: &Path) -> Result<(), UiError> {
+    if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak {
+        // The runtime xdg-open forwards to OpenURI. Await its result, including a
+        // delayed portal rejection; the native opener's short grace is insufficient.
+        return dualfile_core::appenv::run_isolated(
+            xdg_open_command(path),
+            std::time::Duration::from_secs(120),
+        )
+        .map_err(|_| {
+            UiError::new(
+                "unsupported",
+                "Öffnen über das Portal fehlgeschlagen / Opening through the portal failed",
+            )
+        });
+    }
     spawn_opener_reporting(xdg_open_command(path))
 }
 
@@ -1062,8 +1076,11 @@ impl AppState {
     }
 
     pub fn trash_empty(&self) -> Result<u64, UiError> {
-        let table = std::fs::read_to_string("/proc/self/mountinfo")
-            .map_err(|_| UiError::new("timeout", "timeout"))?;
+        let table = dualfile_core::packaging::read_host_file(
+            std::path::Path::new("/proc/self/mountinfo"),
+            4 * 1024 * 1024,
+        )
+        .map_err(|_| UiError::new("timeout", "timeout"))?;
         let dirs = dualfile_core::trash_empty::discover(
             &table,
             &dualfile_core::system_places::DiscoveryPaths::system().data,

@@ -124,6 +124,18 @@ fn read(path: impl AsRef<std::path::Path>, cap: u64) -> String {
     text
 }
 pub(crate) fn bounded_read(path: std::path::PathBuf, cap: u64) -> Option<String> {
+    if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak
+        && matches!(
+            path.to_str(),
+            Some("/proc/self/mountinfo" | "/proc/mounts" | "/etc/fstab")
+        )
+    {
+        return places_pool::control()
+            .run(Duration::from_secs(3), move || {
+                dualfile_core::packaging::read_host_file(&path, cap).ok()
+            })
+            .flatten();
+    }
     // Kernel control files do not enter the probed mount. Concurrent pane listings may
     // read them together; per-path exclusion here would spuriously reject the second pane.
     if path.starts_with("/proc") {
@@ -447,6 +459,9 @@ pub async fn places_space(
 pub async fn trash_open_system(window: tauri::WebviewWindow) -> Result<(), UiError> {
     main_only(window.label())?;
     tauri::async_runtime::spawn_blocking(|| {
+        if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak {
+            return crate::state::open_with_system(std::path::Path::new("trash:/"));
+        }
         let mut command = std::process::Command::new("xdg-open");
         command.arg("trash:/");
         dualfile_core::appenv::launch_isolated(command, Duration::from_secs(5))
@@ -464,6 +479,9 @@ pub(crate) fn main_only(label: &str) -> Result<(), UiError> {
 }
 
 fn open_monitor() -> Option<std::fs::File> {
+    if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak {
+        return None;
+    }
     let mut file = std::fs::File::open("/proc/self/mountinfo").ok()?;
     // Reading acknowledges the proc poll generation before the descriptor is armed.
     let mut sink = std::io::sink();
@@ -1030,7 +1048,8 @@ fn fstab_action(point: &str, unmount: bool) -> Result<(), UiError> {
         bounded_read("/etc/fstab".into(), 256 * 1024).ok_or_else(|| mount_error("timeout"))?;
     let point = authorize_fstab(&fstab, &table, &point, unmount)?;
     authorize_current_user(&fstab, &point, unmount)?;
-    let mut command = std::process::Command::new(if unmount { "umount" } else { "mount" });
+    let mut command =
+        dualfile_core::packaging::host_command(if unmount { "umount" } else { "mount" });
     command.arg("--").arg(&point);
     let result = dualfile_core::appenv::run_isolated_guarded(
         command,
@@ -1084,7 +1103,7 @@ fn unmount_gvfs(mount: system_places::SystemPlace) -> Result<(), UiError> {
     {
         return Err(mount_error("notFound"));
     }
-    let mut command = std::process::Command::new("gio");
+    let mut command = dualfile_core::packaging::host_command("gio");
     command.args(["mount", "-u", "--", &mount.url]);
     let result = dualfile_core::appenv::run_isolated_guarded(
         command,

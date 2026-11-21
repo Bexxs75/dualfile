@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/dualfile-core", "crates/dualfile-remote", "crates/dualfile-plugin"]
+exclude = ["vendor/trash-5.3.0"]
+members = ["crates/dualfile-platform", "crates/dualfile-core", "crates/dualfile-remote", "crates/dualfile-plugin"]
 
 [workspace.package]
 edition = "2021"

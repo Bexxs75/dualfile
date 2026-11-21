@@ -190,6 +190,8 @@ const en: Record<keyof typeof de, string> = {
   "system.promptHelp": "Creates a launcher with an icon for your user (~/.local/share/applications). No administrator privileges are needed. You can remove it in settings at any time.",
   "system.never": "Do not ask again",
   "system.noThanks": "No, thanks",
+  "updates.flatpak": "Updates come through Flathub/software center",
+  "system.autostartPortalHelp": "Requests autostart through the system Background portal. Shows the last confirmed choice.",
   "system.autostart": "Start with the system",
   "system.autostart.off": "Off",
   "system.autostart.minimized": "Start minimized",

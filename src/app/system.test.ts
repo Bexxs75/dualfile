@@ -265,3 +265,18 @@ describe("autostart status follows the disk", () => {
     expect(f.controller.getSnapshot()).toMatchObject({ autostartPrompt: false, status: { autostart: "off" } });
   });
 });
+
+ test("Flatpak never checks/installs updates or touches the AppImage starter", async () => {
+  const f = fixture();
+  vi.mocked(f.api.systemStatus).mockResolvedValue({ packaging: "flatpak", appImage: false, startMenuExists: false, autostart: "off" });
+  await f.controller.start("de");
+  await f.controller.check(true);
+  await f.controller.setStartMenu(true);
+  await f.controller.answerPrompt(true, false);
+  await f.controller.install();
+  expect(f.api.updateCheck).not.toHaveBeenCalled();
+  expect(f.api.updateInstall).not.toHaveBeenCalled();
+  expect(f.api.startMenuSet).not.toHaveBeenCalled();
+  expect(f.controller.getSnapshot().prompt).toBe(false);
+  expect(f.settings().startMenuPromptCount).toBe(0);
+ });

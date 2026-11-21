@@ -256,15 +256,9 @@ impl DiscoveryPaths {
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .unwrap_or_else(|| PathBuf::from("/nonexistent"));
-        let xdg = |key, fallback| {
-            std::env::var_os(key)
-                .map(PathBuf::from)
-                .filter(|p| p.is_absolute())
-                .unwrap_or(fallback)
-        };
         Self {
-            data: xdg("XDG_DATA_HOME", home.join(".local/share")),
-            config: xdg("XDG_CONFIG_HOME", home.join(".config")),
+            data: crate::packaging::desktop_dir(&home, "XDG_DATA_HOME", ".local/share"),
+            config: crate::packaging::desktop_dir(&home, "XDG_CONFIG_HOME", ".config"),
             runtime: PathBuf::from(format!("/run/user/{}", rustix::process::getuid().as_raw())),
             home,
         }

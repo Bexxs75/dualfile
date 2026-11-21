@@ -190,6 +190,8 @@ const de = {
   "system.promptHelp": "Legt einen Starter mit Symbol für deinen Benutzer an (~/.local/share/applications). Es sind keine Administratorrechte nötig. Du kannst ihn jederzeit in den Einstellungen wieder entfernen.",
   "system.never": "Nicht noch einmal fragen",
   "system.noThanks": "Nein, danke",
+  "updates.flatpak": "Updates kommen über Flathub/Software-Center",
+  "system.autostartPortalHelp": "Fragt das System über das Background-Portal nach Autostart. Angezeigt wird die zuletzt bestätigte Auswahl.",
   "system.autostart": "Mit dem System starten",
   "system.autostart.off": "Aus",
   "system.autostart.minimized": "Minimiert starten",

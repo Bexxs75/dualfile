@@ -4,6 +4,7 @@ use crate::{
     desktop_entry::{self, DesktopEntry},
     state::AppState,
 };
+use dualfile_core::packaging::{packaging, Packaging};
 use serde::Serialize;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -40,6 +41,7 @@ impl Drop for InstallGuard {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemStatus {
+    packaging: &'static str,
     app_image: bool,
     start_menu_exists: bool,
     /// Why the start-menu entry could not be read or refreshed.
@@ -111,6 +113,7 @@ fn integration_status(
     let (start_menu_exists, start_menu_error) = start_menu_status(desktop, exe);
     let (autostart, autostart_error) = autostart_status(autostart, exe);
     SystemStatus {
+        packaging: if app_image { "appImage" } else { "plain" },
         app_image,
         start_menu_exists,
         start_menu_error: start_menu_error.or_else(|| exe_error.clone()),
@@ -121,13 +124,25 @@ fn integration_status(
 
 #[tauri::command]
 pub async fn system_status() -> Result<SystemStatus, String> {
+    if packaging() == Packaging::Flatpak {
+        let (autostart, autostart_error) = crate::background_portal::status();
+        return Ok(SystemStatus {
+            packaging: "flatpak",
+            app_image: false,
+            start_menu_exists: false,
+            start_menu_error: None,
+            autostart,
+            autostart_error,
+        });
+    }
     tauri::async_runtime::spawn_blocking(|| {
-        let status = integration_status(
+        let mut status = integration_status(
             desktop(),
             Autostart::from_env(),
             desktop_entry::executable(),
             app_image(),
         );
+        status.packaging = packaging().as_str();
         if let Some(error) = &status.start_menu_error {
             log::warn!("Startmenü-Eintrag: {error}");
         }
@@ -141,6 +156,9 @@ pub async fn system_status() -> Result<SystemStatus, String> {
 }
 #[tauri::command]
 pub async fn start_menu_set(enabled: bool) -> Result<(), String> {
+    if packaging() == Packaging::Flatpak {
+        return Ok(());
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let d = desktop().map_err(|e| e.to_string())?;
         if enabled {
@@ -157,6 +175,9 @@ pub async fn start_menu_set(enabled: bool) -> Result<(), String> {
 /// Writes or removes the autostart entry and answers with what is on disk afterwards.
 #[tauri::command]
 pub async fn autostart_set(mode: autostart::Mode) -> Result<autostart::Mode, String> {
+    if packaging() == Packaging::Flatpak {
+        return crate::background_portal::set(mode).await;
+    }
     tauri::async_runtime::spawn_blocking(move || {
         let entry = Autostart::from_env().map_err(|e| e.to_string())?;
         entry
@@ -433,6 +454,9 @@ pub fn tray_set(app: tauri::AppHandle, enabled: bool, language: String) -> Resul
 
 #[tauri::command]
 pub async fn update_check(app: tauri::AppHandle) -> Result<Option<AvailableUpdate>, String> {
+    if packaging() == Packaging::Flatpak {
+        return Ok(None);
+    }
     let result: Result<Option<AvailableUpdate>, String> = async {
         let update = app
             .updater()
@@ -473,6 +497,9 @@ async fn install_update(
     version: String,
     progress: Channel<UpdateProgress>,
 ) -> Result<(), String> {
+    if packaging() == Packaging::Flatpak {
+        return Err("Updates kommen über Flathub/Software-Center / Updates come through Flathub/software center".into());
+    }
     if !app_image() {
         return Err("Self-update requires AppImage".into());
     }

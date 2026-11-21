@@ -9,13 +9,13 @@ use dualfile_core::{
     drives::Drive,
     fstab, places_pool,
 };
-use std::{path::PathBuf, process::Command, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 pub(crate) fn key(device: &Device) -> String {
     device.key()
 }
 pub(crate) fn list() -> Result<Vec<Device>, UiError> {
-    let mut command = Command::new("lsblk");
+    let mut command = dualfile_core::packaging::host_command("lsblk");
     command.args(["--json", "--bytes", "--tree", "--output", devices::COLUMNS]);
     let output = appenv::capture_isolated(command, Duration::from_millis(750), devices::CAP)
         .map_err(helper_error)?;
@@ -205,7 +205,7 @@ fn helper(
     path: &str,
     lease: Arc<crate::mount_guard::Lease>,
 ) -> Result<(), appenv::HelperError> {
-    let mut command = Command::new("udisksctl");
+    let mut command = dualfile_core::packaging::host_command("udisksctl");
     command.args([verb, "--block-device", path]);
     appenv::run_isolated_guarded(command, Duration::from_secs(120), lease)
 }
@@ -224,7 +224,7 @@ fn unmount_partition(
                 .is_some_and(|f| f.permission.is_some())
     }) {
         crate::places::authorize_current_user_entry(entry, true)?;
-        let mut command = Command::new("umount");
+        let mut command = dualfile_core::packaging::host_command("umount");
         command.args(["--", &entry.drive.path]);
         return Ok(appenv::run_isolated_guarded(
             command,
@@ -251,11 +251,11 @@ fn reconcile(
 /// USB Eject deliberately means unmount all and power off; optical Eject opens the tray.
 fn removal_command(action: Action, device: &Device) -> Command {
     if action == Action::Eject && device.kind == "rom" {
-        let mut command = Command::new("eject");
+        let mut command = dualfile_core::packaging::host_command("eject");
         command.args(["--", &device.path]);
         command
     } else {
-        let mut command = Command::new("udisksctl");
+        let mut command = dualfile_core::packaging::host_command("udisksctl");
         command.args(["power-off", "--block-device", &device.whole]);
         command
     }

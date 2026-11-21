@@ -45,6 +45,10 @@ pub fn plugin() -> TauriPlugin<Wry> {
             if let Err(e) = copy_window_state(&old, &new) {
                 log::warn!("Window-state migration failed: {e}");
             }
+            if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak
+            {
+                return Ok(());
+            }
             let exe = desktop_entry::executable()?;
             // Integration failures remain recoverable and are retried/reported by system_status.
             if let Err(e) = Autostart::from_env().and_then(|entry| entry.migrate(&exe)) {

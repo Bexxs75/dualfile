@@ -362,7 +362,7 @@ pub fn parse_mounts(table: &str, self_mount: Option<&str>) -> Vec<Drive> {
 
 /// Filesystems mounted on this machine. Empty when `/proc/mounts` cannot be read.
 pub fn local_drives() -> Vec<Drive> {
-    match std::fs::read_to_string("/proc/mounts") {
+    match crate::packaging::read_host_file(std::path::Path::new("/proc/mounts"), 4 * 1024 * 1024) {
         Ok(table) => parse_mounts(&table, std::env::var("APPDIR").ok().as_deref()),
         Err(_) => Vec::new(),
     }

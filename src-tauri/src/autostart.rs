@@ -56,9 +56,10 @@ impl Autostart {
         }
     }
     pub fn from_env() -> io::Result<Self> {
-        Ok(Self::new(&config_home(
-            std::env::var_os("XDG_CONFIG_HOME").as_deref(),
+        Ok(Self::new(&dualfile_core::packaging::desktop_dir(
             &desktop_entry::home()?,
+            "XDG_CONFIG_HOME",
+            ".config",
         )))
     }
     // A symlinked entry is someone else's arrangement: neither read through nor replaced.

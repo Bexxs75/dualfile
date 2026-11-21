@@ -1,3 +1,4 @@
+pub use dualfile_platform as packaging;
 pub mod appenv;
 pub mod archive;
 pub mod compare;

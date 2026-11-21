@@ -44,7 +44,7 @@ export function SystemSettings({ field, query = "", onReset }: { field?: "autost
   const startMenuError = error || state.status?.startMenuError;
   return <>
     <section className="system-group" aria-label={tr(field === "startMenu" ? "system.startMenu" : "system.settingsTitle")}>
-      {field !== "autostart" && <div className="setting-row">
+      {field !== "autostart" && state.status?.packaging !== "flatpak" && <div className="setting-row">
         <span className="setting-label"><Highlight text={tr("system.startMenu")} query={query} /> <small className="rare">{tr("settings.rare")}</small></span>
         <div className="setting-control">
           <p className="muted"><b className={state.status?.startMenuExists ? "system-present" : undefined}>{tr(!state.status ? "system.loading" : state.status.startMenuExists ? "system.present" : "system.absent")}</b></p>
@@ -59,7 +59,7 @@ export function SystemSettings({ field, query = "", onReset }: { field?: "autost
             onChange={e => { const mode = e.target.value as AutostartMode; void autostart.run(() => system.setAutostart(mode)); }}>
             {AUTOSTART_MODES.map(mode => <option key={mode} value={mode}>{tr(`system.autostart.${mode}`)}</option>)}
           </select>
-          <p id="autostart-help" className="field-help"><Highlight text={tr("system.autostartHelp")} query={query} /></p>
+          <p id="autostart-help" className="field-help"><Highlight text={tr(state.status?.packaging === "flatpak" ? "system.autostartPortalHelp" : "system.autostartHelp")} query={query} /></p>
           {(autostart.error || state.status?.autostartError) && <p role="alert" className="field-error">{tr("system.autostartFailed", { message: autostart.error || state.status?.autostartError || "" })}</p>}
         </div>
         {onReset && <div className="setting-reset"><span className="modified-dot" title={tr("settings.changed")}><span aria-hidden="true">●</span><span className="sr-only"> {tr("settings.changed")}</span></span><button className="link" type="button" aria-label={`${tr("settings.reset")}: ${tr("system.autostart")}`} onClick={onReset}>{tr("settings.reset")}</button></div>}
@@ -117,6 +117,7 @@ export function UpdateSettings({ query = "" }: { query?: string }) {
   const settings = useAppState(s => s.settings);
   const language = useLanguage();
   const tr = useT();
+  if (state.status?.packaging === "flatpak") return <p>{tr("updates.flatpak")}</p>;
   return <>
     <section className="system-group" aria-labelledby="updates-heading">
       <h3 id="updates-heading"><Highlight text={tr("updates.title")} query={query} /></h3>

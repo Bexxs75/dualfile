@@ -138,6 +138,9 @@ fn login_shell() -> (String, Vec<&'static str>) {
 }
 
 fn shell_command(cwd: Option<String>, mode: &str) -> CommandBuilder {
+    if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak {
+        return flatpak_shell_command(cwd, mode);
+    }
     let bash = std::path::Path::new("/bin/bash").is_file();
     let (program, args) = match mode {
         "login" => login_shell(),
@@ -149,6 +152,42 @@ fn shell_command(cwd: Option<String>, mode: &str) -> CommandBuilder {
     command.arg("-i");
     command.env("TERM", "xterm-256color");
     apply_clean_env(&mut command);
+    command.cwd(local_cwd(cwd));
+    command
+}
+
+// The host wrapper returns success after an interactive shell exits (even `exit 1`),
+// so only a failed host launch selects the sandbox fallback.
+fn flatpak_shell_command(cwd: Option<String>, mode: &str) -> CommandBuilder {
+    let mut host = dualfile_core::packaging::host_command_with(
+        dualfile_core::packaging::Packaging::Flatpak,
+        "sh",
+    );
+    host.args([
+        "-c",
+        r#"
+case "$1" in
+ login) if [ -n "$SHELL" ] && [ -x "$SHELL" ]; then "$SHELL" -i; exit 0; fi ;;
+ bash) if [ -x /bin/bash ]; then /bin/bash --norc -i; exit 0; fi ;;
+ *) if command -v fish >/dev/null 2>&1; then fish --no-config -i; exit 0; fi ;;
+esac
+if [ -x /bin/bash ]; then /bin/bash --norc -i; else /bin/sh -i; fi
+exit 0
+"#,
+        "dualfile-host-shell",
+        mode,
+    ]);
+    let mut command = CommandBuilder::new("/bin/sh");
+    command.args(["-c", r#"
+"$@"
+result=$?
+if [ "$result" -eq 0 ]; then exit 0; fi
+printf '\nHost-Shell nicht verfügbar; Sandbox-Shell aktiv. / Host shell unavailable; using sandbox shell.\n' >&2
+exec /bin/sh -i
+"#, "dualfile-terminal"]);
+    command.arg(host.get_program());
+    command.args(host.get_args());
+    command.env("TERM", "xterm-256color");
     command.cwd(local_cwd(cwd));
     command
 }
@@ -407,6 +446,49 @@ pub async fn terminal_close(manager: Shared<'_>, id: u64) -> Result<(), UiError>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn flatpak_terminal_falls_back_with_visible_bilingual_notice() {
+        let bin = tempfile::tempdir().unwrap();
+        let command = super::flatpak_shell_command(None, "bash");
+        let argv = command.get_argv();
+        let output = std::process::Command::new(&argv[0])
+            .args(&argv[1..])
+            .env("PATH", bin.path())
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&output.stderr);
+        assert!(text.contains("Sandbox-Shell aktiv"));
+        assert!(text.contains("Host shell unavailable"));
+    }
+    #[test]
+    fn flatpak_terminal_passes_mode_to_the_host_without_fallback() {
+        use std::os::unix::fs::PermissionsExt;
+        let bin = tempfile::tempdir().unwrap();
+        let spawn = bin.path().join("flatpak-spawn");
+        std::fs::write(
+            &spawn,
+            "#!/bin/sh\n[ \"$1\" = --host ] || exit 1\nprintf 'host shell reached'\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&spawn, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let command = super::flatpak_shell_command(None, "login");
+        let argv = command.get_argv();
+        assert_eq!(argv.last().unwrap(), "login");
+        let output = std::process::Command::new(&argv[0])
+            .args(&argv[1..])
+            .env("PATH", bin.path())
+            .stdin(std::process::Stdio::null())
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "host shell reached"
+        );
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("Sandbox-Shell"));
+    }
+
     use super::*;
     use std::{
         sync::mpsc,
