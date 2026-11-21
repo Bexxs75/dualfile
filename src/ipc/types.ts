@@ -461,6 +461,8 @@ export interface Settings {
   showGidColumn?: boolean;
   paneTintStrength?: number;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
+  ownerColumnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
+  columnOrder?: { normal?: import("../state/columns").ColumnKey[]; ext?: import("../state/columns").ColumnKey[] };
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
   /** Optional tint (hex) per window; missing/empty = no tint. */
   paneColorLeft?: string;

@@ -373,13 +373,13 @@ input[type="checkbox"], input[type="range"], progress { accent-color: var(--acce
 
 /* Keep filename space before optional metadata columns. */
 @container (max-width: 620px) {
-  .list:not(.owner-columns) .head:not(.ext-split):not(.tv), .list:not(.owner-columns) .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px 130px; }
-  .list:not(.owner-columns) .head:not(.ext-split):not(.tv) > :nth-child(3), .list:not(.owner-columns) .row:not(.ext-split):not(.tv) > :nth-child(3) { display: none; }
+  .list:not(.owner-columns):not(.adjustable-columns) .head:not(.ext-split):not(.tv), .list:not(.owner-columns):not(.adjustable-columns) .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px 130px; }
+  .list:not(.owner-columns):not(.adjustable-columns) .head:not(.ext-split):not(.tv) > :nth-child(3), .list:not(.owner-columns):not(.adjustable-columns) .row:not(.ext-split):not(.tv) > :nth-child(3) { display: none; }
 }
 @container (max-width: 500px) {
-  .list:not(.owner-columns) .head:not(.ext-split):not(.tv), .list:not(.owner-columns) .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px; }
-  .list:not(.owner-columns) .head.ext-split, .list:not(.owner-columns) .row.ext-split { grid-template-columns: minmax(180px, 1fr) 56px 84px; }
-  .list:not(.owner-columns) .head:not(.tv) > :nth-child(4), .list:not(.owner-columns) .row:not(.tv) > :nth-child(4) { display: none; }
+  .list:not(.owner-columns):not(.adjustable-columns) .head:not(.ext-split):not(.tv), .list:not(.owner-columns):not(.adjustable-columns) .row:not(.ext-split):not(.tv) { grid-template-columns: minmax(180px, 1fr) 84px; }
+  .list:not(.owner-columns):not(.adjustable-columns) .head.ext-split, .list:not(.owner-columns):not(.adjustable-columns) .row.ext-split { grid-template-columns: minmax(180px, 1fr) 56px 84px; }
+  .list:not(.owner-columns):not(.adjustable-columns) .head:not(.tv) > :nth-child(4), .list:not(.owner-columns):not(.adjustable-columns) .row:not(.tv) > :nth-child(4) { display: none; }
 }
 .settings .field-help { grid-column: 1 / -1; }
 .warning-slot { height: 1.5em; overflow: auto; }
@@ -638,13 +638,13 @@ html.editor-window-root body { padding: 0; }
 .sidebar-icons .sidebar-eject { right: 0; top: 0; }
 
 /* Both grids have identical content boxes, including the row's cursor border. */
-.owner-columns { overflow-x: hidden; }
-.owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-all); }
-.owner-columns .head { border-left: 2px solid transparent; }
-.owner-columns .head > span, .owner-columns .row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.owner-columns .head > span { overflow: visible; }
-.owner-columns .head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.owner-columns .permissions { font-family: monospace; }
+:is(.owner-columns, .adjustable-columns) { overflow-x: hidden; }
+:is(.owner-columns, .adjustable-columns) .head, :is(.owner-columns, .adjustable-columns) .row { grid-template-columns: var(--df-owner-all); }
+:is(.owner-columns, .adjustable-columns) .head { border-left: 2px solid transparent; }
+:is(.owner-columns, .adjustable-columns) .head > span, :is(.owner-columns, .adjustable-columns) .row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(.owner-columns, .adjustable-columns) .head > span { overflow: visible; }
+:is(.owner-columns, .adjustable-columns) .head button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(.owner-columns, .adjustable-columns) .permissions { font-family: monospace; }
 @container (width < 860px) {
   .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-no-type); }
   .owner-columns [data-column="type"] { display: none; }
@@ -660,6 +660,16 @@ html.editor-window-root body { padding: 0; }
 @container (width < 440px) {
   .owner-columns .head, .owner-columns .row { grid-template-columns: var(--df-owner-minimal); }
   .owner-columns [data-column="ext"] { display: none; }
+}
+
+/* Lists without ownership keep their existing responsive breakpoints. */
+@container (max-width: 620px) {
+  .adjustable-columns:not(.owner-columns) .head, .adjustable-columns:not(.owner-columns) .row { grid-template-columns: var(--df-owner-no-type); }
+  .adjustable-columns:not(.owner-columns) [data-column="type"] { display: none; }
+}
+@container (max-width: 500px) {
+  .adjustable-columns:not(.owner-columns) .head, .adjustable-columns:not(.owner-columns) .row { grid-template-columns: var(--df-owner-no-date); }
+  .adjustable-columns:not(.owner-columns) [data-column="modified"] { display: none; }
 }
 
 .pane [data-tint] .row.sel, [data-fm="weiss"] .pane .row.sel { background: var(--sel); }
@@ -755,3 +765,10 @@ html.editor-window-root body { padding: 0; }
 .settings-extra-columns .setting-control { order: -1; }
 .settings-extra-columns .setting-reset { flex-basis: 100%; }
 .settings-content .warning-slot { height: auto; min-height: 1.5em; }
+
+.adjustable-columns .head > span[data-insertion]::before { content: ""; position: absolute; top: 0; bottom: 0; width: 3px; background: var(--accent); z-index: 3; pointer-events: none; }
+.adjustable-columns .head > span[data-insertion="before"]::before { left: -4px; }
+.adjustable-columns .head > span[data-insertion="after"]::before { right: -4px; }
+.adjustable-columns .head button { touch-action: none; }
+.adjustable-columns .head button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .col-resize::after { transition: none; } }

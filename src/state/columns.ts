@@ -45,3 +45,49 @@ export function ownerColumnTemplates(widths: ColumnTriple, ext: boolean, enabled
     "--df-owner-minimal": `minmax(120px, 1fr) ${[96, 64, 64].filter((_, i) => enabled[i]).map(width => `minmax(0, ${width}px)`).join(" ")}`,
   };
 }
+
+export type ColumnKey = "size" | "type" | "modified" | "permissions" | "uid" | "gid";
+export type AllWidths = [number, number, number, number, number, number];
+export const OWNER_DEFAULTS: ColumnTriple = [96, 64, 64];
+export function defaultOrder(mode: ColumnMode): ColumnKey[] {
+  return [...(mode === "ext" ? ["type", "size"] as const : ["size", "type"] as const), "modified", "permissions", "uid", "gid"];
+}
+export function columnOrderFor(settings: Pick<Settings, "columnOrder">, mode: ColumnMode): ColumnKey[] {
+  const defaults = defaultOrder(mode);
+  const stored = settings.columnOrder?.[mode];
+  return [...new Set([...(Array.isArray(stored) ? stored.filter(k => defaults.includes(k)) : []), ...defaults])];
+}
+export function allWidthsFor(settings: Settings, mode: ColumnMode): AllWidths {
+  const stored = settings.ownerColumnWidths?.[mode];
+  return [...columnWidthsFor(settings, mode), ...OWNER_DEFAULTS.map((v, i) => clampColumn(stored?.[i] ?? v, v))] as AllWidths;
+}
+
+/** Tracks follow column identity, including at each responsive breakpoint. */
+export function orderedTemplates(widths: AllWidths, mode: ColumnMode, order: ColumnKey[], owners: readonly boolean[]): Record<string, string> {
+  const defaults = defaultOrder(mode);
+  const visible = order.filter(k => defaults.indexOf(k) < 3 || owners[defaults.indexOf(k) - 3]);
+  const template = (hidden: ColumnKey[], name = 160) => {
+    const keys = visible.filter(k => !hidden.includes(k));
+    const ownerKeys = keys.filter(k => defaults.indexOf(k) >= 3);
+    const ownerTotal = ownerKeys.reduce((sum, k) => sum + widths[defaults.indexOf(k)]!, 0);
+    const metadataTotal = keys.filter(k => defaults.indexOf(k) < 3).reduce((sum, k) => sum + widths[defaults.indexOf(k)]!, 0);
+    const reserved = name + keys.length * 6;
+    return [`minmax(${name}px, 1fr)`, ...keys.map(k => {
+      const width = widths[defaults.indexOf(k)]!;
+      // Preserve ownership widths while space permits, as in ownerColumnTemplates.
+      // If even those no longer fit, shrink them proportionally instead of overflowing.
+      const owner = defaults.indexOf(k) >= 3;
+      const budget = reserved + (owner ? 0 : ownerTotal);
+      const total = owner ? ownerTotal : metadataTotal;
+      return `min(${width}px, max(0px, calc((100% - ${budget}px) * ${width / total})))`;
+    })].join(" ");
+  };
+  return {
+    "--df-cols": `minmax(120px, 1fr) ${visible.map(k => `${widths[defaults.indexOf(k)]}px`).join(" ")}`,
+    "--df-owner-all": template([]),
+    "--df-owner-no-type": template(mode === "ext" ? [] : ["type"]),
+    "--df-owner-no-date": template(mode === "ext" ? ["modified"] : ["type", "modified"]),
+    "--df-owner-small": template(mode === "ext" ? ["size", "modified"] : ["size", "type", "modified"], 120),
+    "--df-owner-minimal": template(["size", "type", "modified"], 120),
+  };
+}

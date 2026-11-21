@@ -81,6 +81,8 @@ pub struct Settings {
     pub keybindings: BTreeMap<String, String>,
     /// Custom file-list column widths (px); empty fields mean the default width.
     pub column_widths: ColumnWidths,
+    pub owner_column_widths: ColumnWidths,
+    pub column_order: BTreeMap<String, Vec<String>>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(default)]
@@ -136,6 +138,8 @@ impl Default for Settings {
             pane_color_right: String::new(),
             keybindings: BTreeMap::new(),
             column_widths: ColumnWidths::default(),
+            owner_column_widths: ColumnWidths::default(),
+            column_order: BTreeMap::new(),
         }
     }
 }
@@ -443,6 +447,13 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         pane_tint_strength: tint_strength.clamp(80, 100) as u8,
         extension_column: field(&mut obj, "extension_column", d.extension_column, &mut fixes),
         keybindings: field(&mut obj, "keybindings", d.keybindings.clone(), &mut fixes),
+        owner_column_widths: field(
+            &mut obj,
+            "owner_column_widths",
+            d.owner_column_widths.clone(),
+            &mut fixes,
+        ),
+        column_order: field(&mut obj, "column_order", d.column_order.clone(), &mut fixes),
         column_widths: field(
             &mut obj,
             "column_widths",
@@ -780,6 +791,34 @@ mod tests {
         assert!(
             matches!(outcome, LoadOutcome::Repaired(ref f) if f.contains(&"terminal_shell".to_string()))
         );
+    }
+
+    #[test]
+    fn column_layout_migrates_triples_and_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            dir.path(),
+            r#"{"version":6,"column_widths":{"normal":[90,100,150]}}"#,
+        );
+        let (mut s, _) = load(dir.path());
+        assert_eq!(s.column_widths.normal, Some([90, 100, 150]));
+        assert_eq!(s.owner_column_widths, ColumnWidths::default());
+        assert!(s.column_order.is_empty());
+        s.owner_column_widths.normal = Some([120, 80, 72]);
+        s.owner_column_widths.ext = Some([100, 90, 80]);
+        s.column_order.insert(
+            "normal".into(),
+            vec![
+                "uid".into(),
+                "size".into(),
+                "type".into(),
+                "modified".into(),
+                "permissions".into(),
+                "gid".into(),
+            ],
+        );
+        save(dir.path(), &s, false).unwrap();
+        assert_eq!(load(dir.path()).0, s);
     }
 
     #[test]

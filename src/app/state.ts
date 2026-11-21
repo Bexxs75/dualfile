@@ -164,6 +164,8 @@ export const defaultSettings: Settings = {
   paneColorRight: "",
   keybindings: {},
   columnWidths: {},
+  ownerColumnWidths: {},
+  columnOrder: {},
   session: {
     windows: [
       { tabs: [{ path: "", sort: "name", filter: "" }], activeTab: 0 },

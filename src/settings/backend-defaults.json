@@ -60,5 +60,7 @@
   "paneColorLeft": "",
   "paneColorRight": "",
   "keybindings": {},
-  "columnWidths": {}
+  "columnWidths": {},
+  "ownerColumnWidths": {},
+  "columnOrder": {}
 }
