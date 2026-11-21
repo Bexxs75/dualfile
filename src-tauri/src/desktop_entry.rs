@@ -209,24 +209,56 @@ impl DesktopEntry {
         Ok(())
     }
     pub fn remove(&self) -> io::Result<()> {
-        let Some(s) = self.contents()? else {
-            return Ok(());
-        };
-        if !Self::owned(&s) {
-            return Err(invalid("Desktop entry belongs to another application"));
+        if let Some(s) = self.contents()? {
+            if !Self::owned(&s) {
+                return Err(invalid("Desktop entry belongs to another application"));
+            }
+            self.safe(&self.icon())?;
+            fs::remove_file(self.entry())?;
+            if fs::read(self.icon()).is_ok_and(|b| b == ICON) {
+                fs::remove_file(self.icon())?;
+            }
         }
-        self.safe(&self.icon())?;
-        fs::remove_file(self.entry())?;
-        if fs::read(self.icon()).is_ok_and(|b| b == ICON) {
-            fs::remove_file(self.icon())?;
+        // A managed pre-0.4.1 entry left by a failed migration would otherwise stay in the
+        // menu and let the next migration recreate the entry the user just removed.
+        let old_entry = self.entry().with_file_name(format!("{OLD_ID}.desktop"));
+        let old_icon = self.icon().with_file_name(format!("{OLD_ID}.png"));
+        self.safe(&old_entry)?;
+        match fs::read_to_string(&old_entry) {
+            Ok(text) if Self::owned(&text) => {
+                self.safe(&old_icon)?;
+                if fs::read(&old_icon).is_ok_and(|b| b == ICON) {
+                    fs::remove_file(&old_icon)?;
+                }
+                fs::remove_file(&old_entry)
+            }
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
         }
-        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn removal_also_clears_a_managed_legacy_entry_but_not_a_foreign_one() {
+        let home = tempfile::tempdir().unwrap();
+        let entry = DesktopEntry::new(home.path().to_owned()).unwrap();
+        let old = entry.entry().with_file_name(format!("{OLD_ID}.desktop"));
+        entry.install(Path::new("/new/app")).unwrap();
+        fs::copy(entry.entry(), &old).unwrap();
+        entry.remove().unwrap();
+        assert!(!entry.entry().exists());
+        assert!(!old.exists());
+        entry.migrate(Path::new("/new/app")).unwrap();
+        assert!(!entry.entry().exists());
+        fs::write(&old, "foreign").unwrap();
+        entry.remove().unwrap();
+        assert_eq!(fs::read_to_string(&old).unwrap(), "foreign");
+    }
+
     #[test]
     fn migration_replaces_only_owned_legacy_files_and_is_repeatable() {
         let home = tempfile::tempdir().unwrap();

@@ -50,6 +50,12 @@ fn bus_configured() -> bool {
     std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some_and(|v| !v.is_empty())
         || std::env::var_os("XDG_RUNTIME_DIR")
             .is_some_and(|dir| std::path::Path::new(&dir).join("bus").exists())
+        // zbus also falls back to /run/user/<euid>/bus; /proc/self belongs to our euid.
+        // If even that cannot be read, assume a bus may exist and stay on the safe side.
+        || std::fs::metadata("/proc/self").map_or(true, |meta| {
+            let uid = std::os::unix::fs::MetadataExt::uid(&meta);
+            std::path::Path::new(&format!("/run/user/{uid}/bus")).exists()
+        })
 }
 
 pub fn plugin() -> TauriPlugin<Wry> {
