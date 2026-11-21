@@ -10,7 +10,7 @@ const item = (name: RegExp) => within(sidebar()).getByRole("treeitem", { name })
 
 test("sidebar clicks use active/other pane and middle click opens a tab", async () => {
   const app = await setupApp({ settings: { bookmarks: [bookmark] } });
-  expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
+  expect(screen.queryByRole("toolbar", { name: "Orte" })).toBeNull();
   await app.user.click(item(/^Work/));
   await waitFor(() => expect(activeTabOf(app.runtime.store.getState(), 0).path).toBe(DOCS));
   fireEvent.click(item(/^Work/), { ctrlKey: true });
@@ -26,7 +26,7 @@ test("mode shortcuts persist and restore the last visible mode, ribbon only whil
   expect(app.runtime.store.getState().settings.sidebarMode).toBe("icons");
   await app.user.keyboard("{F9}");
   expect(screen.queryByRole("navigation", { name: "Orte" })).toBeNull();
-  expect(screen.getByRole("toolbar", { name: "Lesezeichen" })).toBeInTheDocument();
+  expect(screen.getByRole("toolbar", { name: "Orte" })).toBeInTheDocument();
   await app.user.keyboard("{F9}");
   expect(app.runtime.store.getState().settings.sidebarMode).toBe("icons");
   await act(() => app.runtime.controller.saveNow());
@@ -359,8 +359,8 @@ test("empty trash context action requires confirmation and properties do not sta
   await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
   expect(empty).toHaveBeenCalledOnce();
   fireEvent.contextMenu(item(/^NAS \(fstab\)/));
-  await app.user.click(screen.getByRole("menuitem", { name: "Eigenschaften" }));
-  expect(screen.getByRole("dialog", { name: "Eigenschaften" })).toHaveTextContent("nfs");
+  await app.user.click(screen.getByRole("menuitem", { name: "Ort-Einstellungen" }));
+  expect(screen.getByRole("dialog", { name: "Ort-Einstellungen" })).toHaveTextContent("nfs");
   expect(space).not.toHaveBeenCalled();
 });
 
@@ -455,7 +455,7 @@ test("Ribbon and sidebar never overlap while the compositor delays hiding", asyn
   vi.spyOn(app.api, "sidebarResizeWindow").mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
   act(() => app.runtime.controller.toggleSidebar());
   expect(screen.queryByRole("navigation", { name: "Orte" })).toBeNull();
-  expect(screen.getByRole("toolbar", { name: "Lesezeichen" })).toBeVisible();
+  expect(screen.getByRole("toolbar", { name: "Orte" })).toBeVisible();
   await waitFor(() => expect(finish).toBeDefined());
   await act(async () => { finish({ actualDelta: -210, canGrow: true }); });
 });

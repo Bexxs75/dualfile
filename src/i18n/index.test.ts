@@ -226,7 +226,7 @@ test("similar-image counts have German and English singular and plural forms",()
 
 test("dialog button ellipses follow the existing spaced majority", () => {
   for (const language of ["de", "en"] as const) {
-    for (const key of ["action.compareDirs", "menu.view.settings", "space.button", "bookmarks.pin", "ssh.connections"] as const) {
+    for (const key of ["action.compareDirs", "menu.view.settings", "space.button", "action.multiRename", "ssh.connections", "ssh.new"] as const) {
       expect(t(key, {}, language)).toMatch(/ …$/);
     }
   }

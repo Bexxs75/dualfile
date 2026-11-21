@@ -51,10 +51,10 @@ test.each([["de", "Speicherbelegung"], ["en", "Disk usage"]] as const)("B11 %s d
 test("B13 bookmark tooltip follows pinned state", async () => {
   const app = await setupApp({ left: DOCS });
   const bar = within(app.pane(0));
-  const pin = bar.getByRole("button", { name: /Ordner merken/ });
-  expect(pin).toHaveAttribute("title", "Aktuellen Ordner als Lesezeichen merken (Ctrl+D)");
+  const pin = bar.getByRole("button", { name: /Zu Orten hinzufügen/ });
+  expect(pin).toHaveAttribute("title", "Aktuellen Ordner zu Orten hinzufügen (Ctrl+D)");
   await app.user.click(pin);
-  expect(bar.getByRole("button", { name: "Lesezeichen lösen" })).toHaveAttribute("title", "Lesezeichen lösen (Ctrl+D)");
+  expect(bar.getByRole("button", { name: "Aus Orten entfernen" })).toHaveAttribute("title", "Aus Orten entfernen (Ctrl+D)");
 });
 
 test("B14 German design group and names", async () => {
@@ -113,7 +113,7 @@ test("B22 undo toast/history name items and show platform shortcut without overl
   await app.runJobs();
   await waitFor(() => expect(app.view.container.querySelector(".undo-toast")).toHaveTextContent("Kopieren: notizen.txt und 1 weitere"));
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf der Änderungen …" }));
   expect(app.dialog()).toHaveTextContent("Kopieren: notizen.txt und 1 weitere");
   expect(app.dialog()).toHaveTextContent("Ctrl+Z");
   expect(app.dialog()).not.toHaveTextContent("⌘");
@@ -122,7 +122,7 @@ test("B22 undo toast/history name items and show platform shortcut without overl
   await app.user.keyboard("{Escape}");
   platform.mockReturnValue("MacIntel");
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf der Änderungen …" }));
   expect(app.dialog()).toHaveTextContent("Cmd+Z");
   expect(app.dialog()).not.toHaveTextContent("Ctrl+Z");
   platform.mockRestore();
@@ -143,7 +143,7 @@ test("B24 conflict includes full destination path and neutral overwrite", async 
 test("B25 similar scan labels share spaced fields and review text", async () => {
   const app = await setupApp({ language: "en" });
   await app.user.click(screen.getByRole("button", { name: "Tools" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Similar images" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Similar images …" }));
   expect(screen.getByLabelText("Minimum size (bytes)").closest("label")).toHaveClass("fld");
   expect(screen.getByLabelText("Sensitivity").closest("label")).toHaveClass("fld");
   expect(app.dialog()).toHaveTextContent(": review every");

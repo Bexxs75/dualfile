@@ -252,8 +252,8 @@ export function Sidebar({ mode, width }: { mode: "hidden" | "icons" | "full"; wi
           <button role="menuitem" onClick={() => { void controller.openSystemTrash(); setMenu(null); }}>{tr("sidebar.openSystemTrash")}</button>
           <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" }); setMenu(null); }}>{tr("sidebar.emptyTrash")}</button>
         </>}
-        {menuEntry.path && <button role="menuitem" onClick={() => { void navigator.clipboard.writeText(menuEntry.path!).catch(() => controller.toast(tr("error.io"), "error")); setMenu(null); }}>{tr("sidebar.copyPath")}</button>}
-        <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeProperties", key: menuEntry.key }); setMenu(null); }}>{tr("context.properties")}</button>
+        {menuEntry.path && <button role="menuitem" onClick={() => { void controller.copyPath(undefined, menuEntry.path!); setMenu(null); }}>{tr("context.copyPath")}</button>}
+        <button role="menuitem" onClick={() => { controller.openDialog({ kind: "placeProperties", key: menuEntry.key }); setMenu(null); }}>{tr("sidebar.placeSettings")}</button>
       </>}
       {menuEntry && !menuEntry.key.startsWith("bookmark:") && <button role="menuitem" onClick={() => { controller.hidePlace(menuEntry.key, !menuEntry.hidden); setMenu(null); focus(menuEntry.key); }}>{tr(menuEntry.hidden ? "sidebar.showAgain" : "sidebar.hideEntry")}</button>}
       <button role="menuitemcheckbox" aria-checked={showHidden} onClick={() => { setShowHidden(!showHidden); setMenu(null); focus(focusKey); }}>{tr("sidebar.showHidden")}</button>

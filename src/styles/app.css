@@ -755,3 +755,13 @@ html.editor-window-root body { padding: 0; }
 .settings-extra-columns .setting-control { order: -1; }
 .settings-extra-columns .setting-reset { flex-basis: 100%; }
 .settings-content .warning-slot { height: auto; min-height: 1.5em; }
+
+.ctx { max-width: calc(100vw - 8px); max-height: calc(100vh - 8px); overflow-y: auto; overscroll-behavior: contain; }
+.ctx-group { display: flex; flex-direction: column; flex-shrink: 0; }
+.ctx button { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; flex-shrink: 0; }
+.ctx kbd { color: var(--muted); font-size: .9em; }
+.ctx-heading { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; overflow-wrap: anywhere; flex-shrink: 0; }
+.ctx-heading small, .menu-reason { color: var(--muted); font-size: .85em; }
+.menu-reason { display: block; grid-column: 1 / -1; }
+.ctx button.danger { color: var(--danger, #e66767); }
+.header-dropdown button[aria-disabled="true"] { opacity: .5; }

@@ -104,7 +104,7 @@ test("New and Edit open the editor window instead of an in-page form", async () 
     return <ConnectionsDialog api={api} onClose={() => {}} />;
   });
   const open = vi.spyOn(api, "connectionEditorOpen");
-  await user.click(await screen.findByRole("button", { name: "Neue Verbindung…" }));
+  await user.click(await screen.findByRole("button", { name: "Neue Verbindung …" }));
   expect(open).toHaveBeenLastCalledWith(null, "Verbindungsprofil", expect.anything());
   await user.click(screen.getByRole("button", { name: "Bearbeiten" }));
   expect(open).toHaveBeenLastCalledWith("p", "Verbindungsprofil", expect.anything());
@@ -114,7 +114,7 @@ test("New and Edit open the editor window instead of an in-page form", async () 
 test("a second editor request tells the user instead of opening another window", async () => {
   const { api, runtime, user } = setup((api) => <ConnectionsDialog api={api} onClose={() => {}} />);
   vi.spyOn(api, "connectionEditorOpen").mockResolvedValue(false);
-  await user.click(await screen.findByRole("button", { name: "Neue Verbindung…" }));
+  await user.click(await screen.findByRole("button", { name: "Neue Verbindung …" }));
   await waitFor(() => expect(runtime.store.getState().toasts.some((t) => /schon in einem eigenen Fenster/.test(t.text))).toBe(true));
 });
 

@@ -5,7 +5,7 @@ import { SimilarDialog } from "./dialogs/SimilarDialog";
 import { UsageDialog, DupesDialog } from "./dialogs/SpaceDialogs";
 import { useAppState, useController, useT } from "../app/context";
 import { activeTabOf } from "../app/state";
-import { parseRemotePath } from "../state/paths";
+import { isArchivePath, parseRemotePath } from "../state/paths";
 import { Icon, type IconName } from "./Icon";
 import { TerminalShortcutHint } from "./ShortcutHint";
 import { HeaderMenu, type HeaderMenuItem } from "./HeaderMenu";
@@ -47,11 +47,22 @@ export function Toolbar() {
     { label: tr("ssh.import"), icon: "import", action: () => entry("import") },
     { label: tr("header.manageConnections"), icon: "list", action: () => controller.openDialog({ kind: "connections" }) },
   );
-  const commands = createCommands(state, controller, tr, kind => setSpace({ kind, root: path }));
-  const tools: HeaderMenuItem[] = ["multiRename", "compareDirs", "usage", "dupes", "similar", "history", "whatsNew"].map(id => {
+  const commands = createCommands(state, controller, tr, kind => controller.openTool(kind, path));
+  const tool = (id: string): HeaderMenuItem => {
     const command = commands.find(c => c.id === id)!;
-    return { label: command.title, icon: command.icon, action: () => { if (command.enabled(state)) command.execute(); } };
-  });
+    return { label: command.title, icon: command.icon, hint: command.shortcut, action: command.execute,
+      disabled: !command.enabled(state), reason: tr(isArchivePath(path) ? "menu.reason.archive" : "menu.reason.select") };
+  };
+  const tools: HeaderMenuItem[] = [
+    { kind: "heading", label: tr("menu.analyze") }, ...["usage", "dupes", "similar"].map(tool),
+    { kind: "separator" }, { kind: "heading", label: tr("menu.edit") }, ...["multiRename", "compareDirs"].map(tool),
+    { kind: "separator" }, tool("history"),
+  ];
+  useEffect(() => {
+    const open = (event: Event) => setSpace((event as CustomEvent<NonNullable<typeof space>>).detail);
+    document.addEventListener("dualfile:tool", open);
+    return () => document.removeEventListener("dualfile:tool", open);
+  }, []);
   const openPalette = () => {
     document.querySelector<HTMLElement>(`[data-pane="${state.active}"] [role="grid"]`)?.focus();
     setPalette(true);

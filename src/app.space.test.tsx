@@ -14,7 +14,7 @@ const usage = () => screen.getByRole("dialog", {
   name: "Speicherbelegung"
 });
 const dupes = () => screen.getByRole("dialog", {
-  name: "Duplikate finden"
+  name: "Duplikate finden …"
 });
 test("usage start, progress, select, keyboard drilldown/back, trash confirmation and refresh", async () => {
   const trash = vi.fn();
@@ -120,7 +120,7 @@ test("dupes roots, progress, keep rule, radio choice, confirmation sends only gr
     }
   }));
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden …" }));
   expect(dupes()).toHaveTextContent("Nichts verlässt den Rechner.");
   await app.user.click(within(dupes()).getByRole("button", {
     name: "Ordner hinzufügen"
@@ -155,7 +155,7 @@ test("dupes roots, progress, keep rule, radio choice, confirmation sends only gr
 test("dupes cancellation and focus trap", async () => {
   const app = await setup();
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden …" }));
   await app.user.click(within(dupes()).getByRole("button", {
     name: "Suche starten"
   }));
@@ -221,7 +221,7 @@ test("dupes paginates while global confirmation includes unloaded groups", async
     }
   }));
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden …" }));
   await app.user.click(within(dupes()).getByRole("button", {
     name: "Suche starten"
   }));
@@ -333,7 +333,7 @@ test.each(["cancelled", "failed"] as const)("dupes %s partial results cannot be 
     jobs: async () => (await api.jobs()).map(j => ({ ...j, state: ready ? state : j.state })),
   }));
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden …" }));
   await app.user.click(within(dupes()).getByRole("button", { name: "Suche starten" }));
   await app.runJobs();
   await waitFor(() => expect(within(dupes()).getByRole("alert")).toBeVisible());
@@ -347,7 +347,7 @@ test("dupes incomplete results remain usable after cancellation and a fresh sear
     dupesPage: async (...args) => ({ ...(await api.dupesPage(...args)), cancelled, incomplete: true }),
   }));
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Duplikate finden …" }));
   await app.user.click(within(dupes()).getByRole("button", { name: "Suche starten" }));
   await app.runJobs();
   await waitFor(() => expect(dupes()).toHaveTextContent("Die Suche wurde abgebrochen."));

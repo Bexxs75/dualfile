@@ -1,4 +1,3 @@
-import { currentVersion } from "./release-notes";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { DOCS, DOWNLOADS, setupApp } from "./test-utils";
@@ -10,19 +9,19 @@ test.each(["de", "en"] as const)("tools menu keyboard, wrap, activation and focu
   act(() => trigger.focus());
   await app.user.keyboard("{ArrowDown}");
   const items = screen.getAllByRole("menuitem");
-  expect(items).toHaveLength(7);
+  expect(items).toHaveLength(6);
   expect(items[0]).toHaveFocus();
   expect(trigger).toHaveAttribute("aria-expanded", "true");
   await app.user.keyboard("{ArrowUp}");
-  expect(items[6]).toHaveFocus();
+  expect(items[5]).toHaveFocus();
   await app.user.keyboard("{Home}{ArrowDown}");
   expect(items[1]).toHaveFocus();
   await app.user.keyboard("{End}{Enter}");
-  expect(screen.getByRole("dialog", { name: language === "de" ? `Neu in Dualfile ${currentVersion}` : `What’s new in Dualfile ${currentVersion}` })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: language === "de" ? "Verlauf der Änderungen …" : "Change history …" })).toBeVisible();
   await app.user.keyboard("{Escape}");
   expect(trigger).toHaveFocus();
   await app.user.keyboard("{ArrowUp}");
-  expect(screen.getAllByRole("menuitem")[6]).toHaveFocus();
+  expect(screen.getAllByRole("menuitem")[5]).toHaveFocus();
   await app.user.keyboard("{Escape}");
   expect(trigger).toHaveFocus();
   expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -30,7 +29,7 @@ test.each(["de", "en"] as const)("tools menu keyboard, wrap, activation and focu
 
 test("panel pin toggles its own folder; empty bookmarks disappear; filter shortcut and panel switch", async () => {
   const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { sidebarMode: "hidden" } });
-  expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
+  expect(screen.queryByRole("toolbar", { name: "Orte" })).toBeNull();
   expect(app.pane(0)).toHaveClass("active");
   expect(app.pane(1)).not.toHaveClass("active");
   await app.user.keyboard("{Tab}/");
@@ -40,15 +39,15 @@ test("panel pin toggles its own folder; empty bookmarks disappear; filter shortc
   await app.user.type(filter, "abc");
   await app.user.click(within(app.pane(1)).getByRole("button", { name: "Filter löschen" }));
   expect(filter).toHaveValue("");
-  const pin = within(app.pane(0)).getByRole("button", { name: "Ordner merken …" });
+  const pin = within(app.pane(0)).getByRole("button", { name: "Zu Orten hinzufügen" });
   expect(pin).toHaveAttribute("aria-pressed", "false");
   await app.user.click(pin);
   expect(pin).toHaveAttribute("aria-pressed", "true");
   expect(app.runtime.store.getState().settings.bookmarks.map(b => b.path)).toEqual([DOCS]);
-  expect(screen.getByRole("toolbar", { name: "Lesezeichen" })).toBeVisible();
+  expect(screen.getByRole("toolbar", { name: "Orte" })).toBeVisible();
   await app.user.click(pin);
   expect(pin).toHaveAttribute("aria-pressed", "false");
-  expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
+  expect(screen.queryByRole("toolbar", { name: "Orte" })).toBeNull();
 });
 
 test("connection chip empty, disconnected, connected and targeted dialog entries", async () => {
@@ -57,7 +56,7 @@ test("connection chip empty, disconnected, connected and targeted dialog entries
   expect(empty.querySelector(".connection-dot")).toBeNull();
   await app.user.click(empty);
   const open = vi.spyOn(app.api, "connectionEditorOpen");
-  await app.user.click(screen.getByRole("menuitem", { name: "Neue Verbindung…" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Neue Verbindung …" }));
   expect(open).toHaveBeenLastCalledWith(null, "Verbindungsprofil", expect.objectContaining({ lang: "de" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   const saved = await app.api.connectionSave(newSshProfile("nas"));

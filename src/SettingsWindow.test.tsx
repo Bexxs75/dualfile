@@ -199,3 +199,13 @@ test("LAN discovery is opt-in and synchronized through the settings window relay
   expect(screen.getByRole("switch", { name: "Dienste im lokalen Netzwerk suchen" })).not.toBeChecked();
   expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
 });
+
+test("Info & Help opens release notes locally without settings IO", async () => {
+  const b = setup("info"); b.snapshot();
+  await b.user.click(screen.getByRole("button", { name: "What’s new" }));
+  expect(screen.getByRole("dialog", { name: /What’s new in Dualfile/ })).toBeVisible();
+  await b.user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(b.save).not.toHaveBeenCalled();
+  expect(b.close).not.toHaveBeenCalled();
+});
