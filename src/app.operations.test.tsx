@@ -422,14 +422,8 @@ describe("Kontextmenü", () => {
     const app = await setupApp({ left: DOCS });
     await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, "notizen.txt") });
     const menu = await screen.findByRole("menu", { name: "Kontextmenü" });
-    expect(within(menu).getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
-      "Öffnen",
-      "Pfad kopieren",
-      "Umbenennen",
-      "Packen …",
-      "Mehrfach-Umbenennen",
-      "In den Papierkorb",
-      "Eigenschaften",
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Öffnen", "Ansehen", "Bearbeiten", "Kopieren", "Verschieben", "Packen …", "Umbenennen", "Mehrfach-Umbenennen …", "Pfad kopieren", "Eigenschaften", "In den Papierkorb", "Endgültig löschen",
     ]);
     expect(within(menu).getAllByRole("menuitem")[0]).toHaveFocus();
     expect(app.selected(0)).toEqual(["notizen.txt"]);
@@ -447,7 +441,7 @@ describe("Kontextmenü", () => {
     expect(within(app.pane(0)).getByRole("grid")).toHaveFocus();
     await app.user.keyboard("{Shift>}{F10}{/Shift}");
     expect(await screen.findByRole("menu")).toBeInTheDocument();
-    await app.user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await app.user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
     expect(app.dialog()).toHaveAccessibleName("Umbenennen");
     expect(menu).not.toBeInTheDocument();
   });

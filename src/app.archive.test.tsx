@@ -143,7 +143,7 @@ describe("Archive sind schreibgeschützt", () => {
     const menu = await screen.findByRole("menu", { name: "Kontextmenü" });
     expect(within(menu).getByRole("menuitem", { name: "Umbenennen" })).toBeDisabled();
     expect(within(menu).getByRole("menuitem", { name: "In den Papierkorb" })).toBeDisabled();
-    expect(within(menu).queryByRole("menuitem", { name: "Mehrfach-Umbenennen" })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "Mehrfach-Umbenennen …" })).toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "Öffnen" })).toBeEnabled();
     expect(within(menu).getByRole("menuitem", { name: "Packen …" })).toBeEnabled();
   });

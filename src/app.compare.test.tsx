@@ -42,7 +42,7 @@ describe("Vergleichsdialog", () => {
   test("Toolbar-Knopf und Kontextmenü öffnen ihn ebenfalls", async () => {
     const app = await setupApp({ left: LEFT, right: RIGHT, compareDemo: true });
     await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Vergleichen …" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Verzeichnisse vergleichen …" }));
     expect(cmp()).toBeInTheDocument();
     await app.user.keyboard("{Escape}");
     fireEvent.contextMenu(within(app.pane(0)).getByRole("grid"));

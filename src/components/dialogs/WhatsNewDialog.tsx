@@ -2,11 +2,12 @@ import { useController, useLanguage, useT } from "../../app/context";
 import { currentVersion, releaseNotes } from "../../release-notes";
 import { Modal } from "../Modal";
 
-export function WhatsNewDialog({ versions }: { versions: readonly string[] }) {
+export function WhatsNewDialog({ versions, onClose }: { versions: readonly string[]; onClose?: () => void }) {
   const controller = useController(), tr = useT(), language = useLanguage();
+  const close = onClose ?? (() => controller.closeDialog());
   return <Modal title={tr("whatsNew.heading", { version: currentVersion })} className="whats-new"
-    onClose={() => controller.closeDialog()}
-    footer={<button type="button" className="tb primary" data-autofocus onClick={() => controller.closeDialog()}>{tr("whatsNew.close")}</button>}>
+    onClose={close}
+    footer={<button type="button" className="tb primary" data-autofocus onClick={close}>{tr("whatsNew.close")}</button>}>
     {versions.length > 1 && <p>{tr("whatsNew.skipped")}</p>}
     {versions.map(version => {
       const note = releaseNotes[version];

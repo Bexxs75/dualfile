@@ -17,7 +17,7 @@ const root = () => document.documentElement;
 describe("Lesezeichen", () => {
   test("Klick wechselt den Ordner des aktiven Fensters, das andere bleibt (Spiegeln aus)", async () => {
     const app = await setupApp({ left: DOCS, right: DOWNLOADS, settings: { bookmarks, sidebarMode: "hidden" } });
-    const ribbon = within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
+    const ribbon = within(screen.getByRole("toolbar", { name: "Orte" }));
     expect(ribbon.getByRole("button", { name: /Downloads/ })).toHaveTextContent("Alt+1");
     await app.user.click(ribbon.getByRole("button", { name: /Projekte/ }));
     await waitFor(() => expect(pathOf(app, 0)).toBe(PROJEKTE));
@@ -35,19 +35,19 @@ describe("Lesezeichen", () => {
 
   test("anheften und lösen; Strg+D schaltet ebenfalls um", async () => {
     const app = await setupApp({ left: DOCS, settings: { sidebarMode: "hidden" } });
-    const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
-    await app.user.click(within(app.pane(0)).getByRole("button", { name: "Ordner merken …" }));
+    const ribbon = () => within(screen.getByRole("toolbar", { name: "Orte" }));
+    await app.user.click(within(app.pane(0)).getByRole("button", { name: "Zu Orten hinzufügen" }));
     expect(ribbon().getByRole("button", { name: /^Dokumente/ })).toBeInTheDocument();
-    expect(within(app.pane(0)).getByRole("button", { name: "Lesezeichen lösen" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(app.pane(0)).getByRole("button", { name: "Aus Orten entfernen" })).toHaveAttribute("aria-pressed", "true");
     await app.user.keyboard("{Control>}d{/Control}");
-    expect(screen.queryByRole("toolbar", { name: "Lesezeichen" })).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: "Orte" })).toBeNull();
     await app.user.keyboard("{Control>}d{/Control}");
     expect(ribbon().getByRole("button", { name: /^Dokumente/ })).toBeInTheDocument();
   });
 
-  test("Rechtsklick: Name und Farbe ändern, Lesezeichen lösen", async () => {
+  test("Rechtsklick: Name und Farbe ändern, Aus Orten entfernen", async () => {
     const app = await setupApp({ settings: { bookmarks, sidebarMode: "hidden" } });
-    const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
+    const ribbon = () => within(screen.getByRole("toolbar", { name: "Orte" }));
     await app.user.pointer({ keys: "[MouseRight]", target: ribbon().getByRole("button", { name: /^Projekte/ }) });
     const dlg = app.dialog();
     const name = within(dlg).getByLabelText("Name");
@@ -64,13 +64,13 @@ describe("Lesezeichen", () => {
     const button = await ribbon().findByRole("button", { name: /^Arbeit/ });
     expect(button.style.getPropertyValue("--c")).toBe("#112233");
     await app.user.pointer({ keys: "[MouseRight]", target: button });
-    await app.user.click(within(app.dialog()).getByRole("button", { name: "Lesezeichen lösen" }));
+    await app.user.click(within(app.dialog()).getByRole("button", { name: "Aus Orten entfernen" }));
     expect(ribbon().queryByRole("button", { name: /^Arbeit/ })).toBeNull();
   });
 
   test("Reihenfolge per Ziehen", async () => {
     const app = await setupApp({ settings: { bookmarks, sidebarMode: "hidden" } });
-    const ribbon = () => within(screen.getByRole("toolbar", { name: "Lesezeichen" }));
+    const ribbon = () => within(screen.getByRole("toolbar", { name: "Orte" }));
     const first = ribbon().getByRole("button", { name: /^Downloads/ });
     const second = ribbon().getByRole("button", { name: /^Projekte/ });
     fireEvent.dragStart(first);

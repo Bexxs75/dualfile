@@ -1,11 +1,16 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
-import { useAppState, useController, useT } from "../app/context";
-import type { TranslationKey } from "../i18n";
-import { isArchivePath } from "../state/paths";
-import { activeTabOf, otherWindow, visibleEntries } from "../app/state";
+import { useEffect, useLayoutEffect, useId, useRef, type KeyboardEvent } from "react";
+import { useAppState, useController, useLanguage, useT } from "../app/context";
+import { formatBytes, type TranslationKey } from "../i18n";
+import { isArchivePath, parseRemotePath } from "../state/paths";
+import { activeTabOf, focusedEntry, otherWindow, visibleEntries } from "../app/state";
+
+import { menuShortcut, type Command } from "../state/keymap";
 
 export function ContextMenu() {
-  const menu = useAppState((state) => state.menu);
+  const state = useAppState(state => state);
+  const menu = state.menu;
+  const language = useLanguage();
+  const id = useId();
   const controller = useController();
   const tr = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -30,34 +35,58 @@ export function ContextMenu() {
     };
   }, [menu]);
 
+  useLayoutEffect(() => {
+    if (!menu || !ref.current) return;
+    const place = () => {
+      const el = ref.current!;
+      el.style.left = `${Math.max(4, Math.min(menu.x, window.innerWidth - el.offsetWidth - 4))}px`;
+      el.style.top = `${Math.max(4, Math.min(menu.y, window.innerHeight - el.offsetHeight - 4))}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [menu, state, language]);
+
   if (!menu) return null;
   const run = (action: () => void) => () => {
     controller.closeMenu();
     action();
   };
   const pinTarget = menu.tab === undefined && !menu.background ? controller.bookmarkTarget(menu.w) : null;
-  const items: { text: TranslationKey; action: () => void; disabled?: boolean }[] = menu.tab !== undefined ? [
+  const path = activeTabOf(state, menu.w).path;
+  const entry = focusedEntry(state, menu.w);
+  const parent = entry?.name === "..";
+  const count = visibleEntries(state, menu.w).filter(e => e.name !== ".." && activeTabOf(state, menu.w).selection.selected.has(e.name)).length;
+  const archiveReason = readOnly ? "menu.reason.archive" : undefined;
+  const singleReason = multiple ? "menu.reason.single" : undefined;
+  const destinationReason: TranslationKey | undefined = !packable ? "menu.reason.destination" : undefined;
+  type Item = { text: TranslationKey; action: () => void; reason?: TranslationKey; command?: Command | "pin"; danger?: boolean; checked?: boolean };
+  const cmd = (text: TranslationKey, command: Command, reason?: TranslationKey): Item => ({ text, command, reason, action: () => controller.command(command) });
+  const groups: Item[][] = menu.tab !== undefined ? [[
     { text: tabLocked ? "action.unlockTab" : "action.lockTab", action: () => controller.toggleTabLock(menu.w, menu.tab!) },
-    { text: "action.newTab", action: () => controller.newTab(menu.w) },
-    { text: "action.closeTab", action: () => controller.closeTab(menu.w, menu.tab), disabled: tabCount <= 1 },
-    { text: "action.closeOtherTabs", action: () => controller.closeOtherTabs(menu.w, menu.tab!), disabled: tabCount <= 1 },
-  ] : menu.background ? [
-    { text: "action.newFolder", action: () => controller.command("makeDir"), disabled: readOnly },
-    { text: "action.refresh", action: () => controller.command("refresh") },
-    { text: "menu.view.hidden", action: () => controller.command("toggleHidden") },
-    { text: "context.compareDirs", action: () => controller.openCompare() },
-  ] : [
-    { text: "context.open", action: () => controller.command("open"), disabled: multiple },
-    { text: "context.copyPath", action: () => void controller.copyPath(menu.w) },
-    { text: "context.rename", action: () => controller.openRename(), disabled: readOnly || multiple },
-    ...(packable ? [{ text: "context.pack" as const, action: () => controller.openPack(menu.w) }] : []),
-    ...(controller.canMultiRename(menu.w) ? [{ text: "context.multiRename" as const, action: () => controller.openMultiRename(menu.w) }] : []),
-    ...(controller.diffTargets() ? [{ text: "context.compareFiles" as const, action: () => controller.openDiffFromPanes() }] : []),
-    ...(pinTarget ? [pinTarget && bookmarks.some(b => b.path === pinTarget)
-      ? { text: "context.unpinPlace" as const, action: () => controller.unpinBookmark(pinTarget) }
-      : { text: "context.pinPlace" as const, action: () => controller.pinBookmarkPath(pinTarget) }] : []),
-    { text: "context.trash", action: () => void controller.trashSelection(), disabled: readOnly },
-    { text: "context.properties", action: () => controller.openProperties(menu.w), disabled: multiple },
+    { text: "action.newTab", command: "newTab", action: () => controller.newTab(menu.w) },
+    { text: "action.closeTab", command: "closeTab", action: () => controller.closeTab(menu.w, menu.tab), reason: tabCount <= 1 ? "menu.reason.lastTab" : undefined },
+    { text: "action.closeOtherTabs", action: () => controller.closeOtherTabs(menu.w, menu.tab!), reason: tabCount <= 1 ? "menu.reason.lastTab" : undefined },
+  ]] : menu.background ? [
+    [cmd("action.newFolder", "makeDir", archiveReason)],
+    [cmd("action.refresh", "refresh"), { ...cmd("menu.view.hidden", "toggleHidden"), checked: state.showHidden }],
+    [cmd("keys.cmd.selectAll", "selectAll"), cmd("action.compareDirs", "compareDirs")],
+    [{ text: "space.button", action: () => controller.openTool("usage", path) }, { text: "dupes.title", action: () => controller.openTool("dupes", path) }],
+  ] : parent ? [[cmd("context.open", "open")]] : [
+    [cmd("context.open", "open", singleReason)],
+    !multiple && entry?.kind !== "dir" ? [cmd("fkey.f3", "view"), cmd("fkey.f4", "edit", archiveReason)] : [],
+    [cmd("action.copy", "copy", destinationReason), cmd("action.move", "move", archiveReason ?? destinationReason),
+      ...(packable ? [{ text: "context.pack" as const, command: "pack" as const, action: () => controller.openPack(menu.w) }] : []),
+      ...(readOnly ? [{ text: "context.extract" as const, action: () => controller.openTransfer("copy", menu.w), reason: destinationReason }] : [])],
+    [cmd("action.rename", "rename", archiveReason ?? (multiple ? "menu.reason.multiRename" : undefined)),
+      ...(controller.canMultiRename(menu.w) ? [cmd("action.multiRename", "multiRename")] : []),
+      ...(controller.diffTargets() ? [cmd("context.compareFiles", "compareFiles")] : [])],
+    [{ text: "context.copyPath", action: () => void controller.copyPath(menu.w) },
+      ...(pinTarget ? [{ text: bookmarks.some(b => b.path === pinTarget) ? "context.unpinPlace" as const : "context.pinPlace" as const, command: "pin" as const,
+        action: () => { if (bookmarks.some(b => b.path === pinTarget)) controller.unpinBookmark(pinTarget); else controller.pinBookmarkPath(pinTarget); } }] : []),
+      { text: "context.properties", action: () => controller.openProperties(menu.w), reason: singleReason }],
+    [cmd("action.trash", "trash", archiveReason ?? (parseRemotePath(path) ? "menu.reason.serverTrash" : undefined))],
+    [{ ...cmd("action.deletePermanent", "deletePermanent", archiveReason), danger: true }],
   ];
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -73,8 +102,7 @@ export function ContextMenu() {
     event.stopPropagation();
   }
 
-  const left = Math.max(4, Math.min(menu.x, window.innerWidth - 200));
-  const top = Math.max(4, Math.min(menu.y, window.innerHeight - 310));
+
   return (
     <div
       className="menu-backdrop"
@@ -89,22 +117,26 @@ export function ContextMenu() {
         className="ctx"
         role="menu"
         aria-label={tr("ui.contextMenu")}
-        style={{ left, top }}
+        style={{ left: menu.x, top: menu.y }}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={onKeyDown}
       >
-        {items.map((item) => (
-          <button
-            key={item.text}
-            type="button"
-            role="menuitem"
-            disabled={item.disabled}
-            title={item.disabled ? tr("error.readOnly") : undefined}
-            onClick={run(item.action)}
-          >
-            {tr(item.text)}
-          </button>
-        ))}
+        {menu.tab === undefined && !menu.background && entry && <div className="ctx-heading">
+          <strong>{multiple ? tr("menu.targets", { count }) : entry.name}</strong>
+          <small>{multiple ? tr("menu.selection") : `${tr(entry.kind === "dir" ? "type.folder" : "type.file")} · ${formatBytes(entry.size, language)}`}</small>
+        </div>}
+        {groups.filter(group => group.length).map((group, index) => <div className="ctx-group" key={index}>
+          {index > 0 && <div role="separator" className="header-menu-separator" />}
+          {group.map(item => <button key={item.text} type="button"
+            role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={item.checked}
+            aria-label={tr(item.text)} aria-describedby={item.reason ? `${id}-${item.text}` : undefined}
+            disabled={!!item.reason} aria-disabled={!!item.reason} className={item.danger ? "danger" : undefined}
+            onClick={run(item.action)}>
+            <span className="ctx-label">{item.checked !== undefined && <span aria-hidden="true">{item.checked ? "✓ " : ""}</span>}{tr(item.text)}</span>
+            {item.command && <kbd>{menuShortcut(item.command, state.settings.keybindings, language)}</kbd>}
+            {item.reason && <small id={`${id}-${item.text}`} className="menu-reason">{tr(item.reason)}</small>}
+          </button>)}
+        </div>)}
       </div>
     </div>
   );

@@ -45,7 +45,7 @@ export const catalog: readonly SettingEntry[] = [
 export const actionCatalog = [
   { id: "autostart", section: "allgemein", group: "start", text: ["system.autostart", "system.autostartHelp", "system.autostart.off", "system.autostart.minimized", "system.autostart.shown"] },
   { id: "startMenu", section: "allgemein", group: "start", text: ["system.startMenu", "system.add", "system.remove"] },
-  { id: "about", section: "info", text: ["settings.about.heading", "settings.about.license", "settings.about.github", "settings.wiki"] },
+  { id: "about", section: "info", text: ["settings.about.heading", "settings.about.license", "settings.about.github", "settings.wiki", "whatsNew.title"] },
   { id: "updates", section: "info", text: ["updates.title", "updates.checkNow"] },
   { id: "troubleshoot", section: "info", text: ["log.heading", "log.intro", "log.view", "log.openFolder", "log.report", "log.reportHelp"] },
 ] satisfies readonly { id: string; section: Section; group?: string; text: TranslationKey[] }[];

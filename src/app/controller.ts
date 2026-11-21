@@ -281,7 +281,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   /** Pfad des einen markierten (sonst fokussierten) lokalen Ordners; sonst null. */
   function bookmarkTarget(w: WinIdx): string | null {
     const dir = activeTabOf(get(), w).path;
-    if (parseRemotePath(dir) || isArchivePath(dir)) return null;
+    if (!dir.startsWith("/")) return null;
     const names = targetNames(w);
     if (names.length !== 1) return null;
     return entriesOf(w).find(e => e.name === names[0])?.kind === "dir" ? joinPath(dir, names[0]!) : null;
@@ -1032,9 +1032,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     }
   }
 
-  async function copyPath(w: WinIdx = get().active): Promise<void> {
+  async function copyPath(w: WinIdx = get().active, explicitPath?: string): Promise<void> {
     const paths = targetPaths(w);
-    const text = paths.length > 0 ? paths.join("\n") : activeTabOf(get(), w).path;
+    const text = explicitPath ?? (paths.length > 0 ? paths.join("\n") : activeTabOf(get(), w).path);
     try {
       await navigator.clipboard.writeText(text);
       toast(tr("toast.pathCopied"));
@@ -1745,6 +1745,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       await trashPaths(dialog.paths);
     },
     copyPath,
+    openTool(kind: "usage" | "dupes" | "similar", root = activeTabOf(get(), get().active).path) {
+      document.dispatchEvent(new CustomEvent("dualfile:tool", { detail: { kind, root } }));
+    },
     applyPattern,
     undo,
     dismissUndoToast: (): void => dispatch({ type: "undoState", patch: { undoToast: null } }),

@@ -239,3 +239,10 @@ export function effectiveBindings(bindings?: Record<string, string>): Record<Reb
   }
   return effective;
 }
+
+/** Menu legends share the effective bindings; fixed aliases live beside the key resolver. */
+export function menuShortcut(command: Command | "pin", bindings?: Record<string, string>, language = "en"): string {
+  const fixed: Partial<Record<Command | "pin", string>> = { goBack: "Alt+←", goForward: "Alt+→", open: "Enter", pin: "Ctrl+D", deletePermanent: "Shift+Delete" };
+  const spec = fixed[command] ?? effectiveBindings(bindings)[command as RebindableCommand] ?? "";
+  return language === "de" ? spec.replace("Ctrl", "Strg").replace("Shift", "Umsch").replace("Delete", "Entf") : spec;
+}
