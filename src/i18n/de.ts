@@ -864,6 +864,7 @@ const de = {
   "settings.theme.werkstatt": "Werkstatt",
   "settings.accent": "Akzentfarbe",
   "settings.accent.custom": "Eigener Farbwert (#rrggbb)",
+  "settings.accent.adjusted": "Auf hellem Design zu hell: wird zu {color} abgedunkelt",
   "settings.accent.invalid": "Kein gültiger Farbwert. Erwartet wird #rrggbb.",
   "settings.accent.lowContrast": "Der Akzent hebt sich zu wenig vom Hintergrund ab (unter 3:1).",
   "settings.accent.lowInkContrast": "Text auf dem Akzent ist schlecht lesbar (unter 4,5:1).",

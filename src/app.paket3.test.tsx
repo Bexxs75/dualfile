@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { DOCS, DOWNLOADS, HOME, setupApp } from "./test-utils";
 import css from "./styles/app.css?raw";
-import { contrastRatio, themes } from "./themes/tokens";
+import { contrastRatio, displayAccent, themes } from "./themes/tokens";
 import { archiveRootOf } from "./state/paths";
 
 const settings = async (options: Parameters<typeof setupApp>[0] = {}) => {
@@ -28,9 +28,17 @@ test("B08 automatic Paper contrast and explicit custom colors survive theme chan
   const input = screen.getByLabelText("Eigener Farbwert (#rrggbb)");
   await app.user.clear(input);
   await app.user.type(input, "#4f8cff");
+  expect(app.runtime.store.getState().settings.accent).toBe("#4f8cff");
+  expect(input).toHaveValue("#4f8cff");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe(displayAccent("#4f8cff", "papier"));
   await app.user.click(screen.getByRole("radio", { name: "Schiefer" }));
-  await app.user.click(screen.getByRole("radio", { name: "Papier" }));
+  expect(app.runtime.store.getState().settings.accent).toBe("#4f8cff");
+  expect(input).toHaveValue("#4f8cff");
   expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#4f8cff");
+  await app.user.click(screen.getByRole("radio", { name: "Papier" }));
+  expect(app.runtime.store.getState().settings.accent).toBe("#4f8cff");
+  expect(input).toHaveValue("#4f8cff");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe(displayAccent("#4f8cff", "papier"));
   expect(css).toMatch(/\.warning-slot\s*\{[^}]*height: 1.5em/);
 });
 

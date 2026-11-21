@@ -866,6 +866,7 @@ const en: Record<keyof typeof de, string> = {
   "settings.theme.werkstatt": "Workshop",
   "settings.accent": "Accent color",
   "settings.accent.custom": "Custom color (#rrggbb)",
+  "settings.accent.adjusted": "Too bright on a light design: darkened to {color}",
   "settings.accent.invalid": "Not a valid color. Expected #rrggbb.",
   "settings.accent.lowContrast": "The accent barely stands out from the background (below 3:1).",
   "settings.accent.lowInkContrast": "Text on the accent is hard to read (below 4.5:1).",
