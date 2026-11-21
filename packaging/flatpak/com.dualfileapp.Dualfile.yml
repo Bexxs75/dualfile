@@ -1,13 +1,13 @@
 # Draft only: resolve all TODOs and generate both source lists before building.
 app-id: com.dualfileapp.Dualfile
 runtime: org.gnome.Platform
-runtime-version: 'TODO_GNOME_VERSION' # TODO: aktuell stabile GNOME-Version vor dem Bau prüfen
+runtime-version: '50' # geprüft 21.11.2026: GNOME 50 (50.6), Basis freedesktop 26.08, WebKitGTK 4.1 2.54.1
 sdk: org.gnome.Sdk
 sdk-extensions:
-  # TODO: compatible extension branch/version for the chosen GNOME SDK.
+  # Branch 26.08 passt zur freedesktop-Basis von GNOME 50.
   - org.freedesktop.Sdk.Extension.rust-stable
-  # TODO: compatible branch/version; Node 20 must be >=20.19 for locked Vite.
-  - org.freedesktop.Sdk.Extension.node20
+  # node20 gibt es auf 26.08 nicht; node22 erfüllt Vite (>=20.19).
+  - org.freedesktop.Sdk.Extension.node22
 command: dualfile
 finish-args:
   # File manager: browse, modify and trash user-accessible host files/mounts.
@@ -34,7 +34,7 @@ finish-args:
   # Background and OpenURI use the standard portal access supplied by Flatpak;
   # no broad session/system bus permission or additional portal grant needed.
 build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node20/bin
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
   env:
     CARGO_HOME: /run/build/dualfile/cargo
     CARGO_NET_OFFLINE: 'true'
