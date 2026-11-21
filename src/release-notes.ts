@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.1": {
+    date: "2026-11-21",
+    de: {
+      new: [],
+      improved: ["Dualfile hat eine neue App-Kennung (com.dualfileapp.Dualfile) als Vorbereitung für Flatpak. Fensterposition und -größe, Autostart und der Startmenü-Eintrag werden beim ersten Start übernommen.", "Läuft noch eine ältere Dualfile-Version, holt der Start sie nach vorn, statt ein zweites Dualfile zu öffnen."],
+      fixed: ["Der Hinweis zum Autostart nennt jetzt den richtigen Bereich der Einstellungen („Allgemein“)."],
+    },
+    en: {
+      new: [],
+      improved: ["Dualfile has a new application ID (com.dualfileapp.Dualfile) in preparation for Flatpak. Window position and size, autostart and the start-menu entry are carried over on first start.", "If an older Dualfile is still running, starting Dualfile brings it to the front instead of opening a second one."],
+      fixed: ["The autostart hint now names the right settings section (\u201cGeneral\u201d)."],
+    },
+  },
   "0.4.0": {
     date: "2026-11-20",
     de: {
