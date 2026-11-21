@@ -5,6 +5,14 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Changed
+
+- Linux application ID is now `com.dualfileapp.Dualfile` in preparation for Flatpak (#29). Existing window state, managed autostart modes and start-menu entries are migrated without overwriting newer state or removing foreign files. A legacy D-Bus endpoint prevents old and new versions from running together.
+
+### Fixed
+
+- Autostart help now points to Settings → General / Einstellungen → Allgemein (#32).
+
 ## [0.4.0] - 2026-11-20
 
 ### Changed

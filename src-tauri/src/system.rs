@@ -763,9 +763,12 @@ mod tests {
         assert!(!status.start_menu_exists && status.start_menu_error.is_some());
         assert_eq!(status.autostart, autostart::Mode::Minimized);
         assert_eq!(status.autostart_error, None);
-        let entry =
-            fs::read_to_string(config.path().join("autostart/de.thebexxs.dualfile.desktop"))
-                .unwrap();
+        let entry = fs::read_to_string(
+            config
+                .path()
+                .join("autostart/com.dualfileapp.Dualfile.desktop"),
+        )
+        .unwrap();
         assert!(entry.contains("Exec=\"/new/Dualfile.AppImage\" --minimized\n"));
     }
 
@@ -779,7 +782,9 @@ mod tests {
             .unwrap()
             .install(exe)
             .unwrap();
-        let entry = config.path().join("autostart/de.thebexxs.dualfile.desktop");
+        let entry = config
+            .path()
+            .join("autostart/com.dualfileapp.Dualfile.desktop");
         fs::create_dir_all(entry.parent().unwrap()).unwrap();
         std::os::unix::fs::symlink(config.path().join("elsewhere"), &entry).unwrap();
         let status = integration_status(

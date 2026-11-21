@@ -231,3 +231,8 @@ test("dialog button ellipses follow the existing spaced majority", () => {
     }
   }
 });
+
+test("autostart help points to the General settings section", () => {
+  expect(de["system.autostartPromptHelp"]).toContain("„Allgemein“");
+  expect(en["system.autostartPromptHelp"]).toContain('"General"');
+});

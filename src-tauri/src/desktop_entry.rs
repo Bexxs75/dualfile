@@ -5,7 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub(crate) const ID: &str = "de.thebexxs.dualfile";
+pub(crate) const ID: &str = "com.dualfileapp.Dualfile";
+pub(crate) const OLD_ID: &str = "de.thebexxs.dualfile";
 pub(crate) const MARKER: &str = "X-Dualfile-Managed=true";
 const ICON: &[u8] = include_bytes!("../icons/128x128.png");
 
@@ -159,7 +160,47 @@ impl DesktopEntry {
         }
         self.write(&self.entry(), text.as_bytes())
     }
+    /// Publish the new entry before removing a marked legacy entry. Unknown icons survive.
+    pub fn migrate(&self, exe: &Path) -> io::Result<()> {
+        let old_entry = self.entry().with_file_name(format!("{OLD_ID}.desktop"));
+        let old_icon = self.icon().with_file_name(format!("{OLD_ID}.png"));
+        self.safe(&old_entry)?;
+        let text = match fs::read_to_string(&old_entry) {
+            Ok(text) => text,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        if !Self::owned(&text) {
+            return Ok(());
+        }
+        self.safe(&old_icon)?;
+        match self.contents()? {
+            Some(text) if !Self::owned(&text) => {
+                return Err(invalid("Desktop entry belongs to another application"))
+            }
+            Some(_) => {}
+            None => {
+                self.safe(&self.icon())?;
+                match fs::read(self.icon()) {
+                    Ok(bytes) if bytes != ICON => {
+                        return Err(invalid("Unrecognized icon at new application path"))
+                    }
+                    Ok(_) => {}
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e),
+                }
+                self.install(exe)?;
+            }
+        }
+        // Remove the entry last so a failed icon removal can be retried safely.
+        if fs::read(&old_icon).is_ok_and(|bytes| bytes == ICON) {
+            fs::remove_file(old_icon)?;
+        }
+        fs::remove_file(old_entry)
+    }
+
     pub fn refresh(&self, exe: &Path) -> io::Result<()> {
+        self.migrate(exe)?;
         if let Some(s) = self.contents()? {
             if Self::owned(&s) && s != render(exe)? {
                 self.install(exe)?;
@@ -186,6 +227,72 @@ impl DesktopEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn migration_replaces_only_owned_legacy_files_and_is_repeatable() {
+        let home = tempfile::tempdir().unwrap();
+        let entry = DesktopEntry::new(home.path().to_owned()).unwrap();
+        let exe = Path::new("/new/app");
+        entry.migrate(exe).unwrap();
+        assert!(!entry.exists().unwrap());
+        let old_entry = entry.entry().with_file_name(format!("{OLD_ID}.desktop"));
+        let old_icon = entry.icon().with_file_name(format!("{OLD_ID}.png"));
+        entry
+            .write(
+                &old_entry,
+                render(Path::new("/old/app"))
+                    .unwrap()
+                    .replace(ID, OLD_ID)
+                    .as_bytes(),
+            )
+            .unwrap();
+        entry.write(&old_icon, ICON).unwrap();
+        entry.migrate(exe).unwrap();
+        assert_eq!(
+            fs::read_to_string(entry.entry()).unwrap(),
+            render(exe).unwrap()
+        );
+        assert_eq!(fs::read(entry.icon()).unwrap(), ICON);
+        assert!(!old_entry.exists());
+        assert!(!old_icon.exists());
+        entry.migrate(exe).unwrap();
+        entry
+            .write(&old_entry, format!("{MARKER}\n").as_bytes())
+            .unwrap();
+        entry.write(&old_icon, b"foreign icon").unwrap();
+        entry.migrate(Path::new("/different/app")).unwrap();
+        assert_eq!(
+            fs::read_to_string(entry.entry()).unwrap(),
+            render(exe).unwrap()
+        );
+        assert_eq!(fs::read(&old_icon).unwrap(), b"foreign icon");
+    }
+
+    #[test]
+    fn migration_preserves_foreign_old_or_new_entries_and_icons() {
+        let home = tempfile::tempdir().unwrap();
+        let entry = DesktopEntry::new(home.path().to_owned()).unwrap();
+        let old_entry = entry.entry().with_file_name(format!("{OLD_ID}.desktop"));
+        let old_icon = entry.icon().with_file_name(format!("{OLD_ID}.png"));
+        entry.write(&old_entry, b"foreign").unwrap();
+        entry.write(&old_icon, ICON).unwrap();
+        entry.migrate(Path::new("/new/app")).unwrap();
+        assert!(!entry.exists().unwrap());
+        assert_eq!(fs::read(&old_entry).unwrap(), b"foreign");
+        assert!(old_icon.exists());
+        entry
+            .write(&old_entry, format!("{MARKER}\n").as_bytes())
+            .unwrap();
+        entry.write(&entry.entry(), b"foreign new").unwrap();
+        assert!(entry.migrate(Path::new("/new/app")).is_err());
+        assert!(old_entry.exists() && old_icon.exists());
+        assert_eq!(fs::read(entry.entry()).unwrap(), b"foreign new");
+        fs::remove_file(entry.entry()).unwrap();
+        entry.write(&entry.icon(), b"foreign icon").unwrap();
+        assert!(entry.migrate(Path::new("/new/app")).is_err());
+        assert!(old_entry.exists() && old_icon.exists());
+        assert_eq!(fs::read(entry.icon()).unwrap(), b"foreign icon");
+    }
+
     #[test]
     fn quotes_spaces_percent_and_shell_characters() {
         let s = render(Path::new("/tmp/My App/$cash`x\"%.AppImage")).unwrap();

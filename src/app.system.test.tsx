@@ -18,7 +18,7 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   expect(check).not.toHaveBeenCalled();
   const dlg = await settingsDialog(app);
   await app.user.click(dlg.getByRole("tab", { name: "Allgemein geändert" }));
-  expect(dlg.getByRole("region", { name: "System" })).toBeInTheDocument();
+  expect(dlg.getByRole("region", { name: "Allgemein" })).toBeInTheDocument();
   await app.user.click(dlg.getByRole("switch", { name: /Symbol im Infobereich/ }));
   expect(tray).toHaveBeenLastCalledWith(true, "de");
   expect(app.runtime.store.getState().settings.trayEnabled).toBe(true);

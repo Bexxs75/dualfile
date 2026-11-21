@@ -2,6 +2,8 @@
 //! through the commands in `commands.rs`; the core reports back through `core-event`.
 
 mod anonymize;
+#[cfg(target_os = "linux")]
+mod app_id_migration;
 mod autostart;
 mod close;
 mod close_policy;
@@ -18,6 +20,8 @@ mod discovery;
 mod item_error;
 mod keychain;
 mod lanes;
+#[cfg(target_os = "linux")]
+mod legacy_instance;
 mod mount_guard;
 mod places;
 mod plans;
@@ -75,10 +79,14 @@ pub fn run() {
     // Wayland application id = start-menu entry name, so the compositor finds the
     // entry (and its icon) for the title bar as well as the task bar.
     #[cfg(target_os = "linux")]
-    gtk::glib::set_prgname(Some("de.thebexxs.dualfile"));
+    gtk::glib::set_prgname(Some(desktop_entry::ID));
     diagnostics::install_panic_hook();
-    let app = tauri::Builder::default()
-        // Muss als erstes Plugin stehen: ein zweiter Start holt das vorhandene Fenster nach vorn.
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(legacy_instance::plugin());
+    let builder = builder
+        // Both instance guards precede migration and state construction. The legacy
+        // endpoint also activates 0.4.0 and handles old executables started after us.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 system::bring_to_front(&window);
@@ -86,7 +94,10 @@ pub fn run() {
         }))
         .plugin(diagnostics::plugin())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(app_id_migration::plugin());
+    let app = builder
         .plugin(window_state::plugin())
         .setup(|app| {
             diagnostics::log_start();

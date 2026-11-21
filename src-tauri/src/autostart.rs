@@ -106,8 +106,33 @@ impl Autostart {
         fs::create_dir_all(self.entry.parent().ok_or_else(|| invalid("No parent"))?)?;
         desktop_entry::write_atomic(&self.entry, text.as_bytes())
     }
+    /// Migrate only our enabled legacy entry; an existing new entry wins.
+    pub fn migrate(&self, exe: &Path) -> io::Result<()> {
+        let old = Self {
+            entry: self
+                .entry
+                .with_file_name(format!("{}.desktop", desktop_entry::OLD_ID)),
+        };
+        let Some(text) = old.contents()? else {
+            return Ok(());
+        };
+        let mode = Self::mode_of(&text);
+        if mode == Mode::Off {
+            return Ok(());
+        }
+        match self.contents()? {
+            Some(text) if !Self::owned(&text) => {
+                return Err(invalid("Autostart entry belongs to another application"))
+            }
+            Some(_) => {}
+            None => self.set(mode, exe)?,
+        }
+        fs::remove_file(old.entry)
+    }
+
     /// A moved AppImage leaves a stale Exec path behind; rewrite an enabled entry of ours.
     pub fn refresh(&self, exe: &Path) -> io::Result<()> {
+        self.migrate(exe)?;
         let Some(s) = self.contents()? else {
             return Ok(());
         };
@@ -129,6 +154,92 @@ mod tests {
 
     fn entry(a: &Autostart) -> String {
         fs::read_to_string(&a.entry).unwrap()
+    }
+
+    #[test]
+    fn migration_uses_xdg_config_home_from_environment() {
+        const CHILD: &str = "DUALFILE_TEST_XDG_MIGRATION";
+        if let Some(root) = std::env::var_os(CHILD) {
+            let config = PathBuf::from(root).join("custom-config");
+            let new = Autostart::from_env().unwrap();
+            assert_eq!(new.entry, config.join(format!("autostart/{ID}.desktop")));
+            let old = Autostart {
+                entry: config.join(format!("autostart/{}.desktop", desktop_entry::OLD_ID)),
+            };
+            old.set(Mode::Minimized, Path::new("/old/app")).unwrap();
+            new.migrate(Path::new("/new/app")).unwrap();
+            assert_eq!(new.mode().unwrap(), Mode::Minimized);
+            assert!(!old.entry.exists());
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "autostart::tests::migration_uses_xdg_config_home_from_environment",
+            ])
+            .env(CHILD, root.path())
+            .env("HOME", root.path().join("home"))
+            .env("XDG_CONFIG_HOME", root.path().join("custom-config"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!root.path().join("home/.config").exists());
+    }
+
+    #[test]
+    fn migration_preserves_modes_and_existing_new_entries() {
+        for mode in [Mode::Off, Mode::Minimized, Mode::Shown] {
+            let config = tempfile::tempdir().unwrap();
+            let new = Autostart::new(config.path());
+            let old = Autostart {
+                entry: config.path().join(format!(
+                    "autostart/{}.desktop",
+                    crate::desktop_entry::OLD_ID
+                )),
+            };
+            old.set(mode, Path::new("/old/app")).unwrap();
+            new.migrate(Path::new("/new/app")).unwrap();
+            assert_eq!(new.mode().unwrap(), mode);
+            assert!(!old.entry.exists());
+            new.set(Mode::Shown, Path::new("/chosen/app")).unwrap();
+            old.set(Mode::Minimized, Path::new("/old/app")).unwrap();
+            new.migrate(Path::new("/new/app")).unwrap();
+            assert_eq!(new.mode().unwrap(), Mode::Shown);
+            assert!(entry(&new).contains("/chosen/app"));
+            assert!(!old.entry.exists());
+        }
+    }
+
+    #[test]
+    fn migration_keeps_foreign_entries_and_disabled_autostart() {
+        let config = tempfile::tempdir().unwrap();
+        let new = Autostart::new(config.path());
+        let old = Autostart {
+            entry: config.path().join(format!(
+                "autostart/{}.desktop",
+                crate::desktop_entry::OLD_ID
+            )),
+        };
+        old.set(Mode::Shown, Path::new("/old/app")).unwrap();
+        let disabled = format!("{}Hidden=true\n", entry(&old));
+        fs::write(&old.entry, &disabled).unwrap();
+        new.migrate(Path::new("/new/app")).unwrap();
+        assert_eq!(new.mode().unwrap(), Mode::Off);
+        assert_eq!(entry(&old), disabled);
+        fs::write(&old.entry, "foreign").unwrap();
+        new.migrate(Path::new("/new/app")).unwrap();
+        assert_eq!(entry(&old), "foreign");
+        old.set(Mode::Shown, Path::new("/old/app")).unwrap_err();
+        fs::write(&old.entry, render(Path::new("/old/app"), false).unwrap()).unwrap();
+        fs::write(&new.entry, "foreign").unwrap();
+        assert!(new.migrate(Path::new("/new/app")).is_err());
+        assert!(old.entry.exists());
+        assert_eq!(entry(&new), "foreign");
     }
 
     #[test]
@@ -167,7 +278,7 @@ mod tests {
         );
         assert_eq!(
             Autostart::new(Path::new("/data/cfg")).entry,
-            Path::new("/data/cfg/autostart/de.thebexxs.dualfile.desktop")
+            Path::new("/data/cfg/autostart/com.dualfileapp.Dualfile.desktop")
         );
     }
 
