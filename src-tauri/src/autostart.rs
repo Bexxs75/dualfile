@@ -91,28 +91,40 @@ impl Autostart {
     pub fn mode(&self) -> io::Result<Mode> {
         Ok(self.contents()?.map_or(Mode::Off, |s| Self::mode_of(&s)))
     }
+    fn legacy(&self) -> Self {
+        Self {
+            entry: self
+                .entry
+                .with_file_name(format!("{}.desktop", desktop_entry::OLD_ID)),
+        }
+    }
     pub fn set(&self, mode: Mode, exe: &Path) -> io::Result<()> {
         let existing = self.contents()?;
         if existing.as_deref().is_some_and(|s| !Self::owned(s)) {
             return Err(invalid("Autostart entry belongs to another application"));
         }
         if mode == Mode::Off {
-            return match existing {
-                Some(_) => fs::remove_file(&self.entry),
-                None => Ok(()),
-            };
+            if existing.is_some() {
+                fs::remove_file(&self.entry)?;
+            }
+        } else {
+            let text = render(exe, mode == Mode::Minimized)?;
+            fs::create_dir_all(self.entry.parent().ok_or_else(|| invalid("No parent"))?)?;
+            desktop_entry::write_atomic(&self.entry, text.as_bytes())?;
         }
-        let text = render(exe, mode == Mode::Minimized)?;
-        fs::create_dir_all(self.entry.parent().ok_or_else(|| invalid("No parent"))?)?;
-        desktop_entry::write_atomic(&self.entry, text.as_bytes())
+        // A managed pre-0.4.1 entry left by a failed migration would still start us at login.
+        let old = self.legacy();
+        if old.entry == self.entry {
+            return Ok(());
+        }
+        match old.contents()? {
+            Some(text) if Self::owned(&text) => fs::remove_file(old.entry),
+            _ => Ok(()),
+        }
     }
     /// Migrate only our enabled legacy entry; an existing new entry wins.
     pub fn migrate(&self, exe: &Path) -> io::Result<()> {
-        let old = Self {
-            entry: self
-                .entry
-                .with_file_name(format!("{}.desktop", desktop_entry::OLD_ID)),
-        };
+        let old = self.legacy();
         let Some(text) = old.contents()? else {
             return Ok(());
         };
@@ -127,7 +139,11 @@ impl Autostart {
             Some(_) => {}
             None => self.set(mode, exe)?,
         }
-        fs::remove_file(old.entry)
+        // set() already removes a managed old entry; only a kept new one leaves it here.
+        match fs::remove_file(old.entry) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+            other => other,
+        }
     }
 
     /// A moved AppImage leaves a stale Exec path behind; rewrite an enabled entry of ours.
@@ -212,6 +228,22 @@ mod tests {
             assert_eq!(new.mode().unwrap(), Mode::Shown);
             assert!(entry(&new).contains("/chosen/app"));
             assert!(!old.entry.exists());
+        }
+    }
+
+    #[test]
+    fn explicit_choice_removes_a_managed_old_entry_but_not_a_foreign_one() {
+        for mode in [Mode::Off, Mode::Minimized] {
+            let config = tempfile::tempdir().unwrap();
+            let new = Autostart::new(config.path());
+            let old = new.legacy();
+            old.set(Mode::Shown, Path::new("/old/app")).unwrap();
+            new.set(mode, Path::new("/new/app")).unwrap();
+            assert!(!old.entry.exists());
+            assert_eq!(new.mode().unwrap(), mode);
+            fs::write(&old.entry, "foreign").unwrap();
+            new.set(mode, Path::new("/new/app")).unwrap();
+            assert_eq!(entry(&old), "foreign");
         }
     }
 

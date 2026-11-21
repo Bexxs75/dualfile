@@ -44,6 +44,14 @@ fn acquire_or_forward(
     }
 }
 
+/// Only a session without any bus may skip the check; a configured bus that refuses us
+/// (limits, auth, protocol) could still host a running 0.4.0.
+fn bus_configured() -> bool {
+    std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some_and(|v| !v.is_empty())
+        || std::env::var_os("XDG_RUNTIME_DIR")
+            .is_some_and(|dir| std::path::Path::new(&dir).join("bus").exists())
+}
+
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri::plugin::Builder::new("legacy-instance")
         .setup(|app, _| {
@@ -54,11 +62,12 @@ pub fn plugin() -> TauriPlugin<Wry> {
                 // either, so only this case may continue; every later failure stops below.
                 let connection = match Connection::session() {
                     Ok(connection) => connection,
-                    Err(e) => {
+                    Err(e) if !bus_configured() => {
                         log::warn!("No session bus, skipping the legacy instance check: {e}");
                         eprintln!("No session bus, skipping the legacy instance check: {e}");
                         return Ok(true);
                     }
+                    Err(e) => return Err(e),
                 };
                 connection
                     .object_server()
