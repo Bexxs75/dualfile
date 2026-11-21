@@ -9,6 +9,22 @@ fn flatpak_trash_uses_host_data_for_delete_list_restore_and_purge() {
         let paths = dualfile_core::system_places::DiscoveryPaths::system();
         assert_eq!(paths.data, data);
         assert_eq!(paths.config, root.join("host-config"));
+        let mount_path = std::path::Path::new("/proc/mounts");
+        let read_mounts =
+            || dualfile_core::packaging::read_host_file(mount_path, 4 * 1024 * 1024).unwrap();
+        let calls = || {
+            fs::read_to_string(root.join("host-calls"))
+                .unwrap()
+                .lines()
+                .count()
+        };
+        let first = read_mounts();
+        let before = calls();
+        assert_eq!(first, read_mounts());
+        assert_eq!(calls(), before);
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        read_mounts();
+        assert_eq!(calls(), before + 1);
         let file = root.join("sample.txt");
         fs::write(&file, "preserve me").unwrap();
         trash::delete(&file).unwrap();
@@ -53,9 +69,12 @@ fn flatpak_trash_uses_host_data_for_delete_list_restore_and_purge() {
         r#"#!/bin/sh
 [ "$1" = --host ] || exit 90
 shift
+[ "$1" = --watch-bus ] || exit 92
+shift
 while [ "${1#--env=}" != "$1" ]; do shift; done
 [ "$1" = head ] || exit 91
 shift
+echo call >> "$DUALFILE_FLATPAK_TRASH_TEST/host-calls"
 exec /usr/bin/head "$@"
 "#,
     )

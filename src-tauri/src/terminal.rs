@@ -163,11 +163,21 @@ fn flatpak_shell_command(cwd: Option<String>, mode: &str) -> CommandBuilder {
         dualfile_core::packaging::Packaging::Flatpak,
         "sh",
     );
+    let cwd = local_cwd(cwd);
+    let mut directory = std::ffi::OsString::from("--directory=");
+    directory.push(&cwd);
+    let args: Vec<_> = host.get_args().map(std::ffi::OsStr::to_os_string).collect();
+    host = std::process::Command::new(host.get_program());
+    host.args(&args[..args.len() - 1]);
+    host.args(["--env=TERM=xterm-256color", "--env=COLORTERM=truecolor"]);
+    host.arg(directory).arg(&args[args.len() - 1]);
     host.args([
         "-c",
         r#"
 case "$1" in
- login) if [ -n "$SHELL" ] && [ -x "$SHELL" ]; then "$SHELL" -i; exit 0; fi ;;
+ login) entry=$(getent passwd "$(id -un)")
+        shell=${entry##*:}
+        if [ -n "$shell" ] && [ -x "$shell" ]; then "$shell" -i; exit 0; fi ;;
  bash) if [ -x /bin/bash ]; then /bin/bash --norc -i; exit 0; fi ;;
  *) if command -v fish >/dev/null 2>&1; then fish --no-config -i; exit 0; fi ;;
 esac
@@ -188,7 +198,7 @@ exec /bin/sh -i
     command.arg(host.get_program());
     command.args(host.get_args());
     command.env("TERM", "xterm-256color");
-    command.cwd(local_cwd(cwd));
+    command.cwd(cwd);
     command
 }
 
@@ -446,6 +456,31 @@ pub async fn terminal_close(manager: Shared<'_>, id: u64) -> Result<(), UiError>
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn flatpak_terminal_passes_host_environment_directory_and_host_shell_lookup() {
+        let dir = tempfile::Builder::new()
+            .prefix("terminal space ;$")
+            .tempdir()
+            .unwrap();
+        let command =
+            super::flatpak_shell_command(Some(dir.path().to_string_lossy().into_owned()), "login");
+        let argv = command.get_argv();
+        let host = argv.iter().position(|a| a == "flatpak-spawn").unwrap();
+        assert_eq!(argv[host + 1], "--host");
+        assert_eq!(argv[host + 2], "--watch-bus");
+        assert_eq!(argv[host + 3], "--env=TERM=xterm-256color");
+        assert_eq!(argv[host + 4], "--env=COLORTERM=truecolor");
+        assert_eq!(
+            argv[host + 5],
+            format!("--directory={}", dir.path().display()).as_str()
+        );
+        assert_eq!(argv[host + 6], "sh");
+        assert!(argv[host + 8]
+            .to_string_lossy()
+            .contains("getent passwd \"$(id -un)\""));
+        assert!(!argv[host + 8].to_string_lossy().contains("$SHELL"));
+    }
+
     #[test]
     fn flatpak_terminal_falls_back_with_visible_bilingual_notice() {
         let bin = tempfile::tempdir().unwrap();

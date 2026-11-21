@@ -342,18 +342,94 @@ pub(crate) fn open_with_system(path: &Path) -> Result<(), UiError> {
     if dualfile_core::packaging::packaging() == dualfile_core::packaging::Packaging::Flatpak {
         // The runtime xdg-open forwards to OpenURI. Await its result, including a
         // delayed portal rejection; the native opener's short grace is insufficient.
-        return dualfile_core::appenv::run_isolated(
-            xdg_open_command(path),
-            std::time::Duration::from_secs(120),
-        )
-        .map_err(|_| {
-            UiError::new(
-                "unsupported",
-                "Öffnen über das Portal fehlgeschlagen / Opening through the portal failed",
-            )
-        });
+        return open_flatpak_reporting(xdg_open_command(path));
     }
     spawn_opener_reporting(xdg_open_command(path))
+}
+
+/// Wait for the portal/host helper, retaining a bounded diagnostic on failure.
+pub(crate) fn open_flatpak_reporting(command: Command) -> Result<(), UiError> {
+    dualfile_core::places_pool::helpers()
+        .run(std::time::Duration::from_millis(120_200), move || {
+            wait_for_flatpak_opener(command)
+        })
+        .unwrap_or_else(|| {
+            Err(UiError::new(
+                "unsupported",
+                "Öffnen fehlgeschlagen / Opening failed: timeout",
+            ))
+        })
+}
+
+fn wait_for_flatpak_opener(mut command: Command) -> Result<(), UiError> {
+    use std::io::Read;
+    use std::os::unix::process::CommandExt;
+    use std::time::{Duration, Instant};
+    command.process_group(0);
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(|error| {
+        UiError::new(
+            "unsupported",
+            format!("Öffnen fehlgeschlagen / Opening failed: {error}"),
+        )
+    })?;
+    let stderr = child.stderr.take().unwrap();
+    let detail = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured = detail.clone();
+    let (done, finished) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let mut stderr = stderr;
+        let mut buffer = [0; 1024];
+        while let Ok(n) = stderr.read(&mut buffer) {
+            if n == 0 {
+                break;
+            }
+            let mut text = captured.lock().unwrap_or_else(|e| e.into_inner());
+            let keep = n.min(1024 - text.len());
+            text.extend_from_slice(&buffer[..keep]);
+        }
+        let _ = done.send(());
+    });
+    let deadline = Instant::now() + Duration::from_secs(120);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(()),
+            Ok(Some(status)) => {
+                // Give the reader a short grace, without waiting on inherited pipe handles.
+                let _ = finished.recv_timeout(Duration::from_millis(100));
+                let text = detail.lock().unwrap_or_else(|e| e.into_inner());
+                let text = String::from_utf8_lossy(&text);
+                return Err(UiError::new(
+                    "unsupported",
+                    format!(
+                        "Öffnen fehlgeschlagen / Opening failed ({status}): {}",
+                        text.trim(),
+                    ),
+                ));
+            }
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
+            result => {
+                // SAFETY: the child owns a dedicated process group.
+                unsafe {
+                    libc::kill(-(child.id() as i32), libc::SIGKILL);
+                }
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(UiError::new(
+                    "unsupported",
+                    format!(
+                        "Öffnen fehlgeschlagen / Opening failed: {}",
+                        result
+                            .err()
+                            .map_or_else(|| "timeout".into(), |e| e.to_string()),
+                    ),
+                ));
+            }
+        }
+    }
 }
 
 fn spawn_opener_reporting(mut command: Command) -> Result<(), UiError> {
@@ -1547,6 +1623,26 @@ fn trash_data_dir() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn flatpak_opener_reports_exit_and_bounded_stderr() {
+        let mut command = Command::new("/bin/sh");
+        command.args([
+            "-c",
+            "printf 'portal refused'; printf 'access denied' >&2; exit 7",
+        ]);
+        let error = open_flatpak_reporting(command).unwrap_err();
+        assert!(error.message.contains("7"));
+        assert!(error.message.contains("access denied"));
+        let mut command = Command::new("/bin/sh");
+        command.args(["-c", "head -c 10000 /dev/zero | tr '\\0' x >&2; exit 3"]);
+        let error = open_flatpak_reporting(command).unwrap_err();
+        assert!(error.message.len() < 1200);
+    }
+    #[test]
+    fn flatpak_opener_accepts_success() {
+        open_flatpak_reporting(Command::new("/bin/true")).unwrap();
+    }
+
     #[test]
     fn close_counts_only_active_states() {
         use dualfile_core::jobs::JobState::*;

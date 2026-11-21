@@ -186,10 +186,10 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
   const count = changed.length + changedKeys.length + Number(autostartChanged);
   const needle = normalizeSearch(query.trim()), filtering = !!needle || modified;
   const matches = (text: string) => normalizeSearch(text).includes(needle);
-  const entries = catalog.filter(entry => (entry.id !== "checkUpdatesOnStart" || systemState.status?.packaging !== "flatpak") && settingVisible(settings, entry.id) && (!modified || settingChanged(settings, entry.id)) && matches(settingSearch(entry, tr)));
+  const entries = catalog.filter(entry => (entry.id !== "checkUpdatesOnStart" || (systemState.status && systemState.status.packaging !== "flatpak")) && settingVisible(settings, entry.id) && (!modified || settingChanged(settings, entry.id)) && matches(settingSearch(entry, tr)));
   const commands = REBINDABLE_COMMANDS.filter(command => (!modified || changedKeys.includes(command)) && matches(`${tr("settings.section.tastatur")} ${tr("settings.keys.help")} ${tr(`keys.cmd.${command}` as TranslationKey)} ${bindings[command]}`));
   const actions = actionCatalog.filter(action =>
-    (action.id !== "startMenu" || systemState.status?.packaging !== "flatpak") &&
+    (action.id !== "startMenu" || (systemState.status && systemState.status.packaging !== "flatpak")) &&
     (!modified || action.id === "autostart" && autostartChanged) &&
     matches([tr(`settings.section.${action.section}`), action.group ? tr(`settings.group.${action.group}` as TranslationKey) : "", ...action.text.map(key => tr(key))].join(" "))
   );
