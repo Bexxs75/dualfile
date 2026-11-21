@@ -61,7 +61,10 @@ fn bus_configured() -> bool {
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri::plugin::Builder::new("legacy-instance")
         .setup(|app, _| {
-            let result = (|| -> zbus::Result<bool> {
+            let handle = app.clone();
+            // zbus is built for Tokio: its blocking API needs a runtime context and must not run
+            // on an async worker, so the check runs on Tauri's blocking pool and setup waits.
+            let check = move || -> zbus::Result<(bool, Option<Connection>)> {
                 let name = format!("{OLD_ID}.SingleInstance");
                 let path = format!("/{}", name.replace('.', "/"));
                 // Without any session bus the regular single-instance plugin cannot work
@@ -71,13 +74,13 @@ pub fn plugin() -> TauriPlugin<Wry> {
                     Err(e) if !bus_configured() => {
                         log::warn!("No session bus, skipping the legacy instance check: {e}");
                         eprintln!("No session bus, skipping the legacy instance check: {e}");
-                        return Ok(true);
+                        return Ok((true, None));
                     }
                     Err(e) => return Err(e),
                 };
                 connection
                     .object_server()
-                    .at(path.as_str(), LegacyEndpoint(app.clone()))?;
+                    .at(path.as_str(), LegacyEndpoint(handle))?;
                 let primary = acquire_or_forward(
                     || Ok(DBusProxy::new(&connection)?.name_has_owner(name.as_str().try_into()?)?),
                     || {
@@ -107,14 +110,19 @@ pub fn plugin() -> TauriPlugin<Wry> {
                         Ok(())
                     },
                 )?;
-                if primary {
-                    app.resources_table().add(LegacyLock(connection));
-                }
-                Ok(primary)
-            })();
+                Ok((primary, primary.then_some(connection)))
+            };
+            let result = tauri::async_runtime::block_on(tauri::async_runtime::spawn_blocking(check))
+                .map_err(|e| zbus::Error::Failure(format!("legacy instance check: {e}")))
+                .and_then(|checked| checked);
             match result {
-                Ok(true) => Ok(()),
-                Ok(false) => {
+                Ok((true, lock)) => {
+                    if let Some(connection) = lock {
+                        app.resources_table().add(LegacyLock(connection));
+                    }
+                    Ok(())
+                }
+                Ok((false, _)) => {
                     log::info!(
                         "Activated the running Dualfile instance; stopping before migration."
                     );
