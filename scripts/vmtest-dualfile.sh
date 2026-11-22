@@ -36,26 +36,32 @@ esac
 GUESTEOF
 
 val(){ vm ssh "bash /home/tester/vmtest-guest.sh $*" 2>&1; }
-cnt(){ grep -o 'pids=\[[^]]*\]' <<<"$1" | tr -cd '0-9 ' | wc -w; }
+# Anzahl der PIDs aus genau EINEM pids=[...]-Datensatz; "?" wenn kein oder mehrere Datensätze (z. B. SSH-Abfrage fehlgeschlagen).
+# Eine leere Liste "pids=[]" ist ein gültiger Datensatz und ergibt 0.
+cnt(){ local rec; rec=$(grep -o 'pids=\[[^]]*\]' <<<"$1"); [ -n "$rec" ] && [ "$(wc -l <<<"$rec")" -eq 1 ] && tr -cd '0-9 ' <<<"${rec#pids=}" | wc -w || echo "?"; }
 
 vm start | tail -1
 for _ in $(seq 1 60); do vm ssh true >/dev/null 2>&1 && break; sleep 5; done
 vm ssh true >/dev/null 2>&1 && ok "VM erreichbar (SSH)" || { bad "VM nicht erreichbar"; vm stop; exit 1; }
 sleep 20   # Autologin-Sitzung braucht etwas länger als SSH
 "$VMSH" "$VM" scp "$IMG" tester@127.0.0.1:/home/tester/Dualfile.AppImage </dev/null && "$VMSH" "$VM" scp "$GUEST" tester@127.0.0.1:/home/tester/vmtest-guest.sh </dev/null && ok "AppImage und Gast-Skript kopiert" || bad "scp fehlgeschlagen"
-vm ssh 'chmod +x /home/tester/Dualfile.AppImage' >/dev/null
+vm ssh 'chmod +x /home/tester/Dualfile.AppImage' >/dev/null || bad "chmod auf dem AppImage fehlgeschlagen"
 
 r=$(val clean); [ "$(cnt "$r")" = 0 ] && ok "Ausgangslage: kein dualfile-Prozess, leere Sandbox" || bad "alter Prozess läuft: $r"
 r=$(val start 12); echo "      $r"
 [ "$(cnt "$r")" = 1 ] && ok "1. Start: genau ein dualfile-Prozess" || bad "1. Start: $r"
-vm shot "$OUT/$VM-1-start.png" >/dev/null 2>&1 && ok "Screenshot $OUT/$VM-1-start.png (Fenster mit Datei-Panes von Hand ansehen!)" || bad "Screenshot fehlgeschlagen"
+vm shot "$OUT/$VM-1-start.png" >/dev/null 2>&1 && [ -s "$OUT/$VM-1-start.png" ] && ok "Screenshot $OUT/$VM-1-start.png (Fenster mit Datei-Panes von Hand ansehen!)" || bad "Screenshot fehlgeschlagen"
 r=$(val second); echo "      $(tr '\n' ' ' <<<"$r")"
 grep -q 'exit=0' <<<"$r" && [ "$(cnt "$r")" = 1 ] && ok "Single-Instance: 2. Start endet mit Exit 0, weiter genau ein Prozess" || bad "Single-Instance: $r"
-vm vnc "key:alt+F4" "wait:10" "shot:$OUT/$VM-2-nach-schliessen.png" >/dev/null 2>&1
+vm vnc "key:alt+F4" "wait:10" "shot:$OUT/$VM-2-nach-schliessen.png" >/dev/null 2>&1 && [ -s "$OUT/$VM-2-nach-schliessen.png" ] \
+  && ok "Alt+F4 per VNC gesendet, Screenshot $OUT/$VM-2-nach-schliessen.png (Fenster muss weg sein, von Hand ansehen!)" \
+  || bad "VNC-Aufruf (Alt+F4, zweiter Screenshot) fehlgeschlagen: Schließen nicht belegt"
 r=$(val state)
 # Das Fenster muss im Screenshot weg sein (von Hand ansehen). Bleibt der Prozess ohne Fenster bestehen,
 # ist das ein Befund (WARN), kein Testabbruch: beobachtet unter GNOME mit 0.4.3 (KDE beendet den Prozess).
-if [ "$(cnt "$r")" = 0 ]; then ok "Fenster schließen (Alt+F4): Prozess beendet"
+c=$(cnt "$r")
+if [ "$c" = "?" ]; then bad "Prozessstand nach Alt+F4 unbekannt (kein gültiger pids-Datensatz, SSH-Abfrage fehlgeschlagen?): $r"
+elif [ "$c" = 0 ]; then ok "Fenster schließen (Alt+F4): Prozess beendet"
 else echo "WARN  [$VM] Prozess läuft nach Alt+F4 weiter: $r (Fenster laut Screenshot weg? Tray/Hintergrundbetrieb als Befund melden)"; fi
 
 # Aufräumen und belegen: App beenden, VM herunterfahren, Status zeigen.
