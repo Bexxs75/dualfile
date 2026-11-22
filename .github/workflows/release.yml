@@ -11,8 +11,94 @@ defaults:
   run:
     shell: bash
 jobs:
+  # Refuse to build unless the tagged commit is green in CI and the release
+  # metadata is complete. Mirrors scripts/release-preflight.sh (pre).
+  verify:
+    name: Verify release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: CI must be green on exactly this commit
+        run: |
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --json status,conclusion -q '.[] | "\(.status):\(.conclusion)"')
+          echo "ci.yml runs on $GITHUB_SHA: ${runs:-none}"
+          if ! grep -qx 'completed:success' <<<"$runs"; then
+            echo "::error::ci.yml has no successful run on $GITHUB_SHA; refusing to build."
+            exit 1
+          fi
+      - name: Check version in all files, CHANGELOG and release notes
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+          tag = os.environ['RELEASE_TAG']
+          errors = []
+          if not re.fullmatch(r'v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?', tag):
+              sys.exit(f'Tag {tag!r} is not vX.Y.Z')
+          version = tag[1:]
+          def read(path):
+              return open(path, encoding='utf-8').read()
+          def check(label, found):
+              if found != version:
+                  errors.append(f'{label}: {found!r}, expected {version!r}')
+          check('src-tauri/tauri.conf.json', json.load(open('src-tauri/tauri.conf.json'))['version'])
+          m = re.search(r'\[workspace\.package\][^\[]*?^version\s*=\s*"([^"]+)"', read('Cargo.toml'), re.M | re.S)
+          check('Cargo.toml [workspace.package]', m and m.group(1))
+          m = re.search(r'\[package\][^\[]*?^version\s*=\s*"([^"]+)"', read('src-tauri/Cargo.toml'), re.M | re.S)
+          check('src-tauri/Cargo.toml [package]', m and m.group(1))
+          for lock in ('Cargo.lock', 'src-tauri/Cargo.lock'):
+              pkgs = re.findall(r'^name = "(dualfile[^"]*)"\nversion = "([^"]+)"', read(lock), re.M)
+              if not pkgs:
+                  errors.append(f'{lock}: no dualfile packages found')
+              for name, found in pkgs:
+                  check(f'{lock} {name}', found)
+          # The npm package is intentionally unversioned (0.0.0); only keep both files in step.
+          pkg = json.load(open('package.json'))['version']
+          lock = json.load(open('package-lock.json'))
+          if lock['version'] != pkg or lock['packages']['']['version'] != pkg:
+              errors.append(f'package.json {pkg!r} and package-lock.json differ')
+          # CHANGELOG section: present, not empty (scripts/changelog-notes.py), no placeholders.
+          import importlib.util
+          spec = importlib.util.spec_from_file_location('changelog_notes', 'scripts/changelog-notes.py')
+          mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+          placeholder = re.compile(r'\b(TODO|TBD|FIXME|XXX|VERSION)\b|pending release review|lorem ipsum', re.I)
+          try:
+              notes = mod.section(read('CHANGELOG.md'), version)
+              if placeholder.search(notes):
+                  errors.append('CHANGELOG section contains a placeholder')
+          except ValueError as error:
+              errors.append(str(error))
+          # src/release-notes.ts entry: same rules as the release-guard test in src/state/releaseNotes.test.ts.
+          ts = read('src/release-notes.ts')
+          block = re.search(r'^  "' + re.escape(version) + r'": \{(.*?)^  \},$', ts, re.M | re.S)
+          if not block:
+              errors.append(f'src/release-notes.ts has no entry for {version}')
+          else:
+              body = block.group(1)
+              if not re.search(r'date: "\d{4}-\d{2}-\d{2}"', body):
+                  errors.append('release-notes.ts: date missing or not YYYY-MM-DD')
+              for lang in ('de', 'en'):
+                  part = re.search(r'^    ' + lang + r': \{(.*?)^    \},$', body, re.M | re.S)
+                  lines = re.findall(r'"((?:[^"\\]|\\.)*)"', part.group(1)) if part else []
+                  if not lines or not all(x.strip() for x in lines):
+                      errors.append(f'release-notes.ts {lang}: no or empty lines')
+                  elif any(placeholder.search(x) for x in lines):
+                      errors.append(f'release-notes.ts {lang}: placeholder text')
+          if errors:
+              print('\n'.join('::error::' + e for e in errors))
+              sys.exit(1)
+          print(f'OK: all versions, CHANGELOG and release notes are consistent for {version}')
+          PY
+
   build:
     name: Build ${{ matrix.arch }}
+    needs: verify
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: true
@@ -38,16 +124,6 @@ jobs:
           cache: npm
       # No fixed Rust toolchain is declared by the source manifests.
       - uses: dtolnay/rust-toolchain@stable
-      - name: Check tag matches application version
-        run: |
-          python3 - <<'PY'
-          import json, os
-          version = json.load(open('src-tauri/tauri.conf.json'))['version']
-          if os.environ['RELEASE_TAG'] != 'v' + version:
-              raise SystemExit('Tag must match src-tauri/tauri.conf.json version')
-          PY
-      - name: Check CHANGELOG has release notes for this tag
-        run: python3 scripts/changelog-notes.py --version "$RELEASE_TAG" > /dev/null
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
