@@ -12,7 +12,7 @@ Gilt für jede Version (Fix und Funktion). Ergänzt `docs/release-checklist.md` 
 6. **Preflight `draft`:** `scripts/release-preflight.sh draft X.Y.Z` prüft Entwurf, dass der Tag auf origin genau auf den geprüften Commit zeigt, den erfolgreichen Release-Lauf für diesen Tag und Commit, beide AppImages, Signaturen, Tarballs, `latest.json`, `SHA256SUMS`.
 7. **Kurz-VM-Test** (unten) auf KDE und GNOME am AppImage aus dem Entwurf.
 8. **Zweiter Blick** (Codex oder Sonnet) auf Diff, Texte und Testergebnis; dann erst veröffentlichen: `gh release edit vX.Y.Z --draft=false`.
-9. **Preflight `post`:** `scripts/release-preflight.sh post X.Y.Z` (Tag = geprüfter Commit, Release-Lauf grün, veröffentlicht, `latest.json` lesbar und gleich X.Y.Z, bei stabilen Releases auch unter `releases/latest`; sonst FAIL); danach Homepage/Wiki-Version, Forgejo-Issues schließen.
+9. **Preflight `post`:** `scripts/release-preflight.sh post X.Y.Z` (Tag = geprüfter Commit, Release-Lauf grün, veröffentlicht, `latest.json` lesbar und gleich X.Y.Z, bei stabilen Releases auch unter `releases/latest`; sonst FAIL); danach Homepage/Wiki-Version und die Forgejo-Issues des Releases automatisch schließen (erst nach grünem `post`, nie vorher; Claude ruft `/mnt/claude/projekte/prozesse/3mf/close-release-issues.sh dualfile vX.Y.Z <Nr>…` auf).
 
 ## Kurz-VM-Test
 
