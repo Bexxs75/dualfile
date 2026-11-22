@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2155,SC2015  # Testskript: export mit Befehlsersetzung und A && B || C sind hier gewollt
 # Simulationstest für scripts/release-preflight.sh (Modi post/pre-Eingabeprüfung): lokales "origin", gh/curl als Attrappen.
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd); T=$(mktemp -d); trap 'rm -rf "$T"' EXIT

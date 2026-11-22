@@ -8,11 +8,11 @@ Gilt für jede Version (Fix und Funktion). Ergänzt `docs/release-checklist.md` 
 2. **Pushen und CI abwarten:** Der Commit muss auf GitHub liegen und der Workflow `CI` (`ci.yml`) muss auf genau diesem Commit grün sein.
 3. **Preflight `pre`:** `scripts/release-preflight.sh pre X.Y.Z` im Release-Worktree. Jede Zeile OK, sonst Exit 1 und kein Tag.
 4. **Tag `vX.Y.Z` pushen.** Der Workflow `release.yml` startet.
-5. **Gate (Job `verify`)** bricht vor dem Bauen ab, wenn eines fehlt: erfolgreicher CI-Lauf auf `github.sha`; Version in `tauri.conf.json`, `Cargo.toml`, `src-tauri/Cargo.toml`, `Cargo.lock`, `src-tauri/Cargo.lock` gleich dem Tag; `package.json` und `package-lock.json` zueinander passend; nicht leerer CHANGELOG-Abschnitt ohne Platzhalter (TODO, TBD, FIXME ...); `release-notes.ts` mit Datum sowie nicht leeren, platzhalterfreien `de`/`en`-Texten. Danach baut `build` (x86_64, aarch64, signiert), `assemble` legt nur einen **Entwurf** an (nie ein veröffentlichtes Release).
-6. **Preflight `draft`:** `scripts/release-preflight.sh draft X.Y.Z` prüft Entwurf, Release-Lauf auf diesem Commit, beide AppImages, Signaturen, Tarballs, `latest.json`, `SHA256SUMS`.
+5. **Gate (Job `verify`)** bricht vor dem Bauen ab, wenn eines fehlt: erfolgreicher CI-Lauf auf `github.sha`; Version in `tauri.conf.json`, `Cargo.toml`, `src-tauri/Cargo.toml`, `Cargo.lock`, `src-tauri/Cargo.lock` gleich dem Tag; `package.json` und `package-lock.json` zueinander passend; nicht leerer CHANGELOG-Abschnitt ohne Platzhalter (TODO, TBD, FIXME, XXX, VERSION, `<...>`); `release-notes.ts` mit Datum sowie nicht leeren, platzhalterfreien `de`/`en`-Texten (das Wort „version“ ist erlaubt). CHANGELOG und Texte prüft dasselbe Skript wie der Preflight: `scripts/check-release-notes.py X.Y.Z`. Danach baut `build` (x86_64, aarch64, signiert), `assemble` legt nur einen **Entwurf** an (nie ein veröffentlichtes Release).
+6. **Preflight `draft`:** `scripts/release-preflight.sh draft X.Y.Z` prüft Entwurf, dass der Tag auf origin genau auf den geprüften Commit zeigt, den erfolgreichen Release-Lauf für diesen Tag und Commit, beide AppImages, Signaturen, Tarballs, `latest.json`, `SHA256SUMS`.
 7. **Kurz-VM-Test** (unten) auf KDE und GNOME am AppImage aus dem Entwurf.
 8. **Zweiter Blick** (Codex oder Sonnet) auf Diff, Texte und Testergebnis; dann erst veröffentlichen: `gh release edit vX.Y.Z --draft=false`.
-9. **Preflight `post`:** `scripts/release-preflight.sh post X.Y.Z`; danach Homepage/Wiki-Version, Forgejo-Issues schließen.
+9. **Preflight `post`:** `scripts/release-preflight.sh post X.Y.Z` (Tag = geprüfter Commit, Release-Lauf grün, veröffentlicht, `latest.json` lesbar und gleich X.Y.Z, bei stabilen Releases auch unter `releases/latest`; sonst FAIL); danach Homepage/Wiki-Version, Forgejo-Issues schließen.
 
 ## Kurz-VM-Test
 
@@ -27,5 +27,6 @@ Bei Änderungen an Updater, Datenformat, Remote-Protokollen oder Terminal reicht
 
 ## Werkzeug
 
-- `scripts/release-preflight.sh <pre|draft|post> X.Y.Z` (siehe oben), Voraussetzung `gh` angemeldet.
+- `scripts/release-preflight.sh <pre|draft|post> X.Y.Z` (siehe oben), Voraussetzung `gh` angemeldet; Version nur `X.Y.Z` oder `X.Y.Z-N`, sonst Abbruch. Selbsttest: `scripts/test_release_preflight.sh` (läuft auch in der CI).
+- `scripts/check-release-notes.py X.Y.Z` (CHANGELOG-Abschnitt und `src/release-notes.ts`, Test: `scripts/test_check_release_notes.py`).
 - `scripts/vmtest-dualfile.sh <vm> <AppImage> [Ordner]`.
