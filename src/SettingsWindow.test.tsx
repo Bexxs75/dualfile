@@ -219,3 +219,9 @@ test("the separate window marks only changes against the start state sent by the
   b.snapshot({ ack: 2, settings: { ...start, fontSize: 14 }, base: null });
   expect(screen.getByRole("button", { name: "Modified (1)" })).toBeInTheDocument();
 });
+test("hidden sidebar entries from the session are not counted as modified in the separate window", () => {
+  const b = setup();
+  const hidden = Array.from({ length: 40 }, (_, i) => `drive:/${String(i).padStart(3, "0")}${"x".repeat(4102)}`);
+  b.snapshot({ settings: { ...testSnapshot().settings, sidebarHidden: hidden }, base: { changed: {}, autostart: "off" } });
+  expect(screen.getByRole("button", { name: "Modified (0)" })).toBeInTheDocument();
+});

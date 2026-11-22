@@ -751,8 +751,8 @@ export type SettingsTab = "allgemein" | "darstellung" | "dateiliste" | "seitenle
 export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 /** State at program start; memory only, never saved. `autostart` stays null until the system status is first known. */
 export interface SettingsBase { settings: Settings; autostart: import("./system").AutostartMode | null }
-/** Baseline relative to the current settings: differing fields, hidden sidebar keys added/removed since start. */
-export interface SettingsWindowBaseDelta { changed: SettingsWindowPatch; hidden?: { add: string[]; remove: string[] }; autostart: import("./system").AutostartMode | null }
+/** Baseline relative to the current settings: only the fields that differ (never `sidebarHidden`). */
+export interface SettingsWindowBaseDelta { changed: Omit<SettingsWindowPatch, "sidebarHidden">; autostart: import("./system").AutostartMode | null }
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |

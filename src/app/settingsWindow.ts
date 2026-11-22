@@ -14,23 +14,19 @@ export function project(settings: Settings): SettingsWindowSnapshot["settings"] 
   return Object.fromEntries(PROJECTED_KEYS.filter(key => settings[key] !== undefined).map(key => [key, settings[key]])) as SettingsWindowSnapshot["settings"];
 }
 /**
- * The start-state baseline travels as a difference to the current settings: only fields that differ,
- * and the hidden sidebar entries as added/removed keys. A snapshot thus never carries the projected
- * settings twice; the native relay rejects snapshots over 256 KiB.
+ * The start-state baseline travels as a difference to the current settings: only the small fields
+ * that differ. Hidden sidebar entries are not part of "modified" and never travel twice, so a snapshot
+ * stays within the native relay's 256 KiB limit.
  */
 export function baseDelta(current: Settings, base: SettingsBase): SettingsWindowBaseDelta {
   const changed = Object.fromEntries(PATCH_KEYS.filter(key => key !== "sidebarHidden")
     .map(key => [key, base.settings[key] ?? defaultSettings[key]] as const)
     .filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(current[key] ?? defaultSettings[key])));
-  const now = new Set(current.sidebarHidden ?? []), start = new Set(base.settings.sidebarHidden ?? []);
-  const add = [...start].filter(key => !now.has(key)), remove = [...now].filter(key => !start.has(key));
-  return { changed, ...(add.length || remove.length ? { hidden: { add, remove } } : {}), autostart: base.autostart };
+  return { changed, autostart: base.autostart };
 }
 /** Rebuilds the baseline from the current settings and a `baseDelta`. */
 export function applyBaseDelta(current: Settings, delta: SettingsWindowBaseDelta): SettingsBase {
-  const remove = new Set(delta.hidden?.remove ?? []);
-  const sidebarHidden = [...(current.sidebarHidden ?? []).filter(key => !remove.has(key)), ...(delta.hidden?.add ?? [])];
-  return { settings: { ...current, ...delta.changed, sidebarHidden }, autostart: delta.autostart };
+  return { settings: { ...current, ...delta.changed }, autostart: delta.autostart };
 }
 export function logSaveDir(state: AppState): string {
   const path = activeTabOf(state, state.active).path;

@@ -76,6 +76,9 @@ describe("changes are measured against the start state, not the factory state", 
     expect(changedAgainst(odd, undefined, "density")).toBe(false);
     expect(revertSetting(odd, null, "density")).toBe(odd);
   });
+  test("hidden sidebar entries never count as modified", () => {
+    expect(settingChanged({ ...defaultSettings, sidebarHidden: ["drive:/x"] }, "sidebarHidden", baseOf({ ...defaultSettings, sidebarHidden: [] }))).toBe(false);
+  });
   test("a non-default value already in the base is not marked (the bug)", () => {
     const start = { ...defaultSettings, density: "compact", fontSize: 20, trayEnabled: true } as Settings;
     expect(catalog.filter(e => settingChanged(start, e.id, baseOf(start))).map(e => e.id)).toEqual([]);

@@ -65,6 +65,8 @@ export function settingChanged(settings: Settings, base: SettingsBase | null | u
     return auto !== baseAuto || !auto && settings.accent !== base.settings.accent;
   }
   if ((id === "terminalBg" || id === "terminalFg") && settings.terminalColors !== "custom") return false;
+  // Hidden sidebar entries are managed in the sidebar; the row here is an action with its own count.
+  if (id === "sidebarHidden") return false;
   // The "network" section can be collapsed in the sidebar but has no control here, so it does not count.
   if (id === "sidebarCollapsed") {
     const strip = (value: readonly string[] | undefined) => (value ?? []).filter(section => section !== "network");
