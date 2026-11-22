@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useAppState, useController, useLanguage, useRuntime, useT } from "../../app/context";
 import type { TranslationKey } from "../../i18n";
 import type { Settings } from "../../ipc/types";
+import type { AutostartMode } from "../../ipc/system";
 import {
   accentPresetsForTheme,
   accentAdjustment,
@@ -24,8 +25,8 @@ import {
 } from "../../themes/terminal";
 import { AboutSettings, SystemSettings, TroubleshootSettings, UpdateSettings, useSystem } from "./SystemDialogs";
 import { KeybindingsSettings } from "./KeybindingsSettings";
-import { actionCatalog, catalog, sections, sectionIcons, resolveSection, normalizeSearch, settingChanged, settingVisible, settingDefault, resetSetting, settingSearch, type SettingEntry, type Section } from "../../settings/catalog";
-import { REBINDABLE, REBINDABLE_COMMANDS, effectiveBindings } from "../../state/keymap";
+import { actionCatalog, catalog, sections, sectionIcons, resolveSection, normalizeSearch, settingChanged, settingVisible, settingDefault, resetSetting, revertSetting, settingSearch, type SettingEntry, type Section } from "../../settings/catalog";
+import { REBINDABLE_COMMANDS, effectiveBindings } from "../../state/keymap";
 import { SettingsPreview } from "../../settings/SettingsPreview";
 import { Highlight } from "../../settings/Highlight";
 import { Icon } from "../Icon";
@@ -169,7 +170,7 @@ function SettingControl({ entry, query }: { entry: SettingEntry; query: string }
 export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../ipc/types").SettingsTab; onClose?: () => void }) {
   const controller = useController(), tr = useT(), language = useLanguage();
   const { system, state: systemState } = useSystem();
-  const settings = useAppState(s => s.settings);
+  const settings = useAppState(s => s.settings), base = useAppState(s => s.settingsBase);
   const [tab, setTab] = useState<Section>(() => resolveSection(startTab));
   const [query, setQuery] = useState(""), [modified, setModified] = useState(false), [confirmReset, setConfirmReset] = useState(false);
   const [resetError, setResetError] = useState("");
@@ -181,14 +182,15 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
     contentRef.current?.scrollTo?.(0, 0);
   }, [startTab]);
   useEffect(() => { if (!confirmReset) return; const timer = setTimeout(() => setConfirmReset(false), 3500); return () => clearTimeout(timer); }, [confirmReset]);
-  const changed = catalog.filter(entry => settingChanged(settings, entry.id));
+  const changed = catalog.filter(entry => settingChanged(settings, base, entry.id));
   const bindings = effectiveBindings(settings.keybindings);
-  const changedKeys = REBINDABLE_COMMANDS.filter(command => bindings[command] !== REBINDABLE[command]);
-  const autostartChanged = !!systemState.status && systemState.status.autostart !== "off";
+  const baseBindings = effectiveBindings(base?.settings.keybindings);
+  const changedKeys = base ? REBINDABLE_COMMANDS.filter(command => bindings[command] !== baseBindings[command]) : [];
+  const autostartChanged = !!systemState.status && base?.autostart != null && systemState.status.autostart !== base.autostart;
   const count = changed.length + changedKeys.length + Number(autostartChanged);
   const needle = normalizeSearch(query.trim()), filtering = !!needle || modified;
   const matches = (text: string) => normalizeSearch(text).includes(needle);
-  const entries = catalog.filter(entry => settingVisible(settings, entry.id) && (!modified || settingChanged(settings, entry.id)) && matches(settingSearch(entry, tr)));
+  const entries = catalog.filter(entry => settingVisible(settings, entry.id) && (!modified || settingChanged(settings, base, entry.id)) && matches(settingSearch(entry, tr)));
   const commands = REBINDABLE_COMMANDS.filter(command => (!modified || changedKeys.includes(command)) && matches(`${tr("settings.section.tastatur")} ${tr("settings.keys.help")} ${tr(`keys.cmd.${command}` as TranslationKey)} ${bindings[command]}`));
   const actions = actionCatalog.filter(action =>
     (!modified || action.id === "autostart" && autostartChanged) &&
@@ -196,17 +198,17 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
   );
   const hits = (section: Section) => entries.filter(e => e.section === section).length + actions.filter(a => a.section === section).length + (section === "tastatur" ? commands.length : 0);
   const open = (section: Section) => { setTab(section); setQuery(""); setModified(false); contentRef.current?.scrollTo?.(0, 0); };
-  const resetAutostart = async () => { try { await system.setAutostart("off"); } catch (e) { setResetError(String(e)); } };
+  const resetAutostart = async (mode: AutostartMode = base?.autostart ?? "off") => { try { await system.setAutostart(mode); } catch (e) { setResetError(String(e)); } };
   const resetAll = () => {
     if (!confirmReset) { setConfirmReset(true); return; }
     setConfirmReset(false); setResetError("");
     controller.updateSettings(s => ({ ...catalog.reduce((next, entry) => resetSetting(next, entry.id), s), keybindings: {} }));
     if (settings.trayEnabled) void system.setTray(false, language);
-    if (autostartChanged) void resetAutostart();
+    if (systemState.status && systemState.status.autostart !== "off") void resetAutostart("off");
   };
   const reset = (entry: SettingEntry) => {
-    controller.updateSettings(s => resetSetting(s, entry.id));
-    if (entry.id === "trayEnabled") void system.setTray(false, language);
+    controller.updateSettings(s => revertSetting(s, base, entry.id));
+    if (entry.id === "trayEnabled") void system.setTray(!!(base?.settings.trayEnabled ?? settingDefault("trayEnabled")), language);
   };
   const sectionChanged = (section: Section) => changed.some(e => e.section === section) || section === "tastatur" && changedKeys.length > 0 || section === "allgemein" && autostartChanged;
   const dot = <span className="modified-dot" title={tr("settings.changed")}><span aria-hidden="true">●</span><span className="sr-only"> {tr("settings.changed")}</span></span>;
@@ -217,7 +219,7 @@ export function SettingsPanel({ startTab, onClose }: { startTab?: import("../../
     return <div className="setting-row" key={entry.id} data-setting={entry.id} role={groupedControl ? "group" : undefined} aria-labelledby={groupedControl ? `label-${entry.id}` : undefined}>
       {labelledControl ? <label htmlFor={`setting-${entry.id}`}>{label}</label> : <span className="setting-label" id={`label-${entry.id}`}>{label}</span>}
       <div className="setting-control"><SettingControl entry={entry} query={query} />{entry.help && <p id={entry.id === "verifyPolicy" ? "verify-help" : `help-${entry.id}`} className="field-help"><Highlight text={tr(entry.help)} query={query} /></p>}</div>
-      <div className="setting-reset">{settingChanged(settings, entry.id) && <>{dot}<button className="link" type="button" aria-label={`${tr("settings.reset")}: ${tr(entry.label)}`} onClick={() => reset(entry)}>{tr("settings.reset")}</button></>}</div>
+      <div className="setting-reset">{settingChanged(settings, base, entry.id) && <>{dot}<button className="link" type="button" aria-label={`${tr("settings.reset")}: ${tr(entry.label)}`} onClick={() => reset(entry)}>{tr("settings.reset")}</button></>}</div>
     </div>;
   };
   const renderAction = (id: string) => <div key={id} className="settings-action">{id === "autostart" || id === "startMenu" ? <SystemSettings field={id} query={query} onReset={id === "autostart" && autostartChanged ? () => void resetAutostart() : undefined} /> : id === "about" ? <AboutSettings query={query} /> : id === "updates" ? <UpdateSettings query={query} /> : <TroubleshootSettings query={query} />}</div>;

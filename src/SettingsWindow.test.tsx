@@ -209,3 +209,13 @@ test("Info & Help opens release notes locally without settings IO", async () => 
   expect(b.save).not.toHaveBeenCalled();
   expect(b.close).not.toHaveBeenCalled();
 });
+test("the separate window marks only changes against the start state sent by the main window", () => {
+  const b = setup();
+  const start = { ...testSnapshot().settings, fontSize: 19 };
+  b.snapshot({ settings: start, base: { settings: start, autostart: "off" } });
+  expect(screen.getByRole("button", { name: "Modified (0)" })).toBeInTheDocument();
+  b.snapshot({ ack: 1, settings: { ...start, fontSize: 14 }, base: { settings: start, autostart: "off" } });
+  expect(screen.getByRole("button", { name: "Modified (1)" })).toBeInTheDocument();
+  b.snapshot({ ack: 2, settings: { ...start, fontSize: 14 }, base: null });
+  expect(screen.getByRole("button", { name: "Modified (1)" })).toBeInTheDocument();
+});

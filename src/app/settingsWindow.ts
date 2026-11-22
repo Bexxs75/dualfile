@@ -53,6 +53,7 @@ export function createSettingsWindowBridge(api: DualfileApi, store: AppStore, co
     if (!active || state.phase !== "ready") return;
     const { status, check, error, installing, trayUnavailable } = system.getSnapshot();
     const snapshot: SettingsWindowSnapshot = { session, ack, errors: [...errors], settings: project(state.settings),
+      base: state.settingsBase ? { settings: project(state.settingsBase.settings), autostart: state.settingsBase.autostart } : null,
       system: { status, check, error, installing, trayUnavailable }, logDir: logSaveDir(state),
       persistence: { outcome: state.outcome, error: state.saveError } };
     latest = snapshot;
@@ -245,6 +246,7 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
         }
         if (!next.errors.length && !next.persistence.error && !pending.size) state.canForce = false;
         systemState = { ...systemState, ...next.system };
+        if (next.base) runtime.store.dispatch({ type: "settingsBase", base: { settings: { ...defaultSettings, ...next.base.settings }, autostart: next.base.autostart } });
         rebase(); notify();
       }), timeoutText());
       if (!snapshot) initialSnapshotTimer = setTimeout(() => failed(timeoutText()), CLOSE_TIMEOUT);

@@ -1,5 +1,5 @@
 import { defaultSettings } from "../app/state";
-import type { Settings, SettingsTab } from "../ipc/types";
+import type { Settings, SettingsBase, SettingsTab } from "../ipc/types";
 import type { TranslationKey } from "../i18n";
 import type { IconName } from "../components/Icon";
 
@@ -53,23 +53,38 @@ export const actionCatalog = [
 export function settingDefault(id: keyof Settings): Settings[keyof Settings] {
   return defaultSettings[id] ?? (id === "paneColorLeft" || id === "paneColorRight" ? "" : undefined);
 }
-export function settingChanged(settings: Settings, id: keyof Settings): boolean {
+const sortedJson = (value: unknown) => JSON.stringify(Array.isArray(value) ? [...value].sort() : value);
+const baseValue = (base: SettingsBase, id: keyof Settings) => base.settings[id] ?? settingDefault(id);
+/** "Modified" means: differs from the state at program start. Without a baseline nothing is modified. */
+export function settingChanged(settings: Settings, base: SettingsBase | null | undefined, id: keyof Settings): boolean {
+  if (!base) return false;
   // The automatic flag belongs to the accent row, not a second changed value.
   if (id === "accentAutomatic") return false;
-  if (id === "accent") return !(settings.accentAutomatic ?? defaultSettings.accentAutomatic);
+  if (id === "accent") {
+    const auto = !!(settings.accentAutomatic ?? defaultSettings.accentAutomatic), baseAuto = !!(base.settings.accentAutomatic ?? defaultSettings.accentAutomatic);
+    return auto !== baseAuto || !auto && settings.accent !== base.settings.accent;
+  }
   if ((id === "terminalBg" || id === "terminalFg") && settings.terminalColors !== "custom") return false;
   // The "network" section can be collapsed in the sidebar but has no control here, so it does not count.
-  if (id === "sidebarCollapsed") return (settings.sidebarCollapsed ?? []).some(section => section !== "network");
-  const value = settings[id] ?? settingDefault(id);
-  const standard = settingDefault(id);
-  if (Array.isArray(value) && Array.isArray(standard)) return JSON.stringify([...value].sort()) !== JSON.stringify([...standard].sort());
-  return value !== standard;
+  if (id === "sidebarCollapsed") {
+    const strip = (value: readonly string[] | undefined) => (value ?? []).filter(section => section !== "network");
+    return sortedJson(strip(settings.sidebarCollapsed)) !== sortedJson(strip(base.settings.sidebarCollapsed));
+  }
+  return sortedJson(settings[id] ?? settingDefault(id)) !== sortedJson(baseValue(base, id));
 }
+/** Resets one entry to the factory default (only used by "Reset everything"). */
 export function resetSetting(settings: Settings, id: keyof Settings): Settings {
   if (id === "accent" || id === "accentAutomatic") return { ...settings, accent: defaultSettings.accent, accentAutomatic: defaultSettings.accentAutomatic };
   // Keep the network section's state: it is collapsed in the sidebar only, not in this dialog.
   if (id === "sidebarCollapsed") return { ...settings, sidebarCollapsed: (settings.sidebarCollapsed ?? []).filter(section => section === "network") };
   return { ...settings, [id]: settingDefault(id) };
+}
+/** Reverts one entry to its value at program start. */
+export function revertSetting(settings: Settings, base: SettingsBase | null | undefined, id: keyof Settings): Settings {
+  if (!base) return settings;
+  if (id === "accent" || id === "accentAutomatic") return { ...settings, accent: base.settings.accent ?? defaultSettings.accent, accentAutomatic: base.settings.accentAutomatic ?? defaultSettings.accentAutomatic };
+  if (id === "sidebarCollapsed") return { ...settings, sidebarCollapsed: [...(base.settings.sidebarCollapsed ?? []).filter(section => section !== "network"), ...(settings.sidebarCollapsed ?? []).filter(section => section === "network")] };
+  return { ...settings, [id]: baseValue(base, id) };
 }
 export function settingVisible(settings: Settings, id: keyof Settings): boolean {
   return id !== "accentAutomatic" && (!["terminalBg", "terminalFg"].includes(id) || settings.terminalColors === "custom");
