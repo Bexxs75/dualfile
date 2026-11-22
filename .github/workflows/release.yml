@@ -63,33 +63,11 @@ jobs:
           lock = json.load(open('package-lock.json'))
           if lock['version'] != pkg or lock['packages']['']['version'] != pkg:
               errors.append(f'package.json {pkg!r} and package-lock.json differ')
-          # CHANGELOG section: present, not empty (scripts/changelog-notes.py), no placeholders.
-          import importlib.util
-          spec = importlib.util.spec_from_file_location('changelog_notes', 'scripts/changelog-notes.py')
-          mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
-          placeholder = re.compile(r'\b(TODO|TBD|FIXME|XXX|VERSION)\b|pending release review|lorem ipsum', re.I)
-          try:
-              notes = mod.section(read('CHANGELOG.md'), version)
-              if placeholder.search(notes):
-                  errors.append('CHANGELOG section contains a placeholder')
-          except ValueError as error:
-              errors.append(str(error))
-          # src/release-notes.ts entry: same rules as the release-guard test in src/state/releaseNotes.test.ts.
-          ts = read('src/release-notes.ts')
-          block = re.search(r'^  "' + re.escape(version) + r'": \{(.*?)^  \},$', ts, re.M | re.S)
-          if not block:
-              errors.append(f'src/release-notes.ts has no entry for {version}')
-          else:
-              body = block.group(1)
-              if not re.search(r'date: "\d{4}-\d{2}-\d{2}"', body):
-                  errors.append('release-notes.ts: date missing or not YYYY-MM-DD')
-              for lang in ('de', 'en'):
-                  part = re.search(r'^    ' + lang + r': \{(.*?)^    \},$', body, re.M | re.S)
-                  lines = re.findall(r'"((?:[^"\\]|\\.)*)"', part.group(1)) if part else []
-                  if not lines or not all(x.strip() for x in lines):
-                      errors.append(f'release-notes.ts {lang}: no or empty lines')
-                  elif any(placeholder.search(x) for x in lines):
-                      errors.append(f'release-notes.ts {lang}: placeholder text')
+          # CHANGELOG section and src/release-notes.ts entry: one shared checker, also used by release-preflight.sh.
+          import subprocess
+          check = subprocess.run(['python3', 'scripts/check-release-notes.py', version], capture_output=True, text=True)
+          if check.returncode != 0:
+              errors += check.stdout.splitlines() + check.stderr.splitlines()
           if errors:
               print('\n'.join('::error::' + e for e in errors))
               sys.exit(1)

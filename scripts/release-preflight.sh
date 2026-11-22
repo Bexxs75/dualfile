@@ -41,19 +41,6 @@ if pl["version"] != pj or pl["packages"][""]["version"] != pj: bad.append("packa
 print("; ".join(bad)); sys.exit(1 if bad else 0)
 PY
 }
-notes_ok() {
-  python3 - "$V" <<'PY'
-import re, sys
-v = sys.argv[1]; ts = open("src/release-notes.ts", encoding="utf8").read()
-b = re.search(r'^  "%s": \{(.*?)^  \},$' % re.escape(v), ts, re.M | re.S)
-ok = b and re.search(r'date: "\d{4}-\d{2}-\d{2}"', b.group(1))
-for l in ("de", "en"):
-    p = b and re.search(r'^    %s: \{(.*?)^    \},$' % l, b.group(1), re.M | re.S)
-    ok = ok and p and any(x.strip() for x in re.findall(r'"((?:[^"\\]|\\.)*)"', p.group(1)))
-sys.exit(0 if ok else 1)
-PY
-}
-
 if [ "$MODE" != post ]; then
   [ -z "$(git status --porcelain)" ] && ok "Arbeitsbaum sauber" || bad "ungesicherte Änderungen: $(git status --porcelain | wc -l) Dateien"
   git fetch -q origin "$BR" 2>/dev/null
@@ -62,8 +49,7 @@ if [ "$MODE" != post ]; then
   ci=$(gh run list --repo "$REPO" --workflow ci.yml --commit "$SHA" --json status,conclusion -q '.[]|"\(.status):\(.conclusion)"' 2>/dev/null)
   grep -qx 'completed:success' <<<"$ci" && ok "CI grün auf ${SHA:0:8}" || bad "CI auf ${SHA:0:8}: '${ci:-kein Lauf}'"
   out=$(versions_ok 2>&1) && ok "Versionen in allen Dateien = $V (tauri.conf, Cargo.toml, Cargo.lock x2, package-lock)" || bad "Versionen: $out"
-  chk "CHANGELOG hat nicht leeren Abschnitt [$V]" python3 scripts/changelog-notes.py --version "$V"
-  chk "src/release-notes.ts hat Eintrag $V (Datum, de, en)" notes_ok
+  out=$(python3 scripts/check-release-notes.py "$V" 2>&1) && ok "CHANGELOG-Abschnitt und src/release-notes.ts-Eintrag $V vollständig (Datum, de, en, keine Platzhalter)" || bad "Release-Texte: $out"
   bash -c 'git tag -l "v$0" | grep -q .' "$V" && warn "Tag v$V existiert lokal schon"
 fi
 
