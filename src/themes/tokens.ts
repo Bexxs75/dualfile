@@ -56,7 +56,7 @@ export const themes: Record<ThemeName, ThemeTokens> = {
   },
   weiss: {
     bg: "#f4f5f7", panel: "#ffffff", panel2: "#f7f8fa", raised: "#f7f8fa",
-    lineSoft: "#eceef1", line: "#d9dde3", fg: "#1b1f24", muted: "#505966",
+    lineSoft: "#eceef1", line: "#d9dde3", fg: "#1b1f24", muted: "#434b57",
     accent: "#2563eb", accentInk: "#ffffff", selection: "#dbe7fd", current: "#c3d6fb",
     directory: "#1d4ed8", warning: "#b4441f", success: "#1f7a3a",
     connectionWarning: "#8a6100", accentSoft: "#e3ecfd", colorScheme: "light",
@@ -107,6 +107,15 @@ export const themes: Record<ThemeName, ThemeTokens> = {
 export const rowHeights: Record<Density, number> = { compact: 22, normal: 28, comfortable: 36 };
 export const FONT_SIZE_MIN = 10;
 export const FONT_SIZE_MAX = 24;
+
+/**
+ * Text weights per colour scheme (CSS `--fw`, `--fw-strong`). Dark text on a light background looks
+ * thinner, so light designs go one step up; dark designs keep 400/500. Inter 400/500/600 are bundled.
+ */
+export const fontWeights: Record<ThemeTokens["colorScheme"], { text: number; strong: number }> = {
+  dark: { text: 400, strong: 500 },
+  light: { text: 500, strong: 600 },
+};
 
 /** Vorgegebene Akzentfarben aus dem Mockup. */
 export const accentPresets: readonly string[] = ["#e0a45c", "#6fb3d9", "#7bc08a", "#e07a9f", "#c98fe0"];
@@ -248,6 +257,8 @@ export function themeVariables(settings: ThemeSettings): Record<string, string> 
     "--ok": tokens.success,
     "--rowh": `${rowHeights[settings.density] ?? rowHeights.normal}px`,
     "--fs": `${fontSize}px`,
+    "--fw": String(fontWeights[tokens.colorScheme].text),
+    "--fw-strong": String(fontWeights[tokens.colorScheme].strong),
   };
 }
 

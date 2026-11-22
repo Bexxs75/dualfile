@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { t } from "../i18n";
+import appCss from "../styles/app.css?raw";
 import {
   accentPresets,
   accentPresetsForTheme,
@@ -7,6 +8,7 @@ import {
   darkenForContrast,
   displayAccent,
   effectiveAccent,
+  fontWeights,
   accentWarning,
   applyTheme,
   contrastRatio,
@@ -306,6 +308,8 @@ describe("designabhängige Akzente", () => {
           "--dir": "#9cc3e6",
           "--fg": "#d9dee4",
           "--fs": "13px",
+          "--fw": "400",
+          "--fw-strong": "500",
           "--line": "#2c3540",
           "--line-soft": "#252e38",
           "--muted": "#a0aab6",
@@ -327,6 +331,8 @@ describe("designabhängige Akzente", () => {
           "--dir": "#e8c27a",
           "--fg": "#eadfce",
           "--fs": "13px",
+          "--fw": "400",
+          "--fw-strong": "500",
           "--line": "#3a3025",
           "--line-soft": "#332a21",
           "--muted": "#b3a28d",
@@ -340,5 +346,51 @@ describe("designabhängige Akzente", () => {
         },
       ]
     `);
+  });
+});
+
+describe("light designs: heavier text and darker muted (#37)", () => {
+  const light = themeNames.filter(name => themes[name].colorScheme === "light");
+  const dark = themeNames.filter(name => themes[name].colorScheme === "dark");
+
+  test("White and Paper are the light designs; Slate and Workshop the dark ones", () => {
+    expect([...light].sort()).toEqual(["papier", "weiss"]);
+    expect([...dark].sort()).toEqual(["schiefer", "werkstatt"]);
+  });
+
+  test.each(light)("%s uses weight 500 for text and 600 for emphasis", name => {
+    const vars = themeVariables({ ...base, theme: name });
+    expect([vars["--fw"], vars["--fw-strong"]]).toEqual(["500", "600"]);
+  });
+
+  test.each(dark)("%s keeps weight 400 for text and 500 for emphasis", name => {
+    const vars = themeVariables({ ...base, theme: name });
+    expect([vars["--fw"], vars["--fw-strong"]]).toEqual(["400", "500"]);
+  });
+
+  test("weights are bundled Inter cuts", () => {
+    for (const { text, strong } of Object.values(fontWeights)) for (const weight of [text, strong]) expect([400, 500, 600]).toContain(weight);
+  });
+
+  test("White muted text is darker and reaches 7:1 on every surface", () => {
+    const theme = themes.weiss;
+    expect(theme.muted).toBe("#434b57");
+    for (const surface of [theme.bg, theme.panel, theme.panel2, theme.raised, theme.accentSoft]) {
+      expect(contrastRatio(theme.muted, surface), surface).toBeGreaterThanOrEqual(7);
+    }
+  });
+
+  test("the stylesheet takes body and emphasis weights from the tokens", () => {
+    expect(appCss).toMatch(/body \{[^}]*font-weight: var\(--fw\);/);
+    expect(appCss).not.toMatch(/font-weight: 500;/);
+    expect(appCss).toContain("--fw: 400; --fw-strong: 500;");
+  });
+
+  test("applyTheme sets the weights on the root element", () => {
+    const root = document.createElement("div");
+    applyTheme(root, { ...base, theme: "weiss" });
+    expect(root.style.getPropertyValue("--fw")).toBe("500");
+    applyTheme(root, { ...base, theme: "schiefer" });
+    expect(root.style.getPropertyValue("--fw")).toBe("400");
   });
 });
