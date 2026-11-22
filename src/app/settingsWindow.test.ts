@@ -1,7 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createMockApi } from "../ipc/mock";
 import { createRuntime } from "./runtime";
-import { createSettingsWindowClient } from "./settingsWindow";
+import { applyBaseDelta, baseDelta, createSettingsWindowClient } from "./settingsWindow";
+import { defaultSettings } from "./state";
 import type { SettingsWindowDelivery, SettingsWindowMessage } from "../ipc/types";
 import { testSnapshot } from "./settingsWindow.fixture";
 
@@ -260,4 +261,35 @@ test("main bridge merges sidebar patches and publishes main sidebar changes", as
   expect(b.runtime.store.getState().settings).toMatchObject({ sidebarMode: "icons", sidebarWidth: 260, sidebarHidden: ["drive:/data"], sidebarCollapsed: ["devices"] });
   b.runtime.controller.toggleSidebar(); await tick();
   expect(b.push.mock.lastCall![0].settings.sidebarMode).toBe("hidden"); b.stop();
+});
+
+test("the baseline travels as a difference and rebuilds exactly", () => {
+  const start = { ...defaultSettings, fontSize: 19, sidebarHidden: ["drive:/a", "drive:/b"], keybindings: { copy: "Alt+C" } };
+  const now = { ...start, fontSize: 14, theme: "papier" as const, sidebarHidden: ["drive:/b", "drive:/c"], keybindings: {} };
+  const delta = baseDelta(now, { settings: start, autostart: "minimized" });
+  expect(delta).toEqual({ changed: { fontSize: 19, theme: defaultSettings.theme, keybindings: { copy: "Alt+C" } }, hidden: { add: ["drive:/a"], remove: ["drive:/c"] }, autostart: "minimized" });
+  const rebuilt = applyBaseDelta(now, delta);
+  expect(rebuilt.autostart).toBe("minimized");
+  expect({ ...rebuilt.settings, sidebarHidden: [...rebuilt.settings.sidebarHidden!].sort() }).toEqual(start);
+  expect(baseDelta(start, { settings: start, autostart: null })).toEqual({ changed: {}, autostart: null });
+});
+
+test("largest allowed hidden sidebar keys still fit the 256 KiB native snapshot limit with a baseline", async () => {
+  const b = await bridge();
+  // 40 keys of the maximum length that valid_sidebar_key accepts (4112 bytes).
+  const key = (i: number) => `drive:/${String(i).padStart(3, "0")}${"x".repeat(4112 - 10)}`;
+  const hidden = Array.from({ length: 40 }, (_, i) => key(i));
+  b.runtime.controller.updateSettings(s => ({ ...s, sidebarHidden: hidden }));
+  b.runtime.store.dispatch({ type: "settingsBase", base: { settings: { ...b.runtime.store.getState().settings }, autostart: "off" } });
+  const startFont = b.runtime.store.getState().settings.fontSize;
+  b.runtime.controller.updateSettings(s => ({ ...s, fontSize: 20, sidebarHidden: [...hidden.slice(1), key(40)] }));
+  await tick();
+  const snapshot = b.push.mock.lastCall![0];
+  const size = new TextEncoder().encode(JSON.stringify(snapshot)).length;
+  expect(size).toBeLessThanOrEqual(256 * 1024);
+  // Sending the projected baseline in full (as before) would double the settings and exceed the limit.
+  expect(2 * new TextEncoder().encode(JSON.stringify(snapshot.settings)).length).toBeGreaterThan(256 * 1024);
+  expect(new TextEncoder().encode(JSON.stringify(snapshot.base)).length).toBeLessThan(2 * 4112 + 200);
+  expect(snapshot.base).toMatchObject({ changed: { fontSize: startFont }, hidden: { add: [key(0)], remove: [key(40)] } });
+  b.stop();
 });

@@ -1,5 +1,5 @@
 import type { DualfileApi } from "../ipc/api";
-import type { Settings, SettingsWindowMessage, SettingsWindowPatch, SettingsWindowSnapshot } from "../ipc/types";
+import type { Settings, SettingsBase, SettingsWindowBaseDelta, SettingsWindowMessage, SettingsWindowPatch, SettingsWindowSnapshot } from "../ipc/types";
 import type { AppRuntime } from "./runtime";
 import type { AppStore, Controller } from "./controller";
 import type { SystemController } from "./system";
@@ -12,6 +12,25 @@ export const PROJECTED_KEYS = ["sidebarMode", "sidebarWidth", "sidebarCollapsed"
 export const PATCH_KEYS = PROJECTED_KEYS.filter(key => key !== "lastUpdateCheck");
 export function project(settings: Settings): SettingsWindowSnapshot["settings"] {
   return Object.fromEntries(PROJECTED_KEYS.filter(key => settings[key] !== undefined).map(key => [key, settings[key]])) as SettingsWindowSnapshot["settings"];
+}
+/**
+ * The start-state baseline travels as a difference to the current settings: only fields that differ,
+ * and the hidden sidebar entries as added/removed keys. A snapshot thus never carries the projected
+ * settings twice; the native relay rejects snapshots over 256 KiB.
+ */
+export function baseDelta(current: Settings, base: SettingsBase): SettingsWindowBaseDelta {
+  const changed = Object.fromEntries(PATCH_KEYS.filter(key => key !== "sidebarHidden")
+    .map(key => [key, base.settings[key] ?? defaultSettings[key]] as const)
+    .filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(current[key] ?? defaultSettings[key])));
+  const now = new Set(current.sidebarHidden ?? []), start = new Set(base.settings.sidebarHidden ?? []);
+  const add = [...start].filter(key => !now.has(key)), remove = [...now].filter(key => !start.has(key));
+  return { changed, ...(add.length || remove.length ? { hidden: { add, remove } } : {}), autostart: base.autostart };
+}
+/** Rebuilds the baseline from the current settings and a `baseDelta`. */
+export function applyBaseDelta(current: Settings, delta: SettingsWindowBaseDelta): SettingsBase {
+  const remove = new Set(delta.hidden?.remove ?? []);
+  const sidebarHidden = [...(current.sidebarHidden ?? []).filter(key => !remove.has(key)), ...(delta.hidden?.add ?? [])];
+  return { settings: { ...current, ...delta.changed, sidebarHidden }, autostart: delta.autostart };
 }
 export function logSaveDir(state: AppState): string {
   const path = activeTabOf(state, state.active).path;
@@ -53,7 +72,7 @@ export function createSettingsWindowBridge(api: DualfileApi, store: AppStore, co
     if (!active || state.phase !== "ready") return;
     const { status, check, error, installing, trayUnavailable } = system.getSnapshot();
     const snapshot: SettingsWindowSnapshot = { session, ack, errors: [...errors], settings: project(state.settings),
-      base: state.settingsBase ? { settings: project(state.settingsBase.settings), autostart: state.settingsBase.autostart } : null,
+      base: state.settingsBase ? baseDelta(state.settings, state.settingsBase) : null,
       system: { status, check, error, installing, trayUnavailable }, logDir: logSaveDir(state),
       persistence: { outcome: state.outcome, error: state.saveError } };
     latest = snapshot;
@@ -246,7 +265,7 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
         }
         if (!next.errors.length && !next.persistence.error && !pending.size) state.canForce = false;
         systemState = { ...systemState, ...next.system };
-        if (next.base) runtime.store.dispatch({ type: "settingsBase", base: { settings: { ...defaultSettings, ...next.base.settings }, autostart: next.base.autostart } });
+        if (next.base) runtime.store.dispatch({ type: "settingsBase", base: applyBaseDelta({ ...defaultSettings, ...next.settings }, next.base) });
         rebase(); notify();
       }), timeoutText());
       if (!snapshot) initialSnapshotTimer = setTimeout(() => failed(timeoutText()), CLOSE_TIMEOUT);

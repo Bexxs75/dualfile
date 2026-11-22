@@ -751,6 +751,8 @@ export type SettingsTab = "allgemein" | "darstellung" | "dateiliste" | "seitenle
 export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 /** State at program start; memory only, never saved. `autostart` stays null until the system status is first known. */
 export interface SettingsBase { settings: Settings; autostart: import("./system").AutostartMode | null }
+/** Baseline relative to the current settings: differing fields, hidden sidebar keys added/removed since start. */
+export interface SettingsWindowBaseDelta { changed: SettingsWindowPatch; hidden?: { add: string[]; remove: string[] }; autostart: import("./system").AutostartMode | null }
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |
@@ -762,8 +764,8 @@ export interface SettingsWindowSnapshot {
   ack: number;
   errors: { seq: number; message: string }[];
   settings: SettingsWindowSettings;
-  /** The main window's state at program start (baseline for "modified"). */
-  base?: { settings: SettingsWindowSettings; autostart: import("./system").AutostartMode | null } | null;
+  /** The main window's state at program start (baseline for "modified"), as a difference to `settings`. */
+  base?: SettingsWindowBaseDelta | null;
   system: Pick<import("../app/system").SystemState, "status" | "check" | "error" | "installing" | "trayUnavailable">;
   logDir: string;
   persistence: { outcome: LoadOutcome; error: string };
