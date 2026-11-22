@@ -50,7 +50,7 @@ Dualfile is a two-pane file manager for Linux with tabs, keyboard controls and b
 - Duplicate-file search, similar-image search and disk-usage inspection.
 - Light/dark themes, accent colors, density settings and English/German interface text.
 - Log file for troubleshooting with an anonymizing viewer (Settings → About → Troubleshooting).
-- Plugin interface (process plugins with explicit permissions) is planned: the groundwork exists, but there is no UI and no plugins yet. Total Commander DLLs will not be supported.
+- Process-plugin groundwork exists in the code (`crates/dualfile-plugin/`) but is not being pursued.
 
 ## Download
 
