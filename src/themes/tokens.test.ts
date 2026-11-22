@@ -381,8 +381,13 @@ describe("light designs: heavier text and darker muted (#37)", () => {
   });
 
   test("the stylesheet takes body and emphasis weights from the tokens", () => {
-    expect(appCss).toMatch(/body \{[^}]*font-weight: var\(--fw\);/);
-    expect(appCss).not.toMatch(/font-weight: 500;/);
+    expect(appCss).toMatch(/body \{[^}]*font: var\(--fw\) var\(--fs\)/);
+    expect(appCss).not.toMatch(/font-weight:\s*(normal|400|500)\b/);
+    // The font shorthand resets the weight to 400 unless it names one: plain text must take --fw.
+    const shorthands = [...appCss.matchAll(/(?:^|[;{\s])font:\s*([^;}]+)/g)].map(m => m[1]!.trim()).filter(value => value !== "inherit");
+    expect(shorthands.length).toBeGreaterThan(5);
+    for (const value of shorthands) expect(value, value).toMatch(/^(var\(--fw(-strong)?\)|[5-9]00)\s/);
+    expect(appCss).not.toMatch(/font:\s*(normal|400)\s/);
     expect(appCss).toContain("--fw: 400; --fw-strong: 500;");
   });
 
