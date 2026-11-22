@@ -5,6 +5,13 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-22
+
+### Changed
+
+- Settings: the "Modified" markers, counter and per-row reset now refer to the state at program start and only cover the current session; a restart clears them (#36).
+- Light themes (White, Paper): body text is heavier (weight 500, emphasis 600) and the muted grey in White is darker for better readability (#37).
+
 ## [0.4.2] - 2026-11-21
 
 ### Added

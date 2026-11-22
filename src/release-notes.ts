@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.3": {
+    date: "2026-11-22",
+    de: {
+      new: [],
+      improved: ["In den Einstellungen gelten „Geändert“, der Zähler und „Zurücksetzen“ jetzt für die laufende Sitzung (Stand beim Programmstart); nach einem Neustart sind die Markierungen weg.", "Helle Designs (Weiß, Papier): kräftigere Schrift und im Weiß ein dunkleres Grau für Nebentexte, damit der Text besser lesbar ist."],
+      fixed: [],
+    },
+    en: {
+      new: [],
+      improved: ["In Settings, \u201cModified\u201d, the counter and \u201cReset\u201d now refer to the current session (state at program start); the markers are gone after a restart.", "Light themes (White, Paper): heavier text and a darker grey for secondary text in White for better readability."],
+      fixed: [],
+    },
+  },
   "0.4.2": {
     date: "2026-11-21",
     de: {
