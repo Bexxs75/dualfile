@@ -20,6 +20,8 @@ export function KeybindingsSettings({ commands = REBINDABLE_COMMANDS, query = ""
   const controller = useController();
   const tr = useT();
   const bindings = useAppState((state) => state.settings.keybindings);
+  // "Modified" and the row's reset refer to the keys at program start, like the rest of Settings.
+  const base = useAppState((state) => state.settingsBase);
   const [capturing, setCapturing] = useState<RebindableCommand | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -63,6 +65,15 @@ export function KeybindingsSettings({ commands = REBINDABLE_COMMANDS, query = ""
     return () => window.removeEventListener("keydown", onKey, true);
   });
 
+  /** Back to the key at program start; a key now used by another command asks first, like capturing it. */
+  function revert(command: RebindableCommand, spec: string): void {
+    setCapturing(null);
+    const other = owner(spec, command);
+    if (other) { setNotice({ kind: "conflict", command, spec, owner: other }); return; }
+    setNotice(null);
+    save(assign(command, spec));
+  }
+
   function replace(n: Extract<Notice, { kind: "conflict" }>): void {
     // Grenze: Der alte Inhaber fällt auf seine Standardtaste zurück; kollidiert diese wiederum
     // mit einem anderen Override, wird das nicht weiter aufgelöst (Doppelbelegung: letzter gewinnt).
@@ -79,7 +90,8 @@ export function KeybindingsSettings({ commands = REBINDABLE_COMMANDS, query = ""
       <div className="keys-list">
         {commands.map((command) => {
           const spec = effectiveSpec(command, bindings);
-          const custom = spec !== REBINDABLE[command];
+          const startSpec = base ? effectiveSpec(command, base.settings.keybindings) : spec;
+          const custom = spec !== startSpec;
           const active = capturing === command;
           return (
             <div className="keys-row" key={command}>
@@ -89,7 +101,7 @@ export function KeybindingsSettings({ commands = REBINDABLE_COMMANDS, query = ""
                 : <span className={`keys-caps${custom ? " custom" : ""}`}>{query.trim() && normalizeSearch(spec).includes(normalizeSearch(query.trim())) ? <mark><Shortcut spec={spec} /></mark> : <Shortcut spec={spec} />}</span>}
               <span className="keys-actions">
                 <button type="button" className="tb" onClick={() => { setNotice(null); setCapturing(active ? null : command); }}>{tr("settings.keys.change")}</button>
-                <button type="button" className="tb" disabled={!custom} onClick={() => { const next = { ...(bindings ?? {}) }; delete next[command]; save(next); setNotice(null); }}>{tr("settings.keys.reset")}</button>
+                <button type="button" className="tb" disabled={!custom} onClick={() => revert(command, startSpec)}>{tr("settings.keys.reset")}</button>
               </span>
               {notice !== null && (notice.kind === "reserved" ? active : notice.command === command) ? (
                 <div className="keys-msg" role="alert">

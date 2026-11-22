@@ -101,6 +101,42 @@ test("autostart is compared with the start state and reverts to it", async () =>
   expect(set).toHaveBeenLastCalledWith("minimized");
 });
 
+test("key rows mark, enable and reset against the keys at start (custom start key, change, factory key)", async () => {
+  const app = await setup({ keybindings: { copy: "Alt+C" } });
+  await app.user.click(app.dlg.getByRole("tab", { name: "Tastatur" }));
+  const row = () => [...app.dialog().querySelectorAll<HTMLElement>(".keys-row")].find(r => r.querySelector(".keys-name")?.textContent === "Kopieren")!;
+  const reset = () => within(row()).getByRole("button", { name: "Zurücksetzen" });
+  expect(row().querySelector(".keys-caps.custom")).toBeNull();
+  expect(reset()).toBeDisabled();
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  edit(app, { keybindings: { copy: "Alt+X" } });
+  expect(app.dlg.getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument();
+  expect(row().querySelector(".keys-caps.custom")).not.toBeNull();
+  await app.user.click(reset());
+  expect(app.state().keybindings).toEqual({ copy: "Alt+C" });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  expect(reset()).toBeDisabled();
+  // Going back to the factory key (F5) is a change against the start state as well.
+  edit(app, { keybindings: {} });
+  expect(app.dlg.getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument();
+  expect(row().querySelector(".keys-caps.custom")).not.toBeNull();
+  await app.user.click(reset());
+  expect(app.state().keybindings).toEqual({ copy: "Alt+C" });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+});
+
+test("reverting a key to its start key asks when another command uses it now", async () => {
+  const app = await setup({ keybindings: { copy: "Alt+C" } });
+  await app.user.click(app.dlg.getByRole("tab", { name: "Tastatur" }));
+  edit(app, { keybindings: { copy: "Alt+X", move: "Alt+C" } });
+  const row = [...app.dialog().querySelectorAll<HTMLElement>(".keys-row")].find(r => r.querySelector(".keys-name")?.textContent === "Kopieren")!;
+  await app.user.click(within(row).getByRole("button", { name: "Zurücksetzen" }));
+  expect(app.dlg.getByRole("alert")).toHaveTextContent("Verschieben");
+  expect(app.state().keybindings).toEqual({ copy: "Alt+X", move: "Alt+C" });
+  await app.user.click(app.dlg.getByRole("button", { name: "Ersetzen" }));
+  expect(app.state().keybindings).toEqual({ copy: "Alt+C" });
+});
+
 test("reset everything needs two clicks and expires, preserving unrelated preferences", async () => {
   const app = await setup({ fontSize: 19, keybindings: { copy: "Alt+C" }, terminalHeight: 350 });
   vi.useFakeTimers();
