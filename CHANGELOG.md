@@ -167,10 +167,6 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 - **Settings were often not saved.** Changes such as the language took effect at once but frequently never reached `settings.json`, without any error message. The folder watcher treated merely opening or listing a folder as a change, so the shown folder reloaded about four times a second, and every reload pushed the pending save back again. Reading a folder no longer counts as a change, a reload no longer postpones a pending save, and a change made while a save is still running is written afterwards. This also ends the constant background reloading of the shown folder.
 
-### Changed
-
-- README: the plugin interface is listed as planned (groundwork only, no UI and no plugins yet).
-
 ## [0.3.0] - 2026-11-16
 
 ### Added
@@ -259,7 +255,6 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Security
 
-- Names and text a plugin supplies (entry names and its manifest name/description) can no longer contain invisible or bidirectional Unicode format characters, which could reorder or hide text in the UI to spoof a name (F8).
 - Removing a local source tree during a move now uses the hardened directory removal that never follows a directory symlink swapped in during the walk, so a local race cannot redirect the deletion outside the source tree (F3).
 - A remote file opened externally is never handed to the desktop as a launchable `.desktop` entry: the private local copy of such a file is renamed so it opens as text instead of being executed (F11).
 - A saved password is discarded when a profile is changed to another server (host, port or protocol), so it is never sent to the new server.
@@ -278,7 +273,6 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 ### Security
 
 - Cancelling a conflict prompt during a folder move no longer deletes the source folder: the job now stops, and a cancelled copy never removes source files in any verify mode.
-- The plugin sandbox no longer allows `fcntl` unconditionally; owner/signal commands and `O_ASYNC` (which could signal other processes of the same user) are denied.
 - The release workflow pins appimagetool to a fixed release and verifies its SHA-256.
 
 ### Fixed
@@ -383,7 +377,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 - File operations, trash, undo/history, background job queues, pause/resume and SHA-256 transfer verification.
 - Viewer and quick view, search, batch rename, archives, directory synchronization and text comparison.
 - FTP/FTPS, SFTP and native SMB profiles; Dolphin/GNOME system-place import.
-- Process-plugin host, duplicate search, disk usage and similar-image search.
+- Duplicate search, disk usage and similar-image search.
 - Command palette and AppImage build/repack script.
 
 ### Changed
