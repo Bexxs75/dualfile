@@ -16,8 +16,10 @@ export function ConfirmTransferDialog({ plan }: { plan: OperationPlan }) {
   const current = withDestination(plan, destination, sourceFolder);
   // Ins Archiv zu schreiben geht nie (der Kern lehnt es ebenfalls ab).
   const intoArchive = isArchivePath(destination.trim());
-  const blocked = current === null || current.sameFolder || intoArchive;
   const copy = plan.kind === "copy";
+  // Kopieren in den eigenen Ordner legt eine Kopie mit freiem Namen an (#46); Verschieben dorthin ist sinnlos.
+  const duplicates = copy && !plan.extract && current?.sameFolder === true;
+  const blocked = current === null || (current.sameFolder && !duplicates) || intoArchive;
   const preview = plan.sourceNames.slice(0, 5);
 
   function submit(event: FormEvent): void {
@@ -62,7 +64,9 @@ export function ConfirmTransferDialog({ plan }: { plan: OperationPlan }) {
             {tr("error.readOnly")}
           </p>
         ) : null}
-        {current?.sameFolder ? (
+        {duplicates ? (
+          <p className="muted">{tr("ui.dialog.transfer.duplicateHint")}</p>
+        ) : current?.sameFolder ? (
           <p className="field-error" role="alert">
             {tr("ui.dialog.transfer.sameFolder")}
           </p>

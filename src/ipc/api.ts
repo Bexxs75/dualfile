@@ -139,6 +139,8 @@ export interface DualfileApi extends SystemApi {
   list(path: string): Promise<Listing>;
   homeDir(): Promise<string>;
   copy(sources: string[], destination: string): Promise<number>; // Auftragsnummer
+  /** „Hier duplizieren“: legt je Quelle eine Kopie im selben Ordner unter freiem Namen an (`name_copy`, `name_copy2`, …), ohne Rückfrage. */
+  duplicate(sources: string[]): Promise<number>;
   move(sources: string[], destination: string): Promise<number>;
   /**
    * Packt die Quellen (lokal oder aus einem Archiv, alle aus demselben Ort) als Auftrag in ein

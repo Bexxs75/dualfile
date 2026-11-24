@@ -269,6 +269,7 @@ pub fn run() {
             commands::list,
             commands::home_dir,
             commands::copy,
+            commands::duplicate,
             commands::move_items,
             commands::pack_archive,
             commands::trash,

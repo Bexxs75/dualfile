@@ -162,6 +162,7 @@ export function createTauriApi(): DualfileApi {
     list: (path) => call("list", { path }),
     homeDir: () => call("home_dir"),
     copy: (sources, destination) => call("copy", { sources, destination }),
+    duplicate: (sources) => call("duplicate", { sources }),
     // „move“ ist in Rust ein Schlüsselwort.
     move: (sources, destination) => call("move_items", { sources, destination }),
     packArchive: (sources, destination, name, format) => call("pack_archive", { sources, destination, name, format }),

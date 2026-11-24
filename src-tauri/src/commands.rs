@@ -89,6 +89,12 @@ pub async fn copy(
     run(state, move |s| s.copy(&sources, &destination)).await
 }
 
+/// "Duplicate here": copies each item next to itself as `name_copy`, `name_copy2`, ...
+#[tauri::command]
+pub async fn duplicate(state: Shared<'_>, sources: Vec<String>) -> Result<u64, UiError> {
+    run(state, move |s| s.duplicate(&sources)).await
+}
+
 /// Creates a new archive from the sources as a job; the result arrives as job events. An
 /// existing file of that name is never replaced (`exists`).
 #[tauri::command]

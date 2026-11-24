@@ -1316,3 +1316,17 @@ describe("Phase 10 jobs", () => {
     await expect(api.saveSettings({ ...loaded.settings, verifyPolicy: "invalid" as Settings["verifyPolicy"] })).rejects.toMatchObject({ kind: "invalidSettings" });
   });
 });
+
+describe("copyName (#46)", () => {
+  test("Endungen, .tar.gz und Zählung wie im Kern", async () => {
+    const { copyName } = await import("./mock");
+    const none = () => false;
+    expect(copyName("foto.jpg", false, none)).toBe("foto_copy.jpg");
+    expect(copyName("foto.jpg", false, (c) => c === "foto_copy.jpg")).toBe("foto_copy2.jpg");
+    expect(copyName("a.tar.gz", false, none)).toBe("a_copy.tar.gz");
+    expect(copyName(".bashrc", false, none)).toBe(".bashrc_copy");
+    expect(copyName("v1.2", true, none)).toBe("v1.2_copy");
+    expect(copyName("foto_copy.jpg", false, (c) => c === "foto_copy.jpg")).toBe("foto_copy2.jpg");
+    expect(copyName("a_copy1.txt", false, none)).toBe("a_copy1_copy.txt");
+  });
+});

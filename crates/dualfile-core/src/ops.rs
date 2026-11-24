@@ -698,6 +698,44 @@ pub fn copy(
     report
 }
 
+/// Copies every source next to itself under a free name (`name_copy`, `name_copy2`, ...),
+/// without asking. The name is chosen by looking at the folder; should another process
+/// create it in between, the copy meets a conflict that is answered with "skip" (no resolver),
+/// so an existing file is never overwritten. Folders are copied the same way as in `copy`.
+pub fn duplicate(vfs: &dyn Vfs, sources: &[VPath], job: &JobHandle) -> OpReport {
+    if vfs.is_read_only() {
+        return reject_read_only(sources, job);
+    }
+    let mut report = OpReport::default();
+    for src in sources {
+        if job.checkpoint() {
+            report.cancelled = true;
+            break;
+        }
+        let source = match retry_io(job, src, || vfs.stat(src)) {
+            Ok(v) => v,
+            Err(e) => {
+                failed(&mut report, src, e, job);
+                report.cancelled |= job.is_cancelled();
+                continue;
+            }
+        };
+        let dst = crate::names::copy_name(&source.name, source.kind == EntryKind::Dir, |n| {
+            match src.sibling(n) {
+                // Only a clear "not there" frees a name; any other answer counts as taken.
+                Ok(candidate) => !matches!(vfs.stat(&candidate), Err(Error::NotFound(_))),
+                Err(_) => true,
+            }
+        })
+        .and_then(|name| src.sibling(&name));
+        match dst {
+            Ok(dst) => copy_one(vfs, src, vfs, &dst, None, job, &mut report),
+            Err(e) => failed(&mut report, src, e, job),
+        }
+    }
+    report
+}
+
 struct RememberAll<'a> {
     inner: Option<&'a dyn ConflictResolver>,
     remembered: std::sync::Mutex<Option<Resolution>>,
@@ -2593,6 +2631,64 @@ mod tests {
             &JobHandle::silent(),
         );
         assert!(matches!(result.failed[0].1, Error::DestinationInsideSource));
+    }
+
+    #[test]
+    fn duplicate_creates_free_copy_names_and_never_overwrites() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path();
+        fs::write(dir.join("foto.jpg"), "orig").unwrap();
+        fs::write(dir.join("foto_copy.jpg"), "vorhanden").unwrap();
+        fs::write(dir.join("a.tar.gz"), "tar").unwrap();
+        fs::create_dir_all(dir.join("ordner/sub")).unwrap();
+        fs::write(dir.join("ordner/sub/x.txt"), "x").unwrap();
+        let sources: Vec<VPath> = ["foto.jpg", "a.tar.gz", "ordner"]
+            .iter()
+            .map(|n| VPath::local(dir.join(n)).unwrap())
+            .collect();
+        let report = duplicate(&LocalVfs, &sources, &JobHandle::silent());
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        assert_eq!(
+            fs::read_to_string(dir.join("foto_copy.jpg")).unwrap(),
+            "vorhanden"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("foto_copy2.jpg")).unwrap(),
+            "orig"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("a_copy.tar.gz")).unwrap(),
+            "tar"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("ordner_copy/sub/x.txt")).unwrap(),
+            "x"
+        );
+        // Created covers the copied items (folder contents included), roots are among them.
+        for name in ["foto_copy2.jpg", "a_copy.tar.gz", "ordner_copy"] {
+            assert!(
+                report
+                    .created
+                    .iter()
+                    .any(|(_, t)| t.path() == dir.join(name)),
+                "{name}"
+            );
+        }
+        // A second round counts further and leaves the first copies alone.
+        let again = duplicate(&LocalVfs, &sources, &JobHandle::silent());
+        assert!(again.failed.is_empty());
+        assert!(dir.join("foto_copy3.jpg").exists());
+        assert!(dir.join("a_copy2.tar.gz").exists());
+        assert!(dir.join("ordner_copy2/sub/x.txt").exists());
+        assert_eq!(fs::read_to_string(dir.join("foto.jpg")).unwrap(), "orig");
+    }
+
+    #[test]
+    fn duplicate_of_a_missing_source_is_reported() {
+        let root = tempfile::tempdir().unwrap();
+        let src = VPath::local(root.path().join("weg.txt")).unwrap();
+        let report = duplicate(&LocalVfs, &[src], &JobHandle::silent());
+        assert_eq!(report.failed.len(), 1);
     }
 
     #[cfg(unix)]

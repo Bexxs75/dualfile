@@ -85,7 +85,7 @@ test("B17 row menu retains multi-selection; blank menu uses folder actions only"
 });
 
 test("B17 filter remembers hidden selections but actions never fall back to unrelated focus", async () => {
-  const app = await setupApp({ left: DOWNLOADS });
+  const app = await setupApp({ left: DOWNLOADS, right: DOCS });
   fireEvent.click(app.row(0, "Datei1.txt"));
   fireEvent.click(app.row(0, "Datei2.txt"), { ctrlKey: true });
   const filter = within(app.pane(0)).getByRole("searchbox");

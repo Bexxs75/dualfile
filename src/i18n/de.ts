@@ -13,6 +13,7 @@ const de = {
   "menu.selection": "Auswahl",
   "menu.analyze": "Auswerten",
   "context.extract": "Entpacken …",
+  "context.duplicate": "Hier duplizieren",
   "sidebar.placeSettings": "Ort-Einstellungen",
 
   "settings.section.allgemein": "Allgemein",
@@ -928,6 +929,7 @@ const de = {
   "ui.fkeys": "Funktionstasten",
   "ui.toasts": "Meldungen",
   "ui.notice": "Hinweis",
+  "ui.dialog.transfer.duplicateHint": "Gleicher Ordner: Es wird eine Kopie mit freiem Namen angelegt (name_copy, name_copy2, …).",
   "ui.dialog.transfer.sameFolder": "Quelle und Ziel sind derselbe Ordner.",
   "ui.dialog.transfer.sizeIncomplete": "{size} plus Ordnerinhalt",
   "ui.dialog.delete.trashFailed": "Der Papierkorb ist hier nicht verfügbar. Die Elemente würden endgültig gelöscht.",

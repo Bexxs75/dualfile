@@ -65,6 +65,7 @@ describe("Befehle: Name und Argumentform", () => {
     ["list", (a) => a.list("/home/x"), "list", { path: "/home/x" }],
     ["homeDir", (a) => a.homeDir(), "home_dir", undefined],
     ["copy", (a) => a.copy(["/a", "/b"], "/dst"), "copy", { sources: ["/a", "/b"], destination: "/dst" }],
+    ["duplicate", (a) => a.duplicate(["/a", "/b"]), "duplicate", { sources: ["/a", "/b"] }],
     ["move", (a) => a.move(["/a"], "/dst"), "move_items", { sources: ["/a"], destination: "/dst" }],
     [
       "packArchive",
