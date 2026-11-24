@@ -720,14 +720,40 @@ pub fn duplicate(vfs: &dyn Vfs, sources: &[VPath], job: &JobHandle) -> OpReport 
                 continue;
             }
         };
+        // Only a clear "not there" frees a name and an existing entry takes it. Any other answer
+        // (lost connection, no permission) ends the search with that error instead of counting up
+        // forever; a cancelled job ends it as well.
+        let mut probe_error: Option<Error> = None;
+        let mut stopped = false;
         let dst = crate::names::copy_name(&source.name, source.kind == EntryKind::Dir, |n| {
+            if stopped || probe_error.is_some() {
+                return false;
+            }
+            if job.checkpoint() {
+                stopped = true;
+                return false;
+            }
             match src.sibling(n) {
-                // Only a clear "not there" frees a name; any other answer counts as taken.
-                Ok(candidate) => !matches!(vfs.stat(&candidate), Err(Error::NotFound(_))),
+                Ok(candidate) => match vfs.stat(&candidate) {
+                    Ok(_) => true,
+                    Err(Error::NotFound(_)) => false,
+                    Err(e) => {
+                        probe_error = Some(e);
+                        false
+                    }
+                },
                 Err(_) => true,
             }
         })
         .and_then(|name| src.sibling(&name));
+        if stopped {
+            report.cancelled = true;
+            break;
+        }
+        if let Some(e) = probe_error {
+            failed(&mut report, src, e, job);
+            continue;
+        }
         match dst {
             Ok(dst) => copy_one(vfs, src, vfs, &dst, None, job, &mut report),
             Err(e) => failed(&mut report, src, e, job),
@@ -2683,6 +2709,62 @@ mod tests {
         assert_eq!(fs::read_to_string(dir.join("foto.jpg")).unwrap(), "orig");
     }
 
+    #[test]
+    fn duplicate_stops_with_the_error_when_the_name_probe_fails() {
+        // Source stat works, every later probe fails (connection lost): no endless counting.
+        struct LostAfterSource {
+            calls: std::sync::atomic::AtomicUsize,
+        }
+        impl Vfs for LostAfterSource {
+            fn list(&self, p: &VPath) -> Result<Vec<Entry>> {
+                LocalVfs.list(p)
+            }
+            fn stat(&self, p: &VPath) -> Result<Entry> {
+                if self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                    LocalVfs.stat(p)
+                } else {
+                    Err(Error::Disconnected)
+                }
+            }
+            fn open_read(&self, p: &VPath) -> Result<Box<dyn Read + Send>> {
+                LocalVfs.open_read(p)
+            }
+            fn create_write(&self, p: &VPath, m: WriteMode) -> Result<Box<dyn WriteFinish>> {
+                LocalVfs.create_write(p, m)
+            }
+            fn mkdir(&self, p: &VPath) -> Result<()> {
+                LocalVfs.mkdir(p)
+            }
+            fn rename(&self, a: &VPath, b: &VPath, m: ReplaceMode) -> Result<()> {
+                LocalVfs.rename(a, b, m)
+            }
+            fn read_link(&self, p: &VPath) -> Result<String> {
+                LocalVfs.read_link(p)
+            }
+            fn create_symlink(&self, t: &str, p: &VPath) -> Result<()> {
+                LocalVfs.create_symlink(t, p)
+            }
+            fn trash(&self, p: &VPath) -> Result<()> {
+                LocalVfs.trash(p)
+            }
+            fn remove_permanent(&self, p: &VPath) -> Result<()> {
+                LocalVfs.remove_permanent(p)
+            }
+            fn capabilities(&self) -> Caps {
+                LocalVfs.capabilities()
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("a.txt"), "x").unwrap();
+        let vfs = LostAfterSource { calls: 0.into() };
+        let src = VPath::local(root.path().join("a.txt")).unwrap();
+        let report = duplicate(&vfs, &[src], &JobHandle::silent());
+        assert_eq!(report.failed.len(), 1);
+        assert!(matches!(report.failed[0].1, Error::Disconnected));
+        // One source stat plus exactly one failing probe, not a counting loop.
+        assert_eq!(vfs.calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert!(!root.path().join("a_copy.txt").exists());
+    }
     #[test]
     fn duplicate_of_a_missing_source_is_reported() {
         let root = tempfile::tempdir().unwrap();
