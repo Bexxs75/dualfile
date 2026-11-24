@@ -428,7 +428,10 @@ mod tests {
         assert!(found.found.is_empty());
         assert_eq!(
             found.skipped,
-            vec![SkippedTrash { path: root.clone(), mode: 0o775 }]
+            vec![SkippedTrash {
+                path: root.clone(),
+                mode: 0o775
+            }]
         );
         assert!(discover(&table, &data).unwrap().is_empty());
         assert!(root.join("files/item").exists());

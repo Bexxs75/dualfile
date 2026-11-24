@@ -5,11 +5,11 @@ use crate::compare::{CompareStore, SyncStore};
 use crate::conflict::{BridgeResolver, ConflictBridge, JobIdCell};
 use crate::connections::{ConnectionState, RemoteParts};
 use crate::convert::{
-    SkippedTrashDto, TrashEmptyDto,
     delete_plan_dto, entry_dto, file_info_dto, io_error, job_status_dto, path_text, token_text,
     vpath_text, ConflictAnswerDto, CoreEventDto, DeletePlanDto, DeletePlanInput, DirectionDto,
     FileInfoDto, JobStatusDto, JobTitleDto, ListingDto, LoadedSettingsDto, PackFormatDto,
-    RenameDto, RenameItemDto, SearchResultDto, SettingsDto, UiError,
+    RenameDto, RenameItemDto, SearchResultDto, SettingsDto, SkippedTrashDto, TrashEmptyDto,
+    UiError,
 };
 use crate::plans::PlanStore;
 use crate::plugins::{PluginParts, PluginState};

@@ -25,6 +25,7 @@ pub fn minimized_requested<S: AsRef<OsStr>>(args: impl IntoIterator<Item = S>) -
 }
 
 /// A relative `XDG_CONFIG_HOME` is invalid by specification and ignored.
+#[cfg(test)]
 pub fn config_home(xdg_config_home: Option<&OsStr>, home: &Path) -> PathBuf {
     xdg_config_home
         .map(PathBuf::from)
