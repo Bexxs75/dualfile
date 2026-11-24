@@ -219,3 +219,31 @@ test("failed profile deletion stays in confirmation and displays only translated
   expect(screen.getByRole("button", { name: "Abbrechen" })).toBeEnabled();
   expect(screen.getByRole("dialog")).toHaveTextContent("Example");
 });
+
+test("a stale stored password after the host-key trust step falls back to the password prompt (#52)", async () => {
+  const { api, user } = setup((api) => {
+    vi.spyOn(api, "connectionsList").mockResolvedValue([{ profile: { ...newSshProfile("example"), id: "p", name: "Example", transport: "builtin" as const, port: 22 }, connected: false, connectionId: null, root: null, secretSet: true, secretStore: "keychain", pins: [] }]);
+    return <ConnectionsDialog api={api} onClose={() => {}} />;
+  });
+  vi.spyOn(api, "connectionConnect").mockResolvedValue({ state: "needsTrust", fingerprint: "AA:BB" } as never);
+  const trust = vi.spyOn(api, "connectionTrust").mockRejectedValue(new CoreError("hidden", "auth"));
+  await user.click(await screen.findByRole("button", { name: "Verbinden" }));
+  await user.click(await screen.findByRole("button", { name: "Einmal vertrauen und verbinden" }));
+  await waitFor(() => expect(trust).toHaveBeenCalled());
+  await waitFor(() => expect(document.querySelector("input[type=password]")).not.toBeNull());
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+test("without a stored password an auth error after the trust step is a plain attempt error", async () => {
+  const { api, user } = setup((api) => {
+    vi.spyOn(api, "connectionsList").mockResolvedValue([{ profile: { ...newSshProfile("example"), id: "p", name: "Example", transport: "builtin" as const, port: 22 }, connected: false, connectionId: null, root: null, secretSet: false, secretStore: "none", pins: [] }]);
+    return <ConnectionsDialog api={api} onClose={() => {}} />;
+  });
+  vi.spyOn(api, "connectionConnect").mockResolvedValue({ state: "needsTrust", fingerprint: "AA:BB" } as never);
+  vi.spyOn(api, "connectionTrust").mockRejectedValue(new CoreError("hidden", "auth"));
+  await user.click(await screen.findByRole("button", { name: "Verbinden" }));
+  await waitFor(() => expect(document.querySelector("input[type=password]")).not.toBeNull());
+  await user.type(document.querySelector("input[type=password]")!, "x{enter}");
+  await user.click(await screen.findByRole("button", { name: "Einmal vertrauen und verbinden" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("example:22");
+});

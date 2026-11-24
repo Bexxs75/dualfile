@@ -8,6 +8,8 @@ import { newSshProfile } from "./ConnectionProfileForm";
 import "./ssh.css";
 import { SystemPlacesDialog } from "./SystemPlacesDialog";
 
+const isAuthFailure = (e: unknown) => e instanceof CoreError && (e.kind === "auth" || e.kind === "smbAuth" || e.kind === "needsPassword");
+
 export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; onClose: () => void; entry?: { action: "import" | "system" | "connect" | "disconnect"; profile?: ConnectionProfile; onConnected?: (root: string) => Promise<boolean> } }) {
   const tr = useT();
   const controller = useController();
@@ -20,7 +22,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
   const [hosts, setHosts] = useState<string[] | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [password, setPassword] = useState<ConnectionProfile | null>(null);
-  const [trust, setTrust] = useState<{ profile: ConnectionProfile; outcome: Exclude<ConnectOutcome, { state: "connected" }> } | null>(null);
+  const [trust, setTrust] = useState<{ profile: ConnectionProfile; outcome: Exclude<ConnectOutcome, { state: "connected" }>; askOnAuthFailure: boolean } | null>(null);
   const [deleting, setDeleting] = useState<ConnectionProfile | null>(null);
   const [attemptError, setAttemptError] = useState<{ id: string; text: string } | null>(null);
   const [error, setError] = useState("");
@@ -56,13 +58,13 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
     if (password && changed(password)) { setPassword(null); controller.toast(tr("ssh.profileChanged"), "error"); }
     if (trust && changed(trust.profile)) { setTrust(null); controller.toast(tr("ssh.profileChanged"), "error"); }
   }, [entries, synced, password, trust]);
-  async function outcome(profile: ConnectionProfile, result: ConnectOutcome) {
+  async function outcome(profile: ConnectionProfile, result: ConnectOutcome, askOnAuthFailure = false) {
     if (result.state === "connected") {
       await controller.refreshConnections();
       if (entry?.onConnected) await entry.onConnected(result.root);
       else await controller.navigateTo(active, result.root);
       onClose();
-    } else setTrust({ profile, outcome: result });
+    } else setTrust({ profile, outcome: result, askOnAuthFailure });
   }
   // A stored secret is used without asking; the password dialog only follows when none is stored or the server rejects it.
   const hasStoredSecret = (profile: ConnectionProfile) => !!entries.find((e) => e.profile.id === profile.id)?.secretSet;
@@ -77,9 +79,9 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
         const root = await api.systemMountConnect(profile.id);
         if (await (entry?.onConnected ? entry.onConnected(root) : controller.navigateTo(active, root))) onClose(); return;
       }
-      await outcome(profile, await api.connectionConnect(profile.id, secret, profile)); }
+      await outcome(profile, await api.connectionConnect(profile.id, secret, profile), askOnAuthFailure); }
     catch (e) {
-      if (askOnAuthFailure && e instanceof CoreError && (e.kind === "auth" || e.kind === "smbAuth" || e.kind === "needsPassword")) setPassword(profile);
+      if (askOnAuthFailure && isAuthFailure(e)) setPassword(profile);
       else await failAttempt(profile, e);
     }
     finally { await refresh(); setBusy(false); }
@@ -126,7 +128,9 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
       if (trust.outcome.state !== "needsTrust") return;
       setBusy(true);
       void api.connectionTrust(trust.profile.id, "once", trust.outcome.fingerprint)
-        .then((result) => outcome(trust.profile, result)).catch(async (e: unknown) => { const profile = trust.profile; setTrust(null); await failAttempt(profile, e); }).finally(() => setBusy(false));
+        .then((result) => outcome(trust.profile, result))
+        // The trust step finishes the same connect; a stale stored password falls back to the password prompt (#52).
+        .catch(async (e: unknown) => { const { profile, askOnAuthFailure } = trust; setTrust(null); if (askOnAuthFailure && isAuthFailure(e)) setPassword(profile); else await failAttempt(profile, e); }).finally(() => setBusy(false));
     }}>{tr("ssh.trustOnce")}</button>}
   </>}>
     <p>{tr(trust.outcome.state === "pinMismatch" ? "error.pinMismatch" : "ssh.verifyKey")}</p>
