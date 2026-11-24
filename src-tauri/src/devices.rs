@@ -9,7 +9,7 @@ use dualfile_core::{
     drives::Drive,
     fstab, places_pool,
 };
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, process::Command, sync::Arc, time::Duration};
 
 pub(crate) fn key(device: &Device) -> String {
     device.key()
