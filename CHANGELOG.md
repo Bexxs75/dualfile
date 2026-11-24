@@ -5,6 +5,16 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- Connections: when a saved password is outdated and the server key must be trusted first, a login failure after the trust step now opens the password dialog (#52).
+- Emptying the trash also reports your own trash folders that cannot be opened (for example mode 000); their contents are left alone (#53).
+- WebDAV: a wrong password now shows the login-failure message instead of "Invalid input"; an empty base path means the server root (#55).
+
+### Notes
+
+- Flatpak groundwork (host commands, host trash, terminal, portal autostart, updater off) is in the code but not shipped yet; the Flatpak package follows separately (#54).
+
 ## [0.4.4] - 2026-11-24
 
 ### Added
