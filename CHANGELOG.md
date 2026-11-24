@@ -5,6 +5,19 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-24
+
+### Added
+
+- File list: "Duplicate here" in the context menu creates a copy in the same folder with a free name (`name_copy`, `name_copy2`; `archive.tar.gz` becomes `archive_copy.tar.gz`); F5 with both panes in the same folder copies directly without a dialog (#46).
+
+### Fixed
+
+- WebDAV (and NFS) connections: the file list was empty when the start folder was empty or the path used the `webdav:`/`nfs:` server notation; fixed.
+- Connections: a saved password is used without a dialog; the password dialog only appears after a login failure (#48).
+- Emptying the trash reports folders that were skipped because of missing permissions (#47).
+- More stable automated tests (#39, #42, #49).
+
 ## [0.4.3] - 2026-11-22
 
 ### Changed

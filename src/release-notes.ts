@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.4": {
+    date: "2026-11-24",
+    de: {
+      new: ["Neuer Kontextmenü-Eintrag „Hier duplizieren“: legt eine Kopie im selben Ordner mit freiem Namen an (name_copy, name_copy2). F5 mit beiden Fenstern im selben Ordner kopiert jetzt direkt ohne Dialog."],
+      improved: ["Gespeicherte Passwörter werden ohne Nachfrage genutzt; der Passwort-Dialog erscheint erst, wenn die Anmeldung fehlschlägt.", "Papierkorb leeren meldet Ordner, die wegen fehlender Rechte übersprungen wurden."],
+      fixed: ["WebDAV und NFS: Die Dateiliste blieb leer, wenn der Startordner leer war oder der Pfad in der Schreibweise webdav:/nfs: angegeben wurde."],
+    },
+    en: {
+      new: ["New context-menu entry \u201cDuplicate here\u201d: creates a copy in the same folder with a free name (name_copy, name_copy2). F5 with both panes in the same folder now copies directly without a dialog."],
+      improved: ["Saved passwords are used without asking; the password dialog only appears when the login fails.", "Emptying the trash reports folders that were skipped because of missing permissions."],
+      fixed: ["WebDAV and NFS: the file list stayed empty when the start folder was empty or the path used the webdav:/nfs: notation."],
+    },
+  },
   "0.4.3": {
     date: "2026-11-22",
     de: {
