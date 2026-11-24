@@ -678,7 +678,25 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     }
     if (unmountedPlace(destination)) { toast(tr("sidebar.dropMount"), "error"); return; }
     const plan = planOperation(kind, snapshot(from), { ...snapshot(otherWindow(from)), path: destination });
-    if (plan) dispatch({ type: "dialog", dialog: { kind: "transfer", plan, from } });
+    if (!plan) return;
+    // Beide Fenster zeigen denselben Ordner: Kopieren legt ohne Rückfrage eine Kopie mit freiem Namen an (#46).
+    if (kind === "copy" && plan.sameFolder && !plan.extract) { void duplicatePaths(plan.sources); return; }
+    dispatch({ type: "dialog", dialog: { kind: "transfer", plan, from } });
+  }
+
+  /** „Hier duplizieren“: Kopie im selben Ordner unter freiem Namen (`name_copy`, `name_copy2`, …), ohne Rückfrage; Rückgängig wie bei jeder Kopie. */
+  async function duplicatePaths(paths: string[]): Promise<void> {
+    try {
+      const id = await api.duplicate(paths);
+      dispatch({ type: "jobKind", id, kind: "copy" });
+    } catch (error) {
+      fail(error, { path: paths[0] });
+    }
+  }
+  async function duplicate(w: WinIdx = get().active): Promise<void> {
+    if (refuseInArchive(w) || readOnlyPlace(activeTabOf(get(), w).path)) { toast(tr("error.readOnly"), "error"); return; }
+    const paths = targetPaths(w);
+    if (paths.length > 0) await duplicatePaths(paths);
   }
 
   /** Opens the copy dialog for absolute paths dropped from outside onto `destination`: copy only, the native drop event carries no modifier keys. shortcut: Shift+drop = move is not available here. */
@@ -716,7 +734,12 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
   }
   async function confirmTransfer(plan: OperationPlan, destination: string): Promise<void> {
     const final = withDestination(plan, destination, parentPath(plan.sources[0] ?? "/"));
-    if (!final || final.sameFolder) return;
+    if (!final) return;
+    // Ziel = Quellordner: Kopieren wird zur Kopie mit freiem Namen (#46), Verschieben bleibt ein No-op.
+    if (final.sameFolder) {
+      if (final.kind === "copy" && !final.extract) { dispatch({ type: "dialog", dialog: null }); await duplicatePaths(final.sources); }
+      return;
+    }
     if (unmountedPlace(final.destination)) { toast(tr("sidebar.dropMount"), "error"); return; }
     if (isArchivePath(final.destination) || readOnlyPlace(final.destination)) { toast(tr("error.readOnly"), "error"); return; } // nie in den eigenen Ordner
     dispatch({ type: "dialog", dialog: null });
@@ -1719,6 +1742,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     selectTab,
     setPathEditing: (w: WinIdx | null): void => dispatch({ type: "pathEdit", w }),
     openTransfer,
+    duplicate,
     confirmTransfer,
     answerConflict,
     confirmDelete,

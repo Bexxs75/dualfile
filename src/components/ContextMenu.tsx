@@ -77,6 +77,7 @@ export function ContextMenu() {
     !multiple && entry?.kind !== "dir" ? [cmd("fkey.f3", "view"), cmd("fkey.f4", "edit", archiveReason)] : [],
     [cmd("action.copy", "copy", destinationReason), cmd("action.move", "move", archiveReason ?? destinationReason),
       ...(packable ? [{ text: "context.pack" as const, command: "pack" as const, action: () => controller.openPack(menu.w) }] : []),
+      ...(!readOnly ? [{ text: "context.duplicate" as const, action: () => void controller.duplicate(menu.w) }] : []),
       ...(readOnly ? [{ text: "context.extract" as const, action: () => controller.openTransfer("copy", menu.w), reason: destinationReason }] : [])],
     [cmd("action.rename", "rename", archiveReason ?? (multiple ? "menu.reason.multiRename" : undefined)),
       ...(controller.canMultiRename(menu.w) ? [cmd("action.multiRename", "multiRename")] : []),

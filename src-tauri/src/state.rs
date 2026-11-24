@@ -1148,6 +1148,57 @@ impl AppState {
         self.transfer(sources, destination, false)
     }
 
+    /// "Duplicate here" (#46): copies each source into its own folder under a free name
+    /// (`name_copy`, `name_copy2`, ...), without conflict questions. Undo works like for a copy.
+    pub fn duplicate(&self, sources: &[String]) -> Result<u64, UiError> {
+        let sources = self.paths(sources)?;
+        reject_roots(&sources)?;
+        // Into an archive nothing is written; out of one, "copy" means extract (another path).
+        reject_archive_writes(&sources)?;
+        self.require_writable(&sources)?;
+        let vfs = self.source_vfs(&sources)?;
+        let dirs = parent_dirs(&sources);
+        let name = describe("Duplizieren", &sources);
+        let title = title_of("copy", &sources);
+        let recorder = self.undo_recorder(dirs.clone());
+        let local = sources.iter().all(|p| p.scheme() == Scheme::Local);
+        let lane = sources
+            .first()
+            .and_then(VPath::parent)
+            .map(|dir| crate::lanes::destination_lane(&dir))
+            .ok_or_else(|| UiError::new("invalidPath", "Ungültiger Pfad"))?;
+        let errors = self.shared.errors.clone();
+        self.submit_job_with_lane(
+            name,
+            Some(title),
+            JobPaths {
+                dirs,
+                touched: sources.iter().map(vpath_text).collect(),
+            },
+            lane,
+            move |resolver| {
+                Box::new(move |job| {
+                    let job = job.with_error_resolver(Some(Arc::new(
+                        crate::item_error::BridgeErrorResolver {
+                            job: resolver.job.clone(),
+                            bridge: errors,
+                            sink: resolver.sink.clone(),
+                        },
+                    )));
+                    let report = ops::duplicate(&*vfs, &sources, &job);
+                    if local {
+                        let pairs = undo_impl::roots(&report.created);
+                        recorder.record(recorder.journal.record_copy_created(
+                            &pairs.iter().map(|(_, b)| b.clone()).collect::<Vec<_>>(),
+                            report.replaced,
+                        ));
+                    }
+                    report
+                })
+            },
+        )
+    }
+
     pub fn move_items(&self, sources: &[String], destination: &str) -> Result<u64, UiError> {
         self.transfer(sources, destination, true)
     }
@@ -1846,6 +1897,24 @@ mod tests {
         let events = f.drain();
         assert!(events.contains(&CoreEventDto::UndoChanged));
         assert!(events.contains(&CoreEventDto::DirChanged { path: dst }));
+    }
+
+    #[test]
+    fn duplicate_makes_copy_in_same_folder_and_undo_removes_it() {
+        let f = fixture();
+        let src = f.file("d/bild.png", "abc");
+        let id = f.state.duplicate(std::slice::from_ref(&src)).unwrap();
+        assert_eq!(f.finish(id).state, JobState::Done);
+        assert_eq!(f.read("d/bild_copy.png"), "abc");
+        let id = f.state.duplicate(std::slice::from_ref(&src)).unwrap();
+        assert_eq!(f.finish(id).state, JobState::Done);
+        assert_eq!(f.read("d/bild_copy2.png"), "abc");
+        let entry = f.state.undo_list()[0].clone();
+        assert_eq!(entry.kind, "copy");
+        assert!(f.state.undo_run(entry.id).ok);
+        assert!(!Path::new(&f.p("d/bild_copy2.png")).exists());
+        assert!(Path::new(&f.p("d/bild_copy.png")).exists());
+        assert!(f.state.duplicate(&[]).is_err());
     }
 
     #[test]

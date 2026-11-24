@@ -43,6 +43,7 @@
     "allow-list",
     "allow-home-dir",
     "allow-copy",
+    "allow-duplicate",
     "allow-move-items",
     "allow-pack-archive",
     "allow-trash",

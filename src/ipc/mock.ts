@@ -423,6 +423,24 @@ function keepBothName(name: string, taken: (candidate: string) => boolean): stri
   return `${stem} (${counter})${ext}`;
 }
 
+/** Name einer Kopie im selben Ordner (wie `names::copy_name` im Kern): `a.jpg` -> `a_copy.jpg` -> `a_copy2.jpg`; `.tar.gz` zählt als eine Endung. */
+export function copyName(name: string, isDir: boolean, taken: (candidate: string) => boolean): string {
+  let stem = name;
+  let ext = "";
+  const dot = name.lastIndexOf(".");
+  if (!isDir && dot > 0 && dot < name.length - 1) {
+    stem = name.slice(0, dot);
+    ext = name.slice(dot);
+    if (stem.endsWith(".tar") && stem.length > 4) { ext = `.tar${ext}`; stem = stem.slice(0, -4); }
+  }
+  const m = /^(.+)_copy(\d*)$/.exec(stem);
+  if (m && (m[2] === "" || (!m[2]!.startsWith("0") && Number(m[2]) >= 2))) stem = m[1]!;
+  for (let index = 1; ; index += 1) {
+    const candidate = `${stem}_copy${index === 1 ? "" : index}${ext}`;
+    if (!taken(candidate)) return candidate;
+  }
+}
+
 // ---------------------------------------------------------------- Regex (nur Entwurf)
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
@@ -2417,6 +2435,31 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     onUndoChanged(handler) { undoHandlers.add(handler); return () => { undoHandlers.delete(handler); }; },
     async copy(sources, destination): Promise<number> {
       return startTransfer(sources, destination, false);
+    },
+
+    async duplicate(sources): Promise<number> {
+      if (sources.length === 0) throw new CoreError("Keine Einträge angegeben", "invalidInput");
+      const paths = sources.map(resolvePath);
+      refuseArchiveWrite(...paths);
+      refusePluginWrite(...paths);
+      for (const path of paths) if (isRootPath(path)) throw new CoreError("Die Wurzel kann nicht übertragen werden", "invalidPath");
+      const nodes = paths.map(need);
+      const job = newJob(describe("Duplizieren", paths), countByKind(nodes).bytes, null, titleOf("copy", paths));
+      const pairs: [string, string][] = [];
+      publish(job.id, { state: "running" });
+      let done = 0;
+      for (const [index, path] of paths.entries()) {
+        const node = nodes[index]!;
+        const parent = need(parentOf(path));
+        const name = copyName(node.entry.name, !!node.children, (c) => parent.children?.has(c) ?? false);
+        parent.children?.set(name, cloneNode(node, name));
+        pairs.push([path, join(parentOf(path), name)]);
+        done += 1;
+        changed(parentOf(path));
+      }
+      publish(job.id, { state: "done", filesDone: done, bytesPerSecond: 0 });
+      if (paths.every(localUndoPath)) recordUndo("copy", pairs);
+      return job.id;
     },
 
     async move(sources, destination): Promise<number> {

@@ -47,19 +47,82 @@ describe("F5 / F6 Kopieren und Verschieben", () => {
     expect(app.runtime.store.getState().jobs.jobs).toHaveLength(0);
   });
 
-  test("das Ziel im Dialog lässt sich ändern; derselbe Ordner wird abgelehnt", async () => {
+  test("das Ziel im Dialog lässt sich ändern; derselbe Ordner legt eine Kopie mit freiem Namen an (#46)", async () => {
     const app = await setupApp({ left: DOCS, right: DOWNLOADS });
     await app.user.click(app.row(0, "notizen.txt"));
     await app.user.keyboard("{F5}");
     const input = within(app.dialog()).getByRole("textbox");
     await app.user.clear(input);
     await app.user.type(input, DOCS);
-    expect(within(app.dialog()).getByRole("alert")).toHaveTextContent("Quelle und Ziel sind derselbe Ordner.");
-    expect(within(app.dialog()).getByRole("button", { name: "Kopieren" })).toBeDisabled();
+    expect(within(app.dialog()).queryByRole("alert")).toBeNull();
+    expect(within(app.dialog()).getByText(/Es wird eine Kopie mit freiem Namen angelegt/)).toBeInTheDocument();
+    expect(within(app.dialog()).getByRole("button", { name: "Kopieren" })).toBeEnabled();
     await app.user.clear(input);
     await app.user.type(input, `${HOME}/Bilder{Enter}`);
     await app.runJobs();
     expect(await namesIn(app.api, `${HOME}/Bilder`)).toContain("notizen.txt");
+    expect(await namesIn(app.api, DOCS)).not.toContain("notizen_copy.txt");
+    await app.user.click(app.row(0, "notizen.txt"));
+    await app.user.keyboard("{F5}");
+    const again = within(app.dialog()).getByRole("textbox");
+    await app.user.clear(again);
+    await app.user.type(again, `${DOCS}{Enter}`);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await app.runJobs();
+    expect(await namesIn(app.api, DOCS)).toContain("notizen_copy.txt");
+  });
+
+  test("F6 in denselben Ordner bleibt abgelehnt", async () => {
+    const app = await setupApp({ left: DOCS, right: DOWNLOADS });
+    await app.user.click(app.row(0, "notizen.txt"));
+    await app.user.keyboard("{F6}");
+    const input = within(app.dialog()).getByRole("textbox");
+    await app.user.clear(input);
+    await app.user.type(input, DOCS);
+    expect(within(app.dialog()).getByRole("alert")).toHaveTextContent("Quelle und Ziel sind derselbe Ordner.");
+    expect(within(app.dialog()).getByRole("button", { name: "Verschieben" })).toBeDisabled();
+  });
+
+  test("F5 bei zwei Fenstern mit demselben Ordner kopiert ohne Dialog nach name_copy, name_copy2 (#46)", async () => {
+    const app = await setupApp({ left: DOCS, right: DOCS });
+    await app.user.click(app.row(0, "notizen.txt"));
+    await app.user.keyboard("{F5}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await app.runJobs();
+    await waitFor(() => expect(app.names(0)).toContain("notizen_copy.txt"));
+    await app.user.keyboard("{F5}");
+    await app.runJobs();
+    await waitFor(() => expect(app.names(0)).toContain("notizen_copy2.txt"));
+    expect(await sizeOf(app.api, DOCS, "notizen_copy2.txt")).toBe(1200);
+    expect(await sizeOf(app.api, DOCS, "notizen.txt")).toBe(1200);
+  });
+
+  test("Kontextmenü „Hier duplizieren“ kopiert Dateien im selben Ordner (name_copy, name_copy2) (#46)", async () => {
+    const app = await setupApp({ left: DOCS, right: DOWNLOADS });
+    for (const expected of ["notizen_copy.txt", "notizen_copy2.txt"]) {
+      fireEvent.contextMenu(app.row(0, "notizen.txt"));
+      await app.user.click(within(screen.getByRole("menu", { name: "Kontextmenü" })).getByRole("menuitem", { name: "Hier duplizieren" }));
+      await app.runJobs();
+      await waitFor(() => expect(app.names(0)).toContain(expected));
+    }
+    expect(await sizeOf(app.api, DOCS, "notizen_copy2.txt")).toBe(1200);
+  });
+
+  test("„Hier duplizieren“ kopiert einen Ordner rekursiv; Rückgängig entfernt nur die Kopie (#46)", async () => {
+    const app = await setupApp({ left: HOME, right: DOWNLOADS });
+    const before = await namesIn(app.api, `${HOME}/Bilder`);
+    fireEvent.contextMenu(app.row(0, "Bilder"));
+    await app.user.click(within(screen.getByRole("menu", { name: "Kontextmenü" })).getByRole("menuitem", { name: "Hier duplizieren" }));
+    await app.runJobs();
+    await waitFor(() => expect(app.names(0)).toContain("Bilder_copy"));
+    expect(await namesIn(app.api, `${HOME}/Bilder_copy`)).toEqual(before);
+    const undo = (await app.api.undoList())[0]!;
+    expect(undo.kind).toBe("copy");
+    const undone = app.api.undoRun(undo.id);
+    await app.runJobs();
+    await undone;
+    expect(await namesIn(app.api, HOME)).not.toContain("Bilder_copy");
+    expect(await namesIn(app.api, `${HOME}/Bilder`)).toEqual(before);
   });
 
   test("F6 verschiebt: weg aus der Quelle, da im Ziel", async () => {
@@ -423,7 +486,7 @@ describe("Kontextmenü", () => {
     await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, "notizen.txt") });
     const menu = await screen.findByRole("menu", { name: "Kontextmenü" });
     expect(within(menu).getAllByRole("menuitem").map((item) => item.getAttribute("aria-label"))).toEqual([
-      "Öffnen", "Ansehen", "Bearbeiten", "Kopieren", "Verschieben", "Packen …", "Umbenennen", "Mehrfach-Umbenennen …", "Pfad kopieren", "Eigenschaften", "In den Papierkorb", "Endgültig löschen",
+      "Öffnen", "Ansehen", "Bearbeiten", "Kopieren", "Verschieben", "Packen …", "Hier duplizieren", "Umbenennen", "Mehrfach-Umbenennen …", "Pfad kopieren", "Eigenschaften", "In den Papierkorb", "Endgültig löschen",
     ]);
     expect(within(menu).getAllByRole("menuitem")[0]).toHaveFocus();
     expect(app.selected(0)).toEqual(["notizen.txt"]);
@@ -441,7 +504,7 @@ describe("Kontextmenü", () => {
     expect(within(app.pane(0)).getByRole("grid")).toHaveFocus();
     await app.user.keyboard("{Shift>}{F10}{/Shift}");
     expect(await screen.findByRole("menu")).toBeInTheDocument();
-    await app.user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
+    await app.user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}");
     expect(app.dialog()).toHaveAccessibleName("Umbenennen");
     expect(menu).not.toBeInTheDocument();
   });

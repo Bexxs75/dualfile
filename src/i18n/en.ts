@@ -13,6 +13,7 @@ const en: Record<keyof typeof de, string> = {
   "menu.selection": "Selection",
   "menu.analyze": "Analyze",
   "context.extract": "Extract …",
+  "context.duplicate": "Duplicate here",
   "sidebar.placeSettings": "Place settings",
 
   "settings.section.allgemein": "General",
@@ -930,6 +931,7 @@ const en: Record<keyof typeof de, string> = {
   "ui.fkeys": "Function keys",
   "ui.toasts": "Messages",
   "ui.notice": "Notice",
+  "ui.dialog.transfer.duplicateHint": "Same folder: a copy with a free name is created (name_copy, name_copy2, …).",
   "ui.dialog.transfer.sameFolder": "Source and destination are the same folder.",
   "ui.dialog.transfer.sizeIncomplete": "{size} plus folder contents",
   "ui.dialog.delete.trashFailed": "The Trash is not available here. The items would be deleted permanently.",

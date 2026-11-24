@@ -51,6 +51,7 @@ const COMMANDS: &[&str] = &[
     "list",
     "home_dir",
     "copy",
+    "duplicate",
     "move_items",
     "pack_archive",
     "trash",

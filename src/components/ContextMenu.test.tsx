@@ -12,7 +12,7 @@ test("file actions are grouped, use effective shortcuts and retain the delete co
   const app = await setupApp({ left: DOCS, settings: { keybindings: { copy: "Ctrl+J" } } });
   fireEvent.contextMenu(app.row(0, "notizen.txt"));
   expect(menu().getAllByRole("menuitem").map(e => e.getAttribute("aria-label"))).toEqual([
-    "Öffnen", "Ansehen", "Bearbeiten", "Kopieren", "Verschieben", "Packen …", "Umbenennen", "Mehrfach-Umbenennen …", "Pfad kopieren", "Eigenschaften", "In den Papierkorb", "Endgültig löschen",
+    "Öffnen", "Ansehen", "Bearbeiten", "Kopieren", "Verschieben", "Packen …", "Hier duplizieren", "Umbenennen", "Mehrfach-Umbenennen …", "Pfad kopieren", "Eigenschaften", "In den Papierkorb", "Endgültig löschen",
   ]);
   expect(menu().getAllByRole("separator")).toHaveLength(6);
   expect(menu().getByRole("menuitem", { name: "Kopieren" })).toHaveTextContent("Strg+J");
