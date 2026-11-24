@@ -7,5 +7,5 @@ Comment[de]=Zwei-Fenster-Dateimanager
 Exec=dualfile
 Icon=com.dualfileapp.Dualfile
 Terminal=false
-Categories=Utility;System;FileTools;FileManager;
+Categories=System;FileTools;FileManager;
 StartupWMClass=com.dualfileapp.Dualfile
