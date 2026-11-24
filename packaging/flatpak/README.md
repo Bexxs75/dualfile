@@ -38,8 +38,14 @@ output. It does not change app versions or claim that these releases were
 published. Descriptions derive from README.md; the developer name derives from
 LICENSE. Confirm the empty OARS content rating before submission.
 
-The check script runs each available tool, reports missing tools and exits nonzero
-on missing tools or validation failure. Equivalent individual commands:
+DE: Das Prüfskript führt alle verfügbaren Metadatenprüfer aus und prüft mit
+Python 3/PyYAML das Manifest auf Quellplatzhalter, veraltete Node-Erweiterung und
+fehlende Pflichtausschlüsse. Fehlende Werkzeuge oder Prüffehler ergeben Exit != 0.
+
+EN: The check script runs each available metadata validator and uses Python 3 /
+PyYAML to check the manifest for source placeholders, the obsolete Node extension
+and missing required source exclusions. Missing tools or failed checks yield a
+nonzero exit. Equivalent individual metadata commands:
 
 ```sh
 desktop-file-validate packaging/flatpak/com.dualfileapp.Dualfile.desktop
@@ -48,37 +54,76 @@ appstreamcli validate --strict --no-net packaging/flatpak/com.dualfileapp.Dualfi
 
 ## Later build on ObiWan / Späterer Bau auf ObiWan
 
-**DE:** Die folgenden Befehle sind nur dokumentiert, nicht ausgeführt.
-`flatpak-builder` ist auf ObiWan NICHT installiert. Seine Installation ist eine
-Systemänderung und benötigt vorherige Freigabe. Auch SDK-/Runtime-Installation,
-Generatorbeschaffung, Downloads, lokales Installieren und Einreichen sind separate
-spätere Schritte. Der aktuelle Auftrag erlaubt weder Netzwerk noch Installation.
+**DE:** Die folgenden Baubefehle sind nur dokumentiert, nicht ausgeführt.
+Laut Koordinator läuft auf ObiWan flatpak-builder **1.4.12** im Benutzerbereich
+als `flatpak run --user org.flatpak.Builder`. SDK/Runtime und Erweiterungen sind
+dort installiert. Generatorbeschaffung, Downloads, lokales Installieren und
+Einreichen bleiben spätere Schritte; dieser Auftrag erlaubt kein Netzwerk,
+keine Installation und keinen Builder-Aufruf.
 
-**EN:** Commands below are instructions for later, not executed work.
-ObiWan does NOT have flatpak-builder installed. Obtain explicit approval before
-that system change. Acquiring tools, SDKs/runtimes and dependency downloads,
-installing the app and submitting it are outside this offline task.
+**EN:** Build commands below are instructions for later, not executed work.
+The coordinator verified flatpak-builder **1.4.12** on ObiWan in the user
+installation, invoked as `flatpak run --user org.flatpak.Builder`, with SDK/runtime
+and extensions installed. Acquiring generators, downloading dependencies,
+installing the app and submitting it remain outside this offline task.
 
-1. TODO: aktuell stabile GNOME-Version vor dem Bau prüfen. Set the same verified
-   branch for `org.gnome.Platform` and `org.gnome.Sdk` via `runtime-version`.
-   Verify compatible versions/branches of rust-stable and node20. The locked Vite
-   requires Node **20.19 or later within Node 20** (or a supported newer major).
-   If node20 is unavailable for that SDK, report the conflict and approve a
-   replacement; do not silently substitute an extension. Pin generator versions
-   for reproducibility and verify their CLI help before running the commands.
-2. TODO: Verify GTK3/WebKitGTK 4.1 and native dependencies in the selected SDK and
-   runtime, including the tray's libayatana-appindicator/libappindicator and the
-   repo's documented libxdo requirement. Missing libraries need separate pinned
-   source modules and checksums; none have been guessed here. Verify runtime
-   `flatpak-spawn` and portal-aware `xdg-open` too. The manifest does not yet
-   establish that these runtime helpers/libraries are present.
-3. Prepare a clean source tree containing this packaging directory, the root
-   package-lock.json, src-tauri/Cargo.lock, all local crates and vendor/trash-5.3.0.
-   Exclude host node_modules, targets and local Cargo configuration. Replace
-   `TODO_SOURCE_CHECKOUT` with its path **relative to this manifest**. Do not point
-   at or edit the original checkout from the work order. For Flathub replace the
-   dir source with `type: git`, `url: https://github.com/Bexxs75/dualfile` and an
-   explicitly selected immutable `commit` (TODO, not invented here).
+1. **DE – geprüft durch den Koordinator:** `org.gnome.Platform//50` und
+   `org.gnome.Sdk//50` (50.6, freedesktop-Basis 26.08), dazu `rust-stable//26.08`
+   und freigegebenes `node22//26.08`. Node 22 erfüllt Vites Anforderung >=20.19.
+   TODO: Generatorversionen festlegen und deren CLI-Hilfe prüfen.
+
+   **EN – coordinator verified:** GNOME Platform/SDK 50 (50.6, freedesktop 26.08),
+   rust-stable and approved node22 on branch 26.08. Node 22 meets Vite's >=20.19
+   requirement. TODO: pin generator versions and verify their CLI help.
+2. **DE – geprüft durch den Koordinator:** SDK 50 enthält WebKitGTK 4.1 2.54.1,
+   GTK3 3.24.52, libsoup-3.0, librsvg, OpenSSL 3.5.9, libsecret und dbus. Die Runtime
+   enthält `flatpak-spawn` und `xdg-open`. libayatana-appindicator3,
+   libappindicator3 und libxdo fehlen. `libappindicator-sys` lädt per Dlopen zur
+   Laufzeit; das Tauri-Lockfile enthält kein libxdo-Crate. Diese Bibliotheken
+   blockieren den Bau nicht. Das optionale, standardmäßig ausgeschaltete Tray
+   bleibt in dieser Stufe ohne Bibliothek; keine zusätzlichen Module.
+   TODO Folgearbeit: Tray-Bibliothek gezielt paketieren und Laufzeit testen.
+
+   **EN – coordinator verified:** SDK 50 includes WebKitGTK 4.1 2.54.1, GTK3
+   3.24.52, libsoup-3.0, librsvg, OpenSSL 3.5.9, libsecret and dbus; the runtime
+   includes `flatpak-spawn` and `xdg-open`. The missing appindicator libraries
+   are loaded at runtime by `libappindicator-sys`; no libxdo crate occurs in the
+   Tauri lockfile. They do not block compilation. The optional tray is off by
+   default and has no library in this stage; no extra modules are added.
+   TODO follow-up: package a tray library deliberately and test it at runtime.
+3. **DE – erledigt:** Die `dir`-Quelle zeigt relativ zum Manifest auf `../..`.
+   Ausgeschlossen sind `.git`, `node_modules`, `src-tauri/target`, `target`,
+   `target-tauri`, `dist`, `build-flatpak`, `.flatpak-builder`, `.cargo` und
+   `src-tauri/.cargo`. Enthalten bleiben die npm-Dateien, Frontend-Quellen,
+   Root-Workspace-Manifest, Tauri-Manifest/Lockfile, alle vier lokalen Crates
+   (`dualfile-core`, `dualfile-platform`, `dualfile-remote`, `dualfile-plugin`),
+   `vendor/trash-5.3.0`, Desktop-/AppStream-Dateien und `src-tauri/icons`.
+   Lokale Cargo-Konfiguration liegt an den beiden ausgeschlossenen Stellen
+   derzeit nicht vor. Die untenstehenden Metadata-Befehle liefen offline mit
+   Exit 0; auch die vollständige Auflösung gelang mit dem vorhandenen Host-Cache.
+   Das beweist noch keinen Flatpak-Bau mit den ausstehenden Quellenlisten.
+
+   **EN – complete:** The manifest-relative `dir` source is `../..`, excluding
+   the host files/directories listed above while retaining npm/frontend inputs,
+   both workspace manifests, the Tauri lockfile, all four local crates, vendored
+   trash, packaging metadata and icons. Neither excluded Cargo configuration
+   directory currently exists. Both metadata commands below passed offline
+   (exit 0), including full resolution using the existing host cache. This does
+   not prove the Flatpak build with the still-missing generated source lists.
+
+   Offline evidence commands, run from this checkout / ausgeführte Belege:
+
+   ```sh
+   rg -n 'path\s*=|patch|replace' --glob Cargo.toml
+   cargo metadata --offline --locked --no-deps --format-version 1 --manifest-path src-tauri/Cargo.toml
+   cargo metadata --offline --locked --format-version 1 --manifest-path src-tauri/Cargo.toml
+   ```
+
+   **DE:** TODO für Flathub: auf `type: git` mit öffentlicher URL
+   `https://github.com/Bexxs75/dualfile` und ausdrücklich ausgewähltem,
+   unveränderlichem Commit umstellen. Kein Commit wird hier erfunden.
+   **EN:** TODO for Flathub: replace the dir source with `type: git`, that public
+   URL and an explicitly selected immutable commit; none is invented here.
 4. Generate sources after downloads/tool acquisition are separately authorized.
    From this checkout root, with `flatpak-cargo-generator.py` and
    `flatpak-node-generator` installed on PATH, the commands are:
@@ -103,7 +148,7 @@ installing the app and submitting it are outside this offline task.
    installed, build and install locally (explicitly authorized later):
 
    ```sh
-   flatpak-builder --user --install --force-clean build-flatpak packaging/flatpak/com.dualfileapp.Dualfile.yml
+   flatpak run --user org.flatpak.Builder --user --install --force-clean build-flatpak packaging/flatpak/com.dualfileapp.Dualfile.yml
    flatpak run com.dualfileapp.Dualfile
    ```
 
@@ -174,14 +219,17 @@ acceptance remains outstanding.
 5. After approval, arrange separately authorized publication and verify the
    listing, screenshots, metadata and updates.
 
-DE: Offene TODOs vollständig: GNOME-/SDK-/Erweiterungsversionen und Node-Eignung;
-Generator-/Linterversionen und deren CLI/Cachelayout; native Bibliotheken und
-Runtime-Helfer (gegebenenfalls zusätzliche gepinnte Module); saubere Quelle bzw.
-Git-Commit; beide generierten Offline-Quellen; echte Paket-/Desktop-Tests und
-Lint-Ergebnisse; OARS-Bestätigung; Screenshot-Upload/URLs; aktueller
-Einreichungsprozess und zugeteilter Domain-Nachweis. Metadaten und Rechte sind
-Entwurfsentscheidungen zur unabhängigen Prüfung, keine Freigabe.
+DE: Offene TODOs: Generator-/Linterversionen und deren CLI/Cachelayout;
+beide generierten Offline-Quellen einschließlich aller Plattformabhängigkeiten;
+Git-Commit für Flathub; echte Paket-/Desktop-Tests und Lint-Ergebnisse;
+Tray-Unterstützung als Folgearbeit; OARS-Bestätigung; Screenshot-Upload/URLs;
+aktueller Einreichungsprozess und zugeteilter Domain-Nachweis. Metadaten und
+Rechte sind Entwurfsentscheidungen zur unabhängigen Prüfung, keine Freigabe.
 
-EN: All outstanding assumptions/TODOs are listed above. No installation, build,
-network access, upload, application, commit, push or publication is performed by
-this preparation. This is advisory input for independent review.
+EN: Remaining TODOs: generator/linter versions and CLI/cache layout; both generated
+offline source lists including platform dependencies; immutable Flathub commit;
+real package/desktop tests and lint results; tray support as follow-up; OARS
+confirmation; screenshot upload/URLs; current submission process and assigned
+domain proof. No installation, build, network access, upload, application, commit,
+push or publication is performed by this preparation. This is advisory input for
+independent review.

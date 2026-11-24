@@ -6,7 +6,7 @@ sdk: org.gnome.Sdk
 sdk-extensions:
   # Branch 26.08 passt zur freedesktop-Basis von GNOME 50.
   - org.freedesktop.Sdk.Extension.rust-stable
-  # node20 gibt es auf 26.08 nicht; node22 erfüllt Vite (>=20.19).
+  # node22 ist für 26.08 freigegeben und erfüllt Vite (>=20.19).
   - org.freedesktop.Sdk.Extension.node22
 command: dualfile
 finish-args:
@@ -56,9 +56,20 @@ modules:
       - install -Dm644 src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/com.dualfileapp.Dualfile.png
       - install -Dm644 src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/com.dualfileapp.Dualfile.png
     sources:
-      # TODO: replace with a clean source directory, relative to this manifest.
-      # For submission use the repo's public Git URL and an immutable commit.
+      # Local checkout, relative to this manifest.
+      # For Flathub switch to type: git with the public URL and an immutable commit.
       - type: dir
-        path: TODO_SOURCE_CHECKOUT
+        path: ../..
+        skip:
+          - .git
+          - node_modules
+          - src-tauri/target
+          - target
+          - target-tauri
+          - dist
+          - build-flatpak
+          - .flatpak-builder
+          - .cargo
+          - src-tauri/.cargo
       - generated-sources.json
       - node-sources.json
