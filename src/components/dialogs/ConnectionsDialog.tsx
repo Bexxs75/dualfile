@@ -64,14 +64,24 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
       onClose();
     } else setTrust({ profile, outcome: result });
   }
-  async function connect(profile: ConnectionProfile, secret?: string) {
+  // A stored secret is used without asking; the password dialog only follows when none is stored or the server rejects it.
+  const hasStoredSecret = (profile: ConnectionProfile) => !!entries.find((e) => e.profile.id === profile.id)?.secretSet;
+  const connectOrAsk = (profile: ConnectionProfile) => {
+    if (hasStoredSecret(profile)) void connect(profile, undefined, true);
+    else { setAttemptError(null); setPassword(profile); }
+  };
+  async function connect(profile: ConnectionProfile, secret?: string, askOnAuthFailure = false) {
     setPassword(null); setBusy(true); setError(""); setAttemptError(null);
     try {
       if (profile.protocol === "system") {
         const root = await api.systemMountConnect(profile.id);
         if (await (entry?.onConnected ? entry.onConnected(root) : controller.navigateTo(active, root))) onClose(); return;
       }
-      await outcome(profile, await api.connectionConnect(profile.id, secret, profile)); } catch (e) { await failAttempt(profile, e); }
+      await outcome(profile, await api.connectionConnect(profile.id, secret, profile)); }
+    catch (e) {
+      if (askOnAuthFailure && e instanceof CoreError && (e.kind === "auth" || e.kind === "smbAuth" || e.kind === "needsPassword")) setPassword(profile);
+      else await failAttempt(profile, e);
+    }
     finally { await refresh(); setBusy(false); }
   }
   const openSystem = () => api.systemPlacesList().then(p => { setPlaces(p); setShowSystem(true); }).catch(fail);
@@ -92,7 +102,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
     else if (entry.profile) {
       if (entry.action === "disconnect") void disconnect(entry.profile);
       else if (entry.profile.protocol === "system" || entry.profile.transport === "openssh" || (entry.profile.protocol === "smb" && entry.profile.guest) || entry.profile.protocol === "nfs") void connect(entry.profile);
-      else setPassword(entry.profile);
+      else connectOrAsk(entry.profile);
     }
   }, [entry]);
   if (showSystem) return <SystemPlacesDialog api={api} places={places} profiles={entries.map(e => e.profile)} onClose={() => setShowSystem(false)} onImported={async () => { await refresh(); setShowSystem(false); }} />;
@@ -153,7 +163,7 @@ export function ConnectionsDialog({ api, onClose, entry }: { api: DualfileApi; o
       <strong>{profile.name}</strong><span>{profile.protocol === "system" ? tr("system.type") : profile.protocol.toUpperCase()} · {profile.host}</span>
       <button className="tb" disabled={busy} onClick={() => edit(profile)}>{tr("ssh.edit")}</button>
       {connected && profile.protocol !== "system" ? <button className="tb" disabled={busy} onClick={() => { void disconnect(profile); }}>{tr("ssh.disconnect")}</button>
-        : <button className="tb" disabled={busy} onClick={() => { if (profile.protocol === "system" || profile.transport === "openssh" || (profile.protocol === "smb" && profile.guest) || profile.protocol === "nfs") void connect(profile); else { setAttemptError(null); setPassword(profile); } }}>{tr("ssh.connect")}</button>}
+        : <button className="tb" disabled={busy} onClick={() => { if (profile.protocol === "system" || profile.transport === "openssh" || (profile.protocol === "smb" && profile.guest) || profile.protocol === "nfs") void connect(profile); else connectOrAsk(profile); }}>{tr("ssh.connect")}</button>}
       {profile.protocol === "system" && connected && <>
         <button className="tb" disabled={busy} onClick={() => { setBusy(true); void controller.unmountPlace(`conn:${profile.id}`).then(refresh).catch(fail).finally(() => setBusy(false)); }}>{tr("system.unmount")}</button>
       </>}
