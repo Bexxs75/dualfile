@@ -58,9 +58,19 @@ fn bus_configured() -> bool {
         })
 }
 
+/// A Flatpak install is new: no 0.4.0 with the old D-Bus name can run beside it, and the
+/// sandbox may not own that name anyway. Only the regular single-instance plugin applies.
+fn legacy_check_applies(kind: dualfile_core::packaging::Packaging) -> bool {
+    kind != dualfile_core::packaging::Packaging::Flatpak
+}
+
 pub fn plugin() -> TauriPlugin<Wry> {
     tauri::plugin::Builder::new("legacy-instance")
         .setup(|app, _| {
+            if !legacy_check_applies(dualfile_core::packaging::packaging()) {
+                log::info!("Flatpak: skipping the legacy instance check.");
+                return Ok(());
+            }
             let handle = app.clone();
             // zbus is built for Tokio: its blocking API needs a runtime context and must not run
             // on an async worker, so the check runs on Tauri's blocking pool and setup waits.
@@ -156,7 +166,15 @@ pub fn plugin() -> TauriPlugin<Wry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dualfile_core::packaging::Packaging;
     use std::cell::Cell;
+
+    #[test]
+    fn legacy_check_is_skipped_only_under_flatpak() {
+        assert!(!legacy_check_applies(Packaging::Flatpak));
+        assert!(legacy_check_applies(Packaging::AppImage));
+        assert!(legacy_check_applies(Packaging::Plain));
+    }
 
     #[test]
     fn existing_owner_is_activated_without_claiming_or_starting() {
