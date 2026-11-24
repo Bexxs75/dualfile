@@ -49,7 +49,12 @@ export function TrashView({ w }: { w: WinIdx }) {
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const last = entries.length - 1;
-    if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      const row = document.getElementById(`trash-${w}-${cursor}`);
+      const box = (row ?? gridRef.current)?.getBoundingClientRect();
+      controller.setActive(w);
+      setMenu({ x: (box?.left ?? 0) + 24, y: box?.bottom ?? 80, background: !row });
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Home" || event.key === "End") {
       const next = event.key === "Home" ? 0 : event.key === "End" ? last : Math.max(0, Math.min(last, cursor + (event.key === "ArrowDown" ? 1 : -1)));
       if (event.shiftKey) pick(next, "range");
       else if (event.ctrlKey) setCursor(next);
@@ -69,9 +74,9 @@ export function TrashView({ w }: { w: WinIdx }) {
     controller.setActive(w);
     setMenu({ x: event.clientX, y: event.clientY });
   };
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; background?: boolean } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { menuRef.current?.querySelector<HTMLElement>("button")?.focus(); }, [menu]);
+  useEffect(() => { (menuRef.current?.querySelector<HTMLElement>("button:not(:disabled)") ?? menuRef.current)?.focus(); }, [menu]);
   const closeMenu = () => { setMenu(null); gridRef.current?.focus(); };
   const empty = list !== null && entries.length === 0;
   const has = entries.length > 0;
@@ -87,7 +92,10 @@ export function TrashView({ w }: { w: WinIdx }) {
         <span className="trash-info" role="status">{info}</span>
       </div>
       <div ref={gridRef} className="list" role="grid" aria-label={tr("trash.title")} aria-multiselectable="true" aria-rowcount={has ? entries.length + 1 : 0}
-        aria-activedescendant={has ? `trash-${w}-${cursor}` : undefined} tabIndex={0} onKeyDown={onKeyDown} onFocus={() => controller.setActive(w)}>
+        aria-activedescendant={has ? `trash-${w}-${cursor}` : undefined} tabIndex={0} onContextMenu={event => {
+          event.preventDefault(); event.stopPropagation(); controller.setActive(w);
+          setMenu({ x: event.clientX, y: event.clientY, background: true });
+        }} onKeyDown={onKeyDown} onFocus={() => controller.setActive(w)}>
         {has ? <div role="row" aria-rowindex={1} className="head tv" style={{ "--df-cols": COLUMNS } as React.CSSProperties}>
           <span role="columnheader">{tr("column.name")}</span><span role="columnheader">{tr("trash.colOriginal")}</span>
           <span role="columnheader">{tr("trash.colDeleted")}</span><span role="columnheader" className="num">{tr("column.size")}</span>
@@ -112,21 +120,26 @@ export function TrashView({ w }: { w: WinIdx }) {
       {list?.truncated ? <div className="foot" role="status">{tr("trash.truncated", { count: entries.length })}</div> : null}
       {menu ? (
         <div className="menu-backdrop" onMouseDown={closeMenu} onContextMenu={event => { event.preventDefault(); closeMenu(); }}>
-          <div ref={menuRef} className="ctx" role="menu" aria-label={tr("ui.contextMenu")} style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 140) }}
+          <div ref={menuRef} tabIndex={-1} className="ctx" role="menu" aria-label={tr("ui.contextMenu")} style={{ left: Math.max(4, Math.min(menu.x, window.innerWidth - 220)), top: Math.max(4, Math.min(menu.y, window.innerHeight - 140)) }}
             onMouseDown={event => event.stopPropagation()}
             onKeyDown={event => {
-              const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button")];
+              const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled)")];
               const i = buttons.indexOf(document.activeElement as HTMLElement);
               if (event.key === "ArrowDown") buttons[(i + 1) % buttons.length]?.focus();
               else if (event.key === "ArrowUp") buttons[(i - 1 + buttons.length) % buttons.length]?.focus();
+              else if (event.key === "Home") buttons[0]?.focus();
+              else if (event.key === "End") buttons.at(-1)?.focus();
               else if (event.key === "Escape" || event.key === "Tab") closeMenu();
               else return;
               event.preventDefault();
               event.stopPropagation();
             }}>
+            {menu.background ? <button type="button" role="menuitem" disabled={!has} aria-disabled={!has} aria-description={!has ? tr("trash.emptyTitle") : undefined} onClick={() => { closeMenu(); controller.openDialog({ kind: "placeConfirm", action: "emptyTrash" }); }}>{tr("trash.empty")}{!has && <small className="menu-reason">{tr("trash.emptyTitle")}</small>}</button> : <>
             <button type="button" role="menuitem" onClick={() => { closeMenu(); restore(); }}>{tr("trash.restore")}</button>
-            <button type="button" role="menuitem" disabled={targets().length !== 1} onClick={() => { closeMenu(); const [item] = targets(); if (item) controller.openTrashOriginal(w, item); }}>{tr("trash.openOriginal")}</button>
-            <button type="button" role="menuitem" onClick={() => { closeMenu(); purge(); }}>{tr("trash.purge")}</button>
+            <button type="button" role="menuitem" disabled={targets().length !== 1} aria-disabled={targets().length !== 1} aria-description={targets().length !== 1 ? tr("menu.reason.single") : undefined} onClick={() => { closeMenu(); const [item] = targets(); if (item) controller.openTrashOriginal(w, item); }}>{tr("trash.openOriginal")}{targets().length !== 1 && <small className="menu-reason">{tr("menu.reason.single")}</small>}</button>
+            <div role="separator" className="header-menu-separator" />
+            <button className="danger" type="button" role="menuitem" onClick={() => { closeMenu(); purge(); }}>{tr("trash.purge")}</button>
+            </>}
           </div>
         </div>
       ) : null}

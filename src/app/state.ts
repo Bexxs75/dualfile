@@ -88,6 +88,8 @@ export interface AppState {
   phase: "loading" | "ready";
   home: string;
   settings: Settings;
+  /** State at program start (memory only, never saved); the baseline for the "modified" markers. */
+  settingsBase: import("../ipc/types").SettingsBase | null;
   outcome: LoadOutcome;
   saveError: string;
   noticeVisible: boolean;
@@ -164,6 +166,8 @@ export const defaultSettings: Settings = {
   paneColorRight: "",
   keybindings: {},
   columnWidths: {},
+  ownerColumnWidths: {},
+  columnOrder: {},
   session: {
     windows: [
       { tabs: [{ path: "", sort: "name", filter: "" }], activeTab: 0 },
@@ -182,6 +186,7 @@ export function initialState(): AppState {
     phase: "loading",
     home: "/",
     settings: defaultSettings,
+    settingsBase: null,
     outcome: { kind: "fresh" },
     saveError: "",
     noticeVisible: false,
@@ -279,6 +284,7 @@ export type Action =
   | { type: "pendingFocus"; w: WinIdx; name: string | null }
   | { type: "active"; w: WinIdx }
   | { type: "swap" }
+  | { type: "settingsBase"; base: import("../ipc/types").SettingsBase | null }
   | { type: "settings"; update: (settings: Settings) => Settings }
   | { type: "toggleHidden" }
   | { type: "pathEdit"; w: WinIdx | null }
@@ -360,6 +366,7 @@ export function reducer(state: AppState, action: Action): AppState {
         phase: "ready",
         home: action.home,
         settings: action.settings,
+        settingsBase: state.settingsBase ?? { settings: action.settings, autostart: null },
         outcome: action.outcome,
         noticeVisible: hasNotice(action.outcome),
         windows,
@@ -406,6 +413,7 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
     case "saveError": return { ...state, saveError: action.error };
+    case "settingsBase": return { ...state, settingsBase: action.base };
     case "settings": {
       const next = { ...state, settings: action.update(state.settings) };
       // These settings change the visible order (".." entry, hidden owner sort), so cursor and selection follow by name.

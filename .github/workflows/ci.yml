@@ -42,3 +42,5 @@ jobs:
           cargo test --workspace
       - run: python3 scripts/test_make_latest_json.py
       - run: python3 scripts/test_changelog_notes.py
+      - run: python3 scripts/test_check_release_notes.py
+      - run: bash scripts/test_release_preflight.sh

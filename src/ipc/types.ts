@@ -461,6 +461,8 @@ export interface Settings {
   showGidColumn?: boolean;
   paneTintStrength?: number;
   /** Breiten (px) der drei festen Listenspalten je Modus; fehlt ein Modus, gelten die Standardbreiten. */
+  ownerColumnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
+  columnOrder?: { normal?: import("../state/columns").ColumnKey[]; ext?: import("../state/columns").ColumnKey[] };
   columnWidths?: { normal?: [number, number, number]; ext?: [number, number, number] };
   /** Optional tint (hex) per window; missing/empty = no tint. */
   paneColorLeft?: string;
@@ -747,6 +749,10 @@ export interface SystemPlace {
 
 export type SettingsTab = "allgemein" | "darstellung" | "dateiliste" | "seitenleiste" | "terminal" | "kopieren" | "tastatur" | "info" | "appearance" | "system" | "keyboard";
 export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+/** State at program start; memory only, never saved. `autostart` stays null until the system status is first known. */
+export interface SettingsBase { settings: Settings; autostart: import("./system").AutostartMode | null }
+/** Baseline relative to the current settings: only the fields that differ (never `sidebarHidden`). */
+export interface SettingsWindowBaseDelta { changed: Omit<SettingsWindowPatch, "sidebarHidden">; autostart: import("./system").AutostartMode | null }
 export type SettingsWindowPatch = Partial<Omit<SettingsWindowSettings, "lastUpdateCheck">>;
 export type SettingsWindowMessage = { session: string; seq: number } & (
   { kind: "patch"; patch: SettingsWindowPatch } | { kind: "checkUpdates" } |
@@ -758,6 +764,8 @@ export interface SettingsWindowSnapshot {
   ack: number;
   errors: { seq: number; message: string }[];
   settings: SettingsWindowSettings;
+  /** The main window's state at program start (baseline for "modified"), as a difference to `settings`. */
+  base?: SettingsWindowBaseDelta | null;
   system: Pick<import("../app/system").SystemState, "status" | "check" | "error" | "installing" | "trayUnavailable">;
   logDir: string;
   persistence: { outcome: LoadOutcome; error: string };

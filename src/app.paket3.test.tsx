@@ -3,7 +3,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { DOCS, DOWNLOADS, HOME, setupApp } from "./test-utils";
 import css from "./styles/app.css?raw";
-import { contrastRatio, themes } from "./themes/tokens";
+import { contrastRatio, displayAccent, themes } from "./themes/tokens";
 import { archiveRootOf } from "./state/paths";
 
 const settings = async (options: Parameters<typeof setupApp>[0] = {}) => {
@@ -28,9 +28,17 @@ test("B08 automatic Paper contrast and explicit custom colors survive theme chan
   const input = screen.getByLabelText("Eigener Farbwert (#rrggbb)");
   await app.user.clear(input);
   await app.user.type(input, "#4f8cff");
+  expect(app.runtime.store.getState().settings.accent).toBe("#4f8cff");
+  expect(input).toHaveValue("#4f8cff");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe(displayAccent("#4f8cff", "papier"));
   await app.user.click(screen.getByRole("radio", { name: "Schiefer" }));
-  await app.user.click(screen.getByRole("radio", { name: "Papier" }));
+  expect(app.runtime.store.getState().settings.accent).toBe("#4f8cff");
+  expect(input).toHaveValue("#4f8cff");
   expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#4f8cff");
+  await app.user.click(screen.getByRole("radio", { name: "Papier" }));
+  expect(app.runtime.store.getState().settings.accent).toBe("#4f8cff");
+  expect(input).toHaveValue("#4f8cff");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe(displayAccent("#4f8cff", "papier"));
   expect(css).toMatch(/\.warning-slot\s*\{[^}]*height: 1.5em/);
 });
 
@@ -113,7 +121,7 @@ test("B22 undo toast/history name items and show platform shortcut without overl
   await app.runJobs();
   await waitFor(() => expect(app.view.container.querySelector(".undo-toast")).toHaveTextContent("Kopieren: notizen.txt und 1 weitere"));
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf der Änderungen …" }));
   expect(app.dialog()).toHaveTextContent("Kopieren: notizen.txt und 1 weitere");
   expect(app.dialog()).toHaveTextContent("Ctrl+Z");
   expect(app.dialog()).not.toHaveTextContent("⌘");
@@ -122,7 +130,7 @@ test("B22 undo toast/history name items and show platform shortcut without overl
   await app.user.keyboard("{Escape}");
   platform.mockReturnValue("MacIntel");
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf der Änderungen …" }));
   expect(app.dialog()).toHaveTextContent("Cmd+Z");
   expect(app.dialog()).not.toHaveTextContent("Ctrl+Z");
   platform.mockRestore();
@@ -143,7 +151,7 @@ test("B24 conflict includes full destination path and neutral overwrite", async 
 test("B25 similar scan labels share spaced fields and review text", async () => {
   const app = await setupApp({ language: "en" });
   await app.user.click(screen.getByRole("button", { name: "Tools" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Similar images" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Similar images …" }));
   expect(screen.getByLabelText("Minimum size (bytes)").closest("label")).toHaveClass("fld");
   expect(screen.getByLabelText("Sensitivity").closest("label")).toHaveClass("fld");
   expect(app.dialog()).toHaveTextContent(": review every");

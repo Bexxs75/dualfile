@@ -1,4 +1,3 @@
-import { currentVersion } from "./release-notes";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { DOCS, DOWNLOADS, setupApp } from "./test-utils";
@@ -10,19 +9,19 @@ test.each(["de", "en"] as const)("tools menu keyboard, wrap, activation and focu
   act(() => trigger.focus());
   await app.user.keyboard("{ArrowDown}");
   const items = screen.getAllByRole("menuitem");
-  expect(items).toHaveLength(7);
+  expect(items).toHaveLength(6);
   expect(items[0]).toHaveFocus();
   expect(trigger).toHaveAttribute("aria-expanded", "true");
   await app.user.keyboard("{ArrowUp}");
-  expect(items[6]).toHaveFocus();
+  expect(items[5]).toHaveFocus();
   await app.user.keyboard("{Home}{ArrowDown}");
   expect(items[1]).toHaveFocus();
   await app.user.keyboard("{End}{Enter}");
-  expect(screen.getByRole("dialog", { name: language === "de" ? `Neu in Dualfile ${currentVersion}` : `What’s new in Dualfile ${currentVersion}` })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: language === "de" ? "Verlauf der Änderungen …" : "Change history …" })).toBeVisible();
   await app.user.keyboard("{Escape}");
   expect(trigger).toHaveFocus();
   await app.user.keyboard("{ArrowUp}");
-  expect(screen.getAllByRole("menuitem")[6]).toHaveFocus();
+  expect(screen.getAllByRole("menuitem")[5]).toHaveFocus();
   await app.user.keyboard("{Escape}");
   expect(trigger).toHaveFocus();
   expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -57,7 +56,7 @@ test("connection chip empty, disconnected, connected and targeted dialog entries
   expect(empty.querySelector(".connection-dot")).toBeNull();
   await app.user.click(empty);
   const open = vi.spyOn(app.api, "connectionEditorOpen");
-  await app.user.click(screen.getByRole("menuitem", { name: "Neue Verbindung…" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Neue Verbindung …" }));
   expect(open).toHaveBeenLastCalledWith(null, "Verbindungsprofil", expect.objectContaining({ lang: "de" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   const saved = await app.api.connectionSave(newSshProfile("nas"));

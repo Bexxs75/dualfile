@@ -2,14 +2,17 @@ import { act, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 import { setupApp } from "../test-utils";
 import { defaultSettings } from "../app/state";
+import { accentPresetsForTheme } from "../themes/tokens";
 import { parseSettingsParams } from "../SettingsWindow";
 import { currentVersion } from "../release-notes";
 import type { Settings } from "../ipc/types";
+import type { DualfileApi } from "../ipc/api";
+import type { AutostartMode } from "../ipc/system";
 
 afterEach(() => vi.useRealTimers());
-async function setup(settings: Partial<Settings> = {}) {
+async function setup(settings: Partial<Settings> = {}, wrap?: (api: DualfileApi) => DualfileApi) {
   vi.spyOn(navigator, "language", "get").mockReturnValue("de-DE");
-  const app = await setupApp({ settings: { ...defaultSettings, lastSeenVersion: currentVersion, autostartPrompted: true, ...settings } });
+  const app = await setupApp({ settings: { ...defaultSettings, lastSeenVersion: currentVersion, autostartPrompted: true, ...settings }, ...(wrap ? { wrap } : {}) });
   await app.user.keyboard("{Control>},{/Control}");
   return { ...app, dlg: within(app.dialog()), state: () => app.runtime.store.getState().settings };
 }
@@ -37,11 +40,16 @@ test("search matches options/help across sections, highlights, counts and naviga
   expect(app.dlg.getByRole("status")).toHaveTextContent("Nichts gefunden");
 });
 
-test("modified values and keys share the counter, combine with search and reset individually", async () => {
-  const app = await setup({ fontSize: 19, sidebarCollapsed: ["devices"], paneColorLeft: "#123456", keybindings: { copy: "Alt+C" } });
+const edit = (app: Awaited<ReturnType<typeof setup>>, patch: Partial<Settings>) => act(() => app.runtime.controller.updateSettings(s => ({ ...s, ...patch })));
+
+test("modified values and keys share the counter, combine with search and reset individually to the start state", async () => {
+  const app = await setup();
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  edit(app, { fontSize: 19, sidebarCollapsed: ["devices"], paneColorLeft: "#123456", keybindings: { copy: "Alt+C" } });
   await app.user.click(app.dlg.getByRole("button", { name: "Geändert (4)" }));
   expect(app.dialog().querySelectorAll("[data-setting]")).toHaveLength(3);
   expect(app.dlg.getByText("Kopieren", { selector: ".keys-name" })).toBeInTheDocument();
+  expect(app.dlg.getByText(/4 Werte seit dem Start geändert\./)).toBeInTheDocument();
   await app.user.type(app.dlg.getByRole("searchbox"), "Alt+C");
   expect(app.dialog().querySelectorAll(".keys-row")).toHaveLength(1);
   expect(app.dialog().querySelector("mark")).toHaveTextContent("Alt+C");
@@ -55,7 +63,78 @@ test("modified values and keys share the counter, combine with search and reset 
   expect(app.state().sidebarCollapsed).toEqual([]);
   await app.user.click(app.dlg.getByRole("button", { name: "Zurücksetzen: Linkes Fenster" }));
   expect(app.state().paneColorLeft).toBe("");
-  expect(app.dlg.getByRole("status")).toHaveTextContent("Alles steht auf Standard.");
+  expect(app.dlg.getByRole("status")).toHaveTextContent("Seit dem Start wurde nichts geändert.");
+});
+
+test("values that already differ from the factory state at start are not marked; revert goes back to the start value", async () => {
+  const app = await setup({ fontSize: 19, sidebarCollapsed: ["devices"], paneColorLeft: "#123456", keybindings: { copy: "Alt+C" } });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  expect(app.dialog().querySelector(".modified-dot")).toBeNull();
+  expect(app.dlg.getByText("Änderungen gelten sofort. 0 Werte seit dem Start geändert.")).toBeInTheDocument();
+  edit(app, { fontSize: 14 });
+  expect(app.dlg.getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument();
+  expect(app.dlg.getByRole("tab", { name: "Darstellung geändert" })).toBeInTheDocument();
+  await app.user.click(app.dlg.getByRole("button", { name: "Zurücksetzen: Schriftgröße" }));
+  expect(app.state().fontSize).toBe(19);
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+});
+
+test("the baseline survives closing and reopening the dialog", async () => {
+  const app = await setup({ fontSize: 19 });
+  edit(app, { fontSize: 14 });
+  await app.user.keyboard("{Escape}");
+  await app.user.keyboard("{Control>},{/Control}");
+  expect(within(app.dialog()).getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument();
+});
+
+test("autostart is compared with the start state and reverts to it", async () => {
+  let disk: AutostartMode = "minimized";
+  const set = vi.fn(async (mode: AutostartMode) => (disk = mode));
+  const app = await setup({}, api => ({ ...api, systemStatus: async () => ({ appImage: true, startMenuExists: true, autostart: disk }), autostartSet: set }));
+  await vi.waitFor(() => expect(app.runtime.store.getState().settingsBase?.autostart).toBe("minimized"));
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  expect(app.dlg.queryByRole("button", { name: "Zurücksetzen: Mit dem System starten" })).toBeNull();
+  await act(async () => { await app.runtime.system.setAutostart("shown"); });
+  await vi.waitFor(() => expect(app.dlg.getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument());
+  await app.user.click(app.dlg.getByRole("button", { name: "Geändert (1)" }));
+  await app.user.click(app.dlg.getByRole("button", { name: /^Zurücksetzen: / }));
+  expect(set).toHaveBeenLastCalledWith("minimized");
+});
+
+test("key rows mark, enable and reset against the keys at start (custom start key, change, factory key)", async () => {
+  const app = await setup({ keybindings: { copy: "Alt+C" } });
+  await app.user.click(app.dlg.getByRole("tab", { name: "Tastatur" }));
+  const row = () => [...app.dialog().querySelectorAll<HTMLElement>(".keys-row")].find(r => r.querySelector(".keys-name")?.textContent === "Kopieren")!;
+  const reset = () => within(row()).getByRole("button", { name: "Zurücksetzen" });
+  expect(row().querySelector(".keys-caps.custom")).toBeNull();
+  expect(reset()).toBeDisabled();
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  edit(app, { keybindings: { copy: "Alt+X" } });
+  expect(app.dlg.getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument();
+  expect(row().querySelector(".keys-caps.custom")).not.toBeNull();
+  await app.user.click(reset());
+  expect(app.state().keybindings).toEqual({ copy: "Alt+C" });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  expect(reset()).toBeDisabled();
+  // Going back to the factory key (F5) is a change against the start state as well.
+  edit(app, { keybindings: {} });
+  expect(app.dlg.getByRole("button", { name: "Geändert (1)" })).toBeInTheDocument();
+  expect(row().querySelector(".keys-caps.custom")).not.toBeNull();
+  await app.user.click(reset());
+  expect(app.state().keybindings).toEqual({ copy: "Alt+C" });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+});
+
+test("reverting a key to its start key asks when another command uses it now", async () => {
+  const app = await setup({ keybindings: { copy: "Alt+C" } });
+  await app.user.click(app.dlg.getByRole("tab", { name: "Tastatur" }));
+  edit(app, { keybindings: { copy: "Alt+X", move: "Alt+C" } });
+  const row = [...app.dialog().querySelectorAll<HTMLElement>(".keys-row")].find(r => r.querySelector(".keys-name")?.textContent === "Kopieren")!;
+  await app.user.click(within(row).getByRole("button", { name: "Zurücksetzen" }));
+  expect(app.dlg.getByRole("alert")).toHaveTextContent("Verschieben");
+  expect(app.state().keybindings).toEqual({ copy: "Alt+X", move: "Alt+C" });
+  await app.user.click(app.dlg.getByRole("button", { name: "Ersetzen" }));
+  expect(app.state().keybindings).toEqual({ copy: "Alt+C" });
 });
 
 test("reset everything needs two clicks and expires, preserving unrelated preferences", async () => {
@@ -70,7 +149,8 @@ test("reset everything needs two clicks and expires, preserving unrelated prefer
   expect(app.state().fontSize).toBe(defaultSettings.fontSize);
   expect(app.state().keybindings).toEqual({});
   expect(app.state().terminalHeight).toBe(350);
-  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  // "Alles auf Standard" returns to the factory state; what differed at start now counts as changed (font size, Kopieren key).
+  expect(app.dlg.getByRole("button", { name: "Geändert (2)" })).toBeInTheDocument();
 });
 
 test("Ctrl+F, Escape and roving section navigation", async () => {
@@ -102,8 +182,9 @@ test("preview tracks real design, accent, density, font, tint and extra columns"
   await app.user.click(app.dlg.getByRole("radio", { name: "Weiß" }));
   expect(preview()).toHaveAttribute("data-fm", "weiss");
   expect(preview().style.getPropertyValue("--panel")).toBe("#ffffff");
-  await app.user.click(app.dlg.getByRole("button", { name: "#6fb3d9" }));
-  expect(preview().style.getPropertyValue("--accent")).toBe("#6fb3d9");
+  const preset = accentPresetsForTheme(app.state().theme)[1]!;
+  await app.user.click(app.dlg.getByRole("button", { name: preset }));
+  expect(preview().style.getPropertyValue("--accent")).toBe(preset);
   await app.user.click(app.dlg.getByRole("radio", { name: "Kompakt" }));
   expect(preview().style.getPropertyValue("--rowh")).toBe("22px");
   fireEvent.change(app.dlg.getByRole("slider", { name: "Schriftgröße" }), { target: { value: "20" } });
@@ -156,12 +237,13 @@ test.each([["appearance", "darstellung"], ["system", "allgemein"], ["keyboard", 
 });
 
 test("all changed control types can be reset while search remains usable", async () => {
-  const app = await setup({ showParentEntry: false, density: "compact", terminalShell: "bash", showPermissionsColumn: true });
+  const app = await setup();
+  edit(app, { showParentEntry: false, density: "compact", terminalShell: "bash", showPermissionsColumn: true });
   await app.user.click(app.dlg.getByRole("button", { name: "Geändert (4)" }));
   for (const label of ["Eintrag „..“ anzeigen", "Zeilenhöhe", "Terminal-Shell", "Rechte anzeigen"]) {
     await app.user.click(app.dlg.getByRole("button", { name: `Zurücksetzen: ${label}` }));
   }
-  expect(app.dlg.getByRole("status")).toHaveTextContent("Alles steht auf Standard.");
+  expect(app.dlg.getByRole("status")).toHaveTextContent("Seit dem Start wurde nichts geändert.");
 });
 
 test("search includes the additional-column group and highlights sidebar options and actions", async () => {
@@ -191,7 +273,8 @@ test("English search uses translated options and help", async () => {
 
 
 test("accent counts once in filter, footer and accessible tab, and resets together", async () => {
-  const app = await setup({ accentAutomatic: false, accent: "#123456" });
+  const app = await setup();
+  edit(app, { accentAutomatic: false, accent: "#123456" });
   expect(app.dlg.getByRole("tab", { name: "Darstellung geändert" })).toBeInTheDocument();
   expect(app.dialog().querySelector(".settings-footer")).toHaveTextContent("1 Werte");
   await app.user.click(app.dlg.getByRole("button", { name: "Geändert (1)" }));
@@ -222,11 +305,12 @@ test("dragged sidebar width is rounded and the slider preserves every pixel", as
 
 
 test("automatic accent and hidden terminal colours leave counters and tabs at defaults", async () => {
-  const app = await setup({ accent: "#123456", terminalBg: "#000000", terminalFg: "#ffffff" });
+  const app = await setup();
+  edit(app, { accent: "#123456", terminalBg: "#000000", terminalFg: "#ffffff" });
   expect(app.dlg.getByRole("tab", { name: "Darstellung" })).toBeInTheDocument();
   expect(app.dlg.getByRole("tab", { name: "Terminal" })).toBeInTheDocument();
   await app.user.click(app.dlg.getByRole("button", { name: "Geändert (0)" }));
-  expect(app.dlg.getByRole("status")).toHaveTextContent("Alles steht auf Standard.");
+  expect(app.dlg.getByRole("status")).toHaveTextContent("Seit dem Start wurde nichts geändert.");
   await app.user.click(app.dlg.getByRole("tab", { name: "Terminal 0" }));
   await app.user.click(app.dlg.getByRole("button", { name: /Eigene/ }));
   expect(app.dlg.getByRole("button", { name: "Geändert (3)" })).toBeInTheDocument();

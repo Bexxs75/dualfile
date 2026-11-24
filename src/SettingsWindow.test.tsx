@@ -199,3 +199,29 @@ test("LAN discovery is opt-in and synchronized through the settings window relay
   expect(screen.getByRole("switch", { name: "Dienste im lokalen Netzwerk suchen" })).not.toBeChecked();
   expect(b.load).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
 });
+
+test("Info & Help opens release notes locally without settings IO", async () => {
+  const b = setup("info"); b.snapshot();
+  await b.user.click(screen.getByRole("button", { name: "What’s new" }));
+  expect(screen.getByRole("dialog", { name: /What’s new in Dualfile/ })).toBeVisible();
+  await b.user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(b.save).not.toHaveBeenCalled();
+  expect(b.close).not.toHaveBeenCalled();
+});
+test("the separate window marks only changes against the start state sent by the main window", () => {
+  const b = setup();
+  const start = { ...testSnapshot().settings, fontSize: 19 };
+  b.snapshot({ settings: start, base: { changed: {}, autostart: "off" } });
+  expect(screen.getByRole("button", { name: "Modified (0)" })).toBeInTheDocument();
+  b.snapshot({ ack: 1, settings: { ...start, fontSize: 14 }, base: { changed: { fontSize: 19 }, autostart: "off" } });
+  expect(screen.getByRole("button", { name: "Modified (1)" })).toBeInTheDocument();
+  b.snapshot({ ack: 2, settings: { ...start, fontSize: 14 }, base: null });
+  expect(screen.getByRole("button", { name: "Modified (1)" })).toBeInTheDocument();
+});
+test("hidden sidebar entries from the session are not counted as modified in the separate window", () => {
+  const b = setup();
+  const hidden = Array.from({ length: 40 }, (_, i) => `drive:/${String(i).padStart(3, "0")}${"x".repeat(4102)}`);
+  b.snapshot({ settings: { ...testSnapshot().settings, sidebarHidden: hidden }, base: { changed: {}, autostart: "off" } });
+  expect(screen.getByRole("button", { name: "Modified (0)" })).toBeInTheDocument();
+});

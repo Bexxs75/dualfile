@@ -5,8 +5,8 @@ import { DOCS, DOWNLOADS, setupApp } from "./test-utils";
 afterEach(() => vi.useRealTimers());
 const openHistory = async (app: Awaited<ReturnType<typeof setupApp>>) => {
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf" }));
-  return within(screen.getByRole("dialog", { name: "Verlauf" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf der Änderungen …" }));
+  return within(screen.getByRole("dialog", { name: "Verlauf der Änderungen …" }));
 };
 
 test("empty history, focus trap, Escape and return focus", async () => {
@@ -70,7 +70,7 @@ test("Ctrl/Cmd Z avoid text and dialog focus; Shift opens history", async () => 
   expect(spy).not.toHaveBeenCalled();
   await app.user.keyboard("{Escape}");
   fireEvent.keyDown(document.activeElement!, { key: "Z", ctrlKey: true, shiftKey: true });
-  expect(screen.getByRole("dialog", { name: "Verlauf" })).toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Verlauf der Änderungen …" })).toBeInTheDocument();
   fireEvent.keyDown(document.activeElement!, { key: "z", ctrlKey: true });
   expect(spy).not.toHaveBeenCalled();
   await app.user.keyboard("{Escape}");
@@ -134,7 +134,7 @@ test("English labels and all fixed error codes; backend labels are never display
   }) });
   expect(document.querySelector(".undo-toast")).toBeNull();
   await app.user.click(screen.getByRole("button", { name: "Tools" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "History" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Change history …" }));
   const panel = within(screen.getByRole("dialog"));
   await app.user.click(panel.getByRole("button", { name: "Undo: Move" }));
   expect(panel.getByText("3 of 5 undone, 2 remaining")).toBeInTheDocument();
@@ -155,8 +155,8 @@ test("undo toast stays operable while a dialog is open, and Escape still closes 
   await act(async () => { await app.api.rename(`${DOCS}/notizen.txt`, "neu.txt"); });
   const toast = within(document.querySelector<HTMLElement>(".undo-toast")!);
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf" }));
-  expect(screen.getByRole("dialog", { name: "Verlauf" })).toBeInTheDocument();
+  await app.user.click(screen.getByRole("menuitem", { name: "Verlauf der Änderungen …" }));
+  expect(screen.getByRole("dialog", { name: "Verlauf der Änderungen …" })).toBeInTheDocument();
   const button = toast.getByRole("button", { name: /Rückgängig/ });
   expect(button).toBeEnabled();
   expect(document.querySelector(".undo-toast")).not.toHaveAttribute("inert");
@@ -168,5 +168,5 @@ test("undo toast stays operable while a dialog is open, and Escape still closes 
   // Der Fokus liegt jetzt im Hinweis, außerhalb des Dialogs: Esc muss den Dialog trotzdem schließen.
   act(() => button.focus());
   await app.user.keyboard("{Escape}");
-  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Verlauf" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Verlauf der Änderungen …" })).toBeNull());
 });

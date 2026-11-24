@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./Icon";
 
-export type HeaderMenuAction = { label: string; icon?: IconName; ariaLabel?: string; action: () => void; hint?: string; current?: boolean; connected?: boolean; };
+export type HeaderMenuAction = { label: string; icon?: IconName; ariaLabel?: string; action: () => void; hint?: string; disabled?: boolean; reason?: string; current?: boolean; connected?: boolean; };
 /** A row with `submenu` opens a side menu instead of running an action. */
 export type HeaderMenuParent = { label: string; ariaLabel?: string; detail?: string; connected?: boolean; submenu: HeaderMenuAction[] };
 export type HeaderMenuItem = HeaderMenuAction | HeaderMenuParent | { kind: "heading"; label: string; connected?: boolean; } | { kind: "separator" };
@@ -82,12 +82,12 @@ export function HeaderMenu({ label, title, children, items, className = "", port
         row += 1;
         if ("submenu" in item) {
           const mine = row, expanded = sub === mine;
-          return <button key={i} type="button" role="menuitem" data-row={mine} tabIndex={-1} aria-label={item.ariaLabel} aria-haspopup="menu" aria-expanded={expanded} aria-controls={expanded ? `${id}-sub` : undefined}
+          return <button key={i} type="button" role="menuitem" data-row={mine} tabIndex={-1} aria-label={item.ariaLabel ?? item.label} aria-haspopup="menu" aria-expanded={expanded} aria-controls={expanded ? `${id}-sub` : undefined}
             onClick={() => { if (expanded) closeSub(true); else { subFocus.current = true; setSub(mine); } }}>
             {item.connected !== undefined && <span aria-hidden="true" className={`connection-dot ${item.connected ? "connected" : "disconnected"}`} />}<span className="menu-name">{item.label}</span>{item.detail && <small className="menu-hint menu-detail">{item.detail}</small>}<span aria-hidden="true" className="menu-chevron">›</span>
           </button>;
         }
-        return <button type="button" role="menuitem" data-row={row} aria-current={item.current ? "location" : undefined} tabIndex={-1} aria-label={item.ariaLabel} key={i} onClick={() => { close(); item.action(); }}>{item.icon && <Icon name={item.icon} />}<span>{item.label}</span>{item.connected !== undefined && <span aria-hidden="true" className={`connection-dot ${item.connected ? "connected" : "disconnected"}`} />}{item.hint && <small className="menu-hint">{item.hint}</small>}{item.current && <Icon name="check" />}</button>;
+        return <button type="button" role="menuitem" data-row={row} aria-disabled={item.disabled || undefined} aria-description={item.disabled ? item.reason : undefined} aria-current={item.current ? "location" : undefined} tabIndex={-1} aria-label={item.ariaLabel ?? item.label} key={i} onClick={() => { if (item.disabled) return; close(); item.action(); }}>{item.icon && <Icon name={item.icon} />}<span>{item.label}{item.disabled && item.reason && <small className="menu-reason">{item.reason}</small>}</span>{item.connected !== undefined && <span aria-hidden="true" className={`connection-dot ${item.connected ? "connected" : "disconnected"}`} />}{item.hint && <small className="menu-hint">{item.hint}</small>}{item.current && <Icon name="check" />}</button>;
       }); })()}
     </div>)}
     {open && sub !== null && (() => {
@@ -105,7 +105,7 @@ export function HeaderMenu({ label, title, children, items, className = "", port
         else return;
         e.preventDefault(); e.stopPropagation();
       }}>
-        {parent.submenu.map((item, i) => <button key={i} type="button" role="menuitem" tabIndex={-1} aria-label={item.ariaLabel} onClick={() => { close(); item.action(); }}>{item.icon && <Icon name={item.icon} />}<span>{item.label}</span></button>)}
+        {parent.submenu.map((item, i) => <button key={i} type="button" role="menuitem" tabIndex={-1} aria-disabled={item.disabled || undefined} aria-description={item.disabled ? item.reason : undefined} aria-label={item.ariaLabel ?? item.label} onClick={() => { if (item.disabled) return; close(); item.action(); }}>{item.icon && <Icon name={item.icon} />}<span>{item.label}{item.disabled && item.reason && <small className="menu-reason">{item.reason}</small>}</span></button>)}
       </div>, document.body);
     })()}
   </div>;

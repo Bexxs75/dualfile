@@ -23,6 +23,13 @@ export function createRuntime(api: DualfileApi, options: ControllerOptions = {})
     patch => controller.updateSettings(settings => ({ ...settings, ...patch })),
     () => store.getState().jobs.jobs.some(job => !isFinished(job.state)),
     () => controller.saveNow(true), undefined, () => settingsWindow.flush());
+  // Baseline for "modified": the autostart state arrives asynchronously and is filled in once.
+  const fillBaseAutostart = () => {
+    const base = store.getState().settingsBase, status = system.getSnapshot().status;
+    if (base && base.autostart === null && status) store.dispatch({ type: "settingsBase", base: { ...base, autostart: status.autostart } });
+  };
+  system.subscribe(fillBaseAutostart);
+  store.subscribe(fillBaseAutostart);
   const settingsWindow = createSettingsWindowBridge(api, store, controller, system);
   return { api, store, controller, system, settingsWindow };
 }

@@ -21,7 +21,7 @@ export function PlacePropertiesDialog({ placeKey }: { placeKey: string }) {
   const [space, setSpace] = useState(place?.space);
   const [busy, setBusy] = useState(false);
   const [measured, setMeasured] = useState(false);
-  return <Modal title={tr("context.properties")} onClose={() => controller.closeDialog()}>
+  return <Modal title={tr("sidebar.placeSettings")} onClose={() => controller.closeDialog()}>
     <p>{place?.label ? tr(place.label) : place?.name}</p><p>{place?.path}</p>
     {place?.state && <p>{tr(`sidebar.${place.state}`)}</p>}
     {drive && <dl><dt>{tr("sidebar.device")}</dt><dd>{drive.device || "—"}</dd><dt>{tr("sidebar.filesystem")}</dt><dd>{drive.fstype}</dd>

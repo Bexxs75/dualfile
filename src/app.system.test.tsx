@@ -17,7 +17,7 @@ test("settings groups: immediate tray, fallback hint, entry actions, version, ma
   const app = await setupApp({ settings: { checkUpdatesOnStart: false }, wrap: api => ({ ...api, traySet: tray, startMenuSet: menu, updateCheck: check }) });
   expect(check).not.toHaveBeenCalled();
   const dlg = await settingsDialog(app);
-  await app.user.click(dlg.getByRole("tab", { name: "Allgemein geändert" }));
+  await app.user.click(dlg.getByRole("tab", { name: "Allgemein" }));
   expect(dlg.getByRole("region", { name: "Allgemein" })).toBeInTheDocument();
   await app.user.click(dlg.getByRole("switch", { name: /Symbol im Infobereich/ }));
   expect(tray).toHaveBeenLastCalledWith(true, "de");
@@ -168,7 +168,7 @@ test("English groups and banner use English controls", async () => {
   act(() => app.runtime.controller.openDialog({ kind: "settings" }));
   await app.user.click(screen.getByRole("tab", { name: "Info & Help" }));
   expect(screen.getByRole("region", { name: "Updates" })).toHaveTextContent("Installed version");
-  await app.user.click(screen.getByRole("tab", { name: "General modified" }));
+  await app.user.click(screen.getByRole("tab", { name: "General" }));
   expect(screen.getByRole("switch", { name: /Check for updates on startup/ })).toBeChecked();
 });
 

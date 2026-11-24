@@ -4,7 +4,7 @@ import { HOME, setupApp } from "./test-utils";
 import { CoreError } from "./ipc/api";
 const root = `${HOME}/Bilder`;
 const dialog = () => screen.getByRole("dialog", {
-  name: "Ähnliche Bilder"
+  name: "Ähnliche Bilder …"
 });
 test("similar workflow has no defaults, protects last card, explicit suggestion, confirmation, trash and rescan", async () => {
   const trash = vi.fn(),
@@ -24,7 +24,7 @@ test("similar workflow has no defaults, protects last card, explicit suggestion,
     })
   });
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder …" }));
   expect(dialog()).toHaveTextContent("Nichts verlässt diesen Computer");
   expect(dialog()).toHaveTextContent("Ähnlich heißt nicht gleich");
   expect(within(dialog()).getByLabelText("Empfindlichkeit")).toHaveValue("6");
@@ -97,7 +97,7 @@ test("similar preview failure, incomplete results and changed-file result remain
     })
   });
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder …" }));
   await app.user.click(within(dialog()).getByRole("button", {
     name: "Suche starten"
   }));
@@ -131,9 +131,9 @@ test("English similar dialog traps focus and Escape closes the session", async (
     })
   });
   await app.user.click(screen.getByRole("button", { name: "Tools" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Similar images" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Similar images …" }));
   const d = screen.getByRole("dialog", {
-    name: "Similar images"
+    name: "Similar images …"
   });
   expect(d).toHaveTextContent("Similar does not mean identical");
   await app.user.click(within(d).getByRole("button", {
@@ -152,7 +152,7 @@ test("English similar dialog traps focus and Escape closes the session", async (
   expect(first).not.toHaveFocus();
   await app.user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog", {
-    name: "Similar images"
+    name: "Similar images …"
   })).not.toBeInTheDocument();
   await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
 });
@@ -196,7 +196,7 @@ test("previews wait for visibility, run at most two and discard the closed queue
       })
     });
     await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder …" }));
     await app.user.click(within(dialog()).getByRole("button", {
       name: "Suche starten"
     }));
@@ -260,7 +260,7 @@ test("similar groups load in pages of fifty without marking new entries", async 
     })
   });
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder …" }));
   await app.user.click(within(dialog()).getByRole("button", {
     name: "Suche starten"
   }));
@@ -282,7 +282,7 @@ test.each(["cancelled", "failed"] as const)("similar %s partial results cannot b
     jobs: async () => (await api.jobs()).map(j => ({ ...j, state: bad && ready ? state : j.state })),
   }) });
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder …" }));
   await app.user.click(within(dialog()).getByRole("button", { name: "Suche starten" }));
   await app.runJobs();
   await waitFor(() => expect(within(dialog()).getByRole("alert")).toBeVisible());
@@ -306,7 +306,7 @@ test("similar uses hash labels, selected counts, consistent sizes and an empty r
     similarTrash: async (...args) => { const r = await api.similarTrash(...args); empty = true; return r; },
   }) });
   await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder" }));
+  await app.user.click(screen.getByRole("menuitem", { name: "Ähnliche Bilder …" }));
   await app.user.click(within(dialog()).getByRole("button", { name: "Suche starten" }));
   await app.runJobs();
   const boxes = await within(dialog()).findAllByRole("checkbox");
@@ -326,8 +326,8 @@ test("English hash distance and selected text avoid identical and redundant clai
     similarPage: async (...args) => { const p = await api.similarPage(...args); return { ...p, groups: p.groups.map(g => ({ ...g, entries: g.entries.map((e, i) => ({ ...e, distanceToReference: i })) })) }; },
   }) });
   await app.user.click(screen.getByRole("button", { name: "Tools" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Similar images" }));
-  const d = screen.getByRole("dialog", { name: "Similar images" });
+  await app.user.click(screen.getByRole("menuitem", { name: "Similar images …" }));
+  const d = screen.getByRole("dialog", { name: "Similar images …" });
   await app.user.click(within(d).getByRole("button", { name: "Start search" }));
   await app.runJobs();
   const cards = await within(d).findAllByRole("article");

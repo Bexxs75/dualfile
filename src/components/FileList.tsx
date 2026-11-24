@@ -3,7 +3,7 @@ import { useAppState, useController, useLanguage, useT } from "../app/context";
 import { activeTabOf, visibleEntries, type WinIdx } from "../app/state";
 import { createTranslator, formatBytes, formatDate, type Language } from "../i18n";
 import type { Entry } from "../ipc/types";
-import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, columnTemplate, columnWidthsFor, ownerColumnTemplates, type ColumnTriple } from "../state/columns";
+import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, allWidthsFor, columnOrderFor, defaultOrder, orderedTemplates, OWNER_DEFAULTS, type AllWidths, type ColumnKey } from "../state/columns";
 import { isArchivePath } from "../state/paths";
 import { fileType, visibleSort, type SortKey } from "../state/sort";
 import { formatPermissions } from "../state/permissions";
@@ -50,12 +50,12 @@ interface RowProps {
   current: boolean;
   language: Language;
   extCol: boolean;
-  owners: readonly boolean[];
+  order: ColumnKey[];
   local: boolean;
   dropInto: boolean;
 }
 
-const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, owners, local, dropInto }: RowProps) {
+const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, order, local, dropInto }: RowProps) {
   const controller = useController();
   const isDir = entry.kind === "dir";
   const classes = ["row", entry.name === ".." ? "parent-entry" : "", isDir ? "d" : "", entry.kind === "symlink" ? "l" : "", entry.brokenLink ? "broken" : "", entry.hidden ? "hid" : "", entry.error ? "err" : "", selected ? "sel" : "", current ? "cur" : "", extCol ? "ext-split" : "", dropInto ? "drop-into" : ""]
@@ -81,8 +81,10 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
         {entry.name === ".." ? "" : formatDate(entry.modified, language)}
       </span>
     ),
+    permissions: <span key="permissions" data-column="permissions" role="gridcell" className="owner permissions" title={entry.permissions ?? formatPermissions(entry.mode)}>{entry.name === ".." ? "" : entry.permissions ?? formatPermissions(entry.mode)}</span>,
+    uid: <span key="uid" data-column="uid" role="gridcell" className="owner" title={entry.uid == null ? undefined : `uid ${entry.uid}`}>{entry.name === ".." ? "" : (local ? entry.ownerName : null) ?? entry.uid ?? ""}</span>,
+    gid: <span key="gid" data-column="gid" role="gridcell" className="owner" title={entry.gid == null ? undefined : `gid ${entry.gid}`}>{entry.name === ".." ? "" : (local ? entry.groupName : null) ?? entry.gid ?? ""}</span>,
   };
-  const order = extCol ? (["type", "size", "modified"] as const) : (["size", "type", "modified"] as const);
   const overFolder = (event: DragEvent) => {
     if (!controller.dragOverFolder(w, index, event.shiftKey, event.clientX, event.clientY)) return;
     event.preventDefault();
@@ -133,9 +135,7 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
         {entry.linkTarget ? <span className="lt"> → {entry.linkTarget}</span> : null}
       </span>
       {order.map((key) => cells[key])}
-      {owners[0] ? <span role="gridcell" className="owner permissions" title={entry.permissions ?? formatPermissions(entry.mode)}>{entry.name === ".." ? "" : entry.permissions ?? formatPermissions(entry.mode)}</span> : null}
-      {owners[1] ? <span role="gridcell" className="owner" title={entry.uid == null ? undefined : `uid ${entry.uid}`}>{entry.name === ".." ? "" : (local ? entry.ownerName : null) ?? entry.uid ?? ""}</span> : null}
-      {owners[2] ? <span role="gridcell" className="owner" title={entry.gid == null ? undefined : `gid ${entry.gid}`}>{entry.name === ".." ? "" : (local ? entry.groupName : null) ?? entry.gid ?? ""}</span> : null}
+
     </div>
   );
 });
@@ -157,15 +157,23 @@ export function FileList({ w }: { w: WinIdx }) {
   const hasOwners = owners.some(Boolean);
   const extCol = useAppState((state) => state.settings.extensionColumn === true);
   const dropFolder = useAppState((state) => (state.drag?.folder?.w === w ? state.drag.folder.name : null));
-  const storedWidths = useAppState((state) => state.settings.columnWidths);
   const mode = extCol ? "ext" : "normal";
-  const savedWidths = columnWidthsFor({ columnWidths: storedWidths }, mode);
+  const savedWidths = allWidthsFor(settings, mode);
+  const defaults = [...COLUMN_DEFAULTS[mode], ...OWNER_DEFAULTS];
+  const order = useMemo(() => columnOrderFor(settings, mode), [settings.columnOrder, mode]);
+  const visibleOrder = useMemo(() => order.filter(k => defaultOrder(mode).indexOf(k) < 3 || owners[defaultOrder(mode).indexOf(k) - 3]), [order, mode, owners]);
+  const columns = [...(extCol ? COLUMNS_EXT : COLUMNS), ...OWNER_COLUMNS];
+  const shownColumns = [columns[0]!, ...visibleOrder.map(k => columns.find(c => c.key === k)!)];
+  const saveWidths = (next: AllWidths) => controller.updateSettings(s => ({ ...s,
+    columnWidths: { ...s.columnWidths, [mode]: next.slice(0, 3) as [number, number, number] },
+    ownerColumnWidths: { ...s.ownerColumnWidths, [mode]: next.slice(3) as [number, number, number] },
+  }));
   // Entwurf während des Ziehens bzw. Tastenanpassens; erst beim Loslassen wird gespeichert.
-  const [draft, setDraft] = useState<ColumnTriple | null>(null);
+  const [draft, setDraft] = useState<AllWidths | null>(null);
   const [dragSlot, setDragSlot] = useState<number | null>(null);
-  const draftRef = useRef<ColumnTriple | null>(null);
+  const draftRef = useRef<AllWidths | null>(null);
   const widths = draft ?? savedWidths;
-  const setLive = (next: ColumnTriple | null) => {
+  const setLive = (next: AllWidths | null) => {
     draftRef.current = next;
     setDraft(next);
   };
@@ -173,44 +181,134 @@ export function FileList({ w }: { w: WinIdx }) {
     const next = draftRef.current;
     setLive(null);
     if (!next) return;
-    controller.updateSettings((s) => ({ ...s, columnWidths: { ...s.columnWidths, [mode]: next } }));
+    saveWidths(next);
   };
-  const widthAt = (slot: number, value: number): ColumnTriple => {
-    const next: ColumnTriple = [...(draftRef.current ?? savedWidths)];
-    next[slot] = clampColumn(value, COLUMN_DEFAULTS[mode][slot]);
+  const widthAt = (slot: number, value: number): AllWidths => {
+    const next: AllWidths = [...(draftRef.current ?? savedWidths)];
+    next[slot] = clampColumn(value, defaults[slot]!);
     return next;
   };
   const resetWidth = (slot: number) => {
     setLive(null);
-    controller.updateSettings((s) => ({ ...s, columnWidths: { ...s.columnWidths, [mode]: widthAt(slot, COLUMN_DEFAULTS[mode][slot]) } }));
+    saveWidths(widthAt(slot, defaults[slot]!));
   };
   const startDrag = (slot: number, event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+    cleanupGesture.current?.();
     const startX = event.clientX;
-    const startWidth = widths[slot];
+    const pointerId = event.pointerId;
+    const startWidth = widths[slot]!;
     setDragSlot(slot);
-    // Handle sits on the column's LEFT edge; dragging it left widens the column so the
-    // divider tracks the cursor (the flexible name column on the left absorbs the change).
-    const move = (e: PointerEvent) => setLive(widthAt(slot, startWidth + startX - e.clientX));
-    const end = () => {
+    // The left-edge handle widens its column when dragged left.
+    const move = (e: PointerEvent) => {
+      if (e.pointerId === pointerId) setLive(widthAt(slot, startWidth + startX - e.clientX));
+    };
+    const cleanup = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", end);
-      window.removeEventListener("pointercancel", end);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("blur", cancel);
       setDragSlot(null);
+      cleanupGesture.current = null;
+    };
+    const cancel = () => { cleanup(); setLive(null); };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      cleanup();
       commitWidths();
     };
+    cleanupGesture.current = cancel;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", end);
-    window.addEventListener("pointercancel", end);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("blur", cancel);
   };
   const onHandleKey = (slot: number, event: KeyboardEvent<HTMLElement>) => {
+    // Let native Tab traversal reach the next header instead of the global pane shortcut.
+    if (event.key === "Tab") event.stopPropagation();
     const delta = event.key === "ArrowLeft" ? COLUMN_STEP : event.key === "ArrowRight" ? -COLUMN_STEP : 0;
     if (delta === 0) return;
     event.preventDefault();
     event.stopPropagation();
-    setLive(widthAt(slot, (draftRef.current ?? savedWidths)[slot] + delta));
+    setLive(widthAt(slot, (draftRef.current ?? savedWidths)[slot]! + delta));
+  };
+  const [announcement, setAnnouncement] = useState("");
+  const [insertion, setInsertion] = useState<{ key: ColumnKey; after: boolean } | null>(null);
+  const suppressClick = useRef(false);
+  const cleanupGesture = useRef<(() => void) | null>(null);
+  useEffect(() => () => cleanupGesture.current?.(), [mode, settings.columnOrder, owners]);
+  const saveOrder = (next: ColumnKey[], key: ColumnKey) => {
+    controller.updateSettings(s => ({ ...s, columnOrder: { ...s.columnOrder, [mode]: next } }));
+    setAnnouncement(tr("column.moved", { column: tr(columns.find(c => c.key === key)!.label), position: next.indexOf(key) + 1 }));
+  };
+  const reorderKey = (key: ColumnKey, event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!event.altKey || !["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Home") {
+      controller.updateSettings(s => ({ ...s, columnOrder: { ...s.columnOrder, [mode]: defaultOrder(mode) } }));
+      setAnnouncement(tr("column.orderReset"));
+      return;
+    }
+    const index = visibleOrder.indexOf(key);
+    const target = visibleOrder[index + (event.key === "ArrowLeft" ? -1 : 1)];
+    if (!target) return;
+    const next = order.filter(k => k !== key);
+    next.splice(next.indexOf(target) + (event.key === "ArrowRight" ? 1 : 0), 0, key);
+    saveOrder(next, key);
+  };
+  const startReorder = (key: ColumnKey, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    cleanupGesture.current?.();
+    suppressClick.current = false;
+    const startX = event.clientX, startY = event.clientY;
+    const pointerId = event.pointerId;
+    const button = event.currentTarget;
+    let dragging = false;
+    let target: { key: ColumnKey; after: boolean } | null = null;
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < 6) return;
+      dragging = true;
+      suppressClick.current = true;
+      target = null;
+      for (const header of ref.current?.querySelectorAll<HTMLElement>('[role="columnheader"]') ?? []) {
+        const rect = header.getBoundingClientRect();
+        const id = header.dataset.column === "ext" ? "type" : header.dataset.column;
+        if (id === "name" || rect.width === 0) continue;
+        if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+          target = { key: id as ColumnKey, after: e.clientX > rect.left + rect.width / 2 };
+          break;
+        }
+      }
+      setInsertion(target);
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("blur", cancel);
+      setInsertion(null);
+      cleanupGesture.current = null;
+    };
+    const cancel = () => { cleanup(); };
+    const end = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      cleanup();
+      if (dragging && target && target.key !== key) {
+        const next = order.filter(k => k !== key);
+        next.splice(next.indexOf(target.key) + (target.after ? 1 : 0), 0, key);
+        saveOrder(next, key);
+      }
+      button.focus();
+    };
+    cleanupGesture.current = cleanup;
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("blur", cancel);
   };
   const spec = visibleSort(sort, settings);
   const ref = useRef<HTMLDivElement>(null);
@@ -222,7 +320,7 @@ export function FileList({ w }: { w: WinIdx }) {
     const current = document.activeElement;
     const typing = current instanceof HTMLInputElement || current instanceof HTMLTextAreaElement;
     const inDialog = current instanceof HTMLElement && current.closest('[role="dialog"], [role="alertdialog"], [role="menu"]');
-    if (!typing && !inDialog) ref.current?.focus({ preventScroll: true });
+    if (!typing && !inDialog && !ref.current?.contains(current)) ref.current?.focus({ preventScroll: true });
   }, [active]);
 
   // Fokuszeile sichtbar halten und die Seitengröße für Bild auf/ab messen.
@@ -258,12 +356,12 @@ export function FileList({ w }: { w: WinIdx }) {
   return (
     <div
       ref={ref}
-      className={hasOwners ? "list owner-columns" : "list"}
+      className={hasOwners ? "list owner-columns adjustable-columns" : "list adjustable-columns"}
       role="grid"
       tabIndex={0}
       aria-label={`${tr("pane.listLabel")} – ${tr(w === 0 ? "pane.left" : "pane.right")}`}
       aria-multiselectable="true"
-      style={{ "--df-cols": columnTemplate(widths), ...(hasOwners ? ownerColumnTemplates(widths, extCol, owners) : {}) } as CSSProperties}
+      style={orderedTemplates(widths, mode, order, owners) as CSSProperties}
       aria-rowcount={entries.length + 1}
       aria-activedescendant={entries.length > 0 ? rowId(w, focusIndex) : undefined}
       onFocus={() => controller.setActive(w)}
@@ -273,29 +371,33 @@ export function FileList({ w }: { w: WinIdx }) {
       }}
     >
       <div role="row" aria-rowindex={1} className={extCol ? "head ext-split" : "head"}>
-        {[...(extCol ? COLUMNS_EXT : COLUMNS), ...OWNER_COLUMNS.filter((_, i) => owners[i])].map((column, columnIndex) => {
+        {shownColumns.map((column) => {
           const sorted = spec.key === column.key;
           const name = tr(column.label);
-          const slot = columnIndex - 1; // Spalte 0 (Name) ist flexibel und nicht ziehbar
+          const slot = defaultOrder(mode).indexOf(column.key as ColumnKey);
           return (
             <span
               key={column.key}
               data-column={column.key === "type" && extCol ? "ext" : column.key}
+              data-insertion={insertion?.key === column.key ? (insertion.after ? "after" : "before") : undefined}
               role="columnheader"
               aria-sort={sorted ? (spec.direction === "asc" ? "ascending" : "descending") : "none"}
               className={[sorted ? "s" : "", column.key === "size" || column.key === "modified" ? "numeric tabular-nums" : ""].join(" ")}
             >
               <button
                 type="button"
-                tabIndex={-1}
-                title={tr("tip.sortBy", { column: name })}
+                tabIndex={0}
+                aria-description={slot >= 0 ? tr("column.reorderHint") : undefined}
+                onPointerDown={slot >= 0 ? event => startReorder(column.key as ColumnKey, event) : undefined}
+                onKeyDown={slot >= 0 ? event => reorderKey(column.key as ColumnKey, event) : undefined}
+                title={tr("tip.sortBy", { column: name }) + (slot >= 0 ? ". " + tr("column.reorderHint") : "")}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => controller.sortBy(w, column.key)}
+                onClick={(event) => { if (event.detail > 0 && suppressClick.current) { suppressClick.current = false; return; } controller.sortBy(w, column.key); }}
               >
                 {name}
                 {sorted ? <Icon name={spec.direction === "asc" ? "sortUp" : "down"} size={12} className="arrow" /> : null}
               </button>
-              {slot >= 0 && slot < 3 ? (
+              {slot >= 0 ? (
                 <span
                   role="separator"
                   aria-orientation="vertical"
@@ -323,6 +425,7 @@ export function FileList({ w }: { w: WinIdx }) {
           );
         })}
       </div>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</span>
       <ListBody w={w}>
         {entries.map((entry, index) => (
           <Row
@@ -334,7 +437,7 @@ export function FileList({ w }: { w: WinIdx }) {
             current={index === focusIndex}
             language={language}
             extCol={extCol}
-            owners={owners}
+            order={visibleOrder}
             local={listing.path?.startsWith("/") === true}
             dropInto={dropFolder === entry.name}
           />

@@ -56,7 +56,7 @@ export const themes: Record<ThemeName, ThemeTokens> = {
   },
   weiss: {
     bg: "#f4f5f7", panel: "#ffffff", panel2: "#f7f8fa", raised: "#f7f8fa",
-    lineSoft: "#eceef1", line: "#d9dde3", fg: "#1b1f24", muted: "#505966",
+    lineSoft: "#eceef1", line: "#d9dde3", fg: "#1b1f24", muted: "#434b57",
     accent: "#2563eb", accentInk: "#ffffff", selection: "#dbe7fd", current: "#c3d6fb",
     directory: "#1d4ed8", warning: "#b4441f", success: "#1f7a3a",
     connectionWarning: "#8a6100", accentSoft: "#e3ecfd", colorScheme: "light",
@@ -108,8 +108,24 @@ export const rowHeights: Record<Density, number> = { compact: 22, normal: 28, co
 export const FONT_SIZE_MIN = 10;
 export const FONT_SIZE_MAX = 24;
 
+/**
+ * Text weights per colour scheme (CSS `--fw`, `--fw-strong`). Dark text on a light background looks
+ * thinner, so light designs go one step up; dark designs keep 400/500. Inter 400/500/600 are bundled.
+ */
+export const fontWeights: Record<ThemeTokens["colorScheme"], { text: number; strong: number }> = {
+  dark: { text: 400, strong: 500 },
+  light: { text: 500, strong: 600 },
+};
+
 /** Vorgegebene Akzentfarben aus dem Mockup. */
 export const accentPresets: readonly string[] = ["#e0a45c", "#6fb3d9", "#7bc08a", "#e07a9f", "#c98fe0"];
+
+const lightAccentPresets: readonly string[] = ["#2563eb", "#1f7a3a", "#b45309", "#be185d", "#7e22ce"];
+
+/** Akzentvorgaben passend zum Design; die Pastellpalette bleibt auch für Lesezeichen verfügbar. */
+export function accentPresetsForTheme(theme: ThemeName): readonly string[] {
+  return themes[theme].colorScheme === "light" ? lightAccentPresets : accentPresets;
+}
 
 /** Dunkle Textfarbe auf eigenen Akzenten (wie im Mockup), sonst Weiß. */
 const INK_DARK = "#15110a";
@@ -144,6 +160,36 @@ export function inkForAccent(accent: string, theme: ThemeName): string {
   return contrastRatio(INK_DARK, accent) >= contrastRatio(INK_LIGHT, accent) ? INK_DARK : INK_LIGHT;
 }
 
+/** sRGB-Mischung wie bei den Pane-Farben. */
+function mixColor(a: string, b: string, fraction: number): string {
+  return "#" + [1, 3, 5].map(i => Math.round(
+    parseInt(a.slice(i, i + 2), 16) * (1 - fraction) + parseInt(b.slice(i, i + 2), 16) * fraction,
+  ).toString(16).padStart(2, "0")).join("");
+}
+
+/** Maximal 20 Schritte bis Schwarz; vermeidet Rundungsstillstand bei sehr dunklen Farben. */
+export function darkenForContrast(color: string, backgrounds: readonly string[], minimum: number): string {
+  for (let step = 0; step <= 20; step++) {
+    const candidate = mixColor(color, "#000000", step / 20);
+    if (backgrounds.every(bg => contrastRatio(candidate, bg) >= minimum)) return candidate;
+  }
+  return "#000000";
+}
+
+/** Nur die Anzeige wird angepasst, niemals der gespeicherte Wunschwert. */
+export function displayAccent(accent: string, theme: ThemeName): string {
+  return themes[theme].colorScheme === "light"
+    ? darkenForContrast(accent, [themes[theme].bg], 3)
+    : accent.toLowerCase();
+}
+
+/** Hinweis nur bei einem gültigen, tatsächlich abgedunkelten Akzent. */
+export function accentAdjustment(accent: string, theme: ThemeName): string | undefined {
+  if (!isValidHex(accent)) return undefined;
+  const displayed = displayAccent(accent, theme);
+  return displayed !== accent.toLowerCase() ? displayed : undefined;
+}
+
 export type AccentWarning = "invalid" | "lowContrastBackground" | "lowContrastInk";
 
 /**
@@ -152,6 +198,7 @@ export type AccentWarning = "invalid" | "lowContrastBackground" | "lowContrastIn
  */
 export function accentWarning(accent: string, theme: ThemeName): AccentWarning[] {
   if (!isValidHex(accent)) return ["invalid"];
+  accent = displayAccent(accent, theme);
   const warnings: AccentWarning[] = [];
   if (contrastRatio(accent, themes[theme].bg) < 3) warnings.push("lowContrastBackground");
   if (contrastRatio(inkForAccent(accent, theme), accent) < 4.5) warnings.push("lowContrastInk");
@@ -174,7 +221,8 @@ export type ThemeSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic
 /** Die tatsächlich wirksame Akzentfarbe (automatisch, eigene oder Design-Vorgabe). */
 export function effectiveAccent(settings: Pick<Settings, "theme" | "accent" | "accentAutomatic">): string {
   const theme: ThemeName = settings.theme in themes ? settings.theme : "schiefer";
-  return settings.accentAutomatic ? defaultAccent(theme) : isValidHex(settings.accent) ? settings.accent.toLowerCase() : themes[theme].accent;
+  const chosen = settings.accentAutomatic ? defaultAccent(theme) : isValidHex(settings.accent) ? settings.accent.toLowerCase() : themes[theme].accent;
+  return displayAccent(chosen, theme);
 }
 
 /** Alle CSS-Variablen für die Einstellungen (Namen wie im Mockup). Ungültiges fällt auf Vorgaben zurück. */
@@ -182,6 +230,10 @@ export function themeVariables(settings: ThemeSettings): Record<string, string> 
   const tokens = themes[settings.theme] ?? themes.schiefer;
   const theme: ThemeName = settings.theme in themes ? settings.theme : "schiefer";
   const accent = effectiveAccent(settings);
+  const light = tokens.colorScheme === "light";
+  const selection = light ? mixColor(tokens.panel, accent, 0.14) : tokens.selection;
+  const current = light ? mixColor(tokens.panel, accent, 0.26) : tokens.current;
+  const directory = light ? darkenForContrast(accent, [tokens.panel, selection, current], 4.5) : tokens.directory;
   const fontSize = Number.isFinite(settings.fontSize)
     ? Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(settings.fontSize)))
     : 13;
@@ -191,20 +243,22 @@ export function themeVariables(settings: ThemeSettings): Record<string, string> 
     "--panel2": tokens.panel2,
     "--raised": tokens.raised,
     "--line-soft": tokens.lineSoft,
-    "--accent-soft": `color-mix(in srgb, ${accent} 12%, ${tokens.panel})`,
+    "--accent-soft": light ? mixColor(tokens.panel, accent, 0.10) : `color-mix(in srgb, ${accent} 12%, ${tokens.panel})`,
     "--connection-warning": tokens.connectionWarning,
     "--line": tokens.line,
     "--fg": tokens.fg,
     "--muted": tokens.muted,
     "--accent": accent,
     "--accent-ink": inkForAccent(accent, theme),
-    "--sel": tokens.selection,
-    "--cur": tokens.current,
-    "--dir": tokens.directory,
+    "--sel": selection,
+    "--cur": current,
+    "--dir": directory,
     "--warn": tokens.warning,
     "--ok": tokens.success,
     "--rowh": `${rowHeights[settings.density] ?? rowHeights.normal}px`,
     "--fs": `${fontSize}px`,
+    "--fw": String(fontWeights[tokens.colorScheme].text),
+    "--fw-strong": String(fontWeights[tokens.colorScheme].strong),
   };
 }
 

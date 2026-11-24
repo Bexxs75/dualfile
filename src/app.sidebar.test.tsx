@@ -359,8 +359,8 @@ test("empty trash context action requires confirmation and properties do not sta
   await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
   expect(empty).toHaveBeenCalledOnce();
   fireEvent.contextMenu(item(/^NAS \(fstab\)/));
-  await app.user.click(screen.getByRole("menuitem", { name: "Eigenschaften" }));
-  expect(screen.getByRole("dialog", { name: "Eigenschaften" })).toHaveTextContent("nfs");
+  await app.user.click(screen.getByRole("menuitem", { name: "Ort-Einstellungen" }));
+  expect(screen.getByRole("dialog", { name: "Ort-Einstellungen" })).toHaveTextContent("nfs");
   expect(space).not.toHaveBeenCalled();
 });
 

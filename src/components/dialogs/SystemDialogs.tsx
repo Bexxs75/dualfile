@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAppState, useLanguage, useRuntime, useT } from "../../app/context";
 import { isFinished } from "../../state/operations";
 import { useDialogFocus } from "./useDialogFocus";
+import { WhatsNewDialog } from "./WhatsNewDialog";
+import { currentVersion } from "../../release-notes";
 import { Modal } from "../Modal";
 import type { AutostartMode } from "../../ipc/system";
 import { Highlight } from "../../settings/Highlight";
@@ -74,12 +76,15 @@ export function AboutSettings({ query = "" }: { query?: string }) {
   const language = useLanguage();
   const { api } = useRuntime();
   const tr = useT();
+  const [notes, setNotes] = useState(false);
   const { error, run } = useAction();
   return <section className="system-group" aria-labelledby="about-heading">
     <h3 id="about-heading"><Highlight text={tr("settings.about.heading")} query={query} /></h3>
     <p>Dualfile <span className="system-version">{config.version}</span> · <Highlight text={tr("settings.about.license")} query={query} /></p>
     <div><button className="tb primary" onClick={() => void run(() => api.openUrl(language === "de" ? "https://wiki.dualfileapp.com/de/" : "https://wiki.dualfileapp.com/"))}><Highlight text={tr("settings.wiki")} query={query} /></button></div>
     <div><button className="tb" onClick={() => void run(() => api.openUrl(REPO_URL))}><Highlight text={tr("settings.about.github")} query={query} /></button></div>
+    <div><button className="tb" onClick={() => setNotes(true)}><Highlight text={tr("whatsNew.title")} query={query} /></button></div>
+    {notes && <WhatsNewDialog versions={[currentVersion]} onClose={() => setNotes(false)} />}
     {error && <p role="alert" className="field-error">{error}</p>}
   </section>;
 }

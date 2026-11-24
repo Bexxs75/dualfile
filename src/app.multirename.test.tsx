@@ -70,11 +70,11 @@ describe("Strg+M öffnet den Dialog nur mit gültiger Auswahl", () => {
     const app = await setupApp({ left: DOCS });
     const toolbar = within(screen.getByRole("toolbar", { name: /Werkzeugleiste|Toolbar/ }));
     await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(toolbar.getByRole("menuitem", { name: "Mehrfach-Umbenennen" }));
+  await app.user.click(toolbar.getByRole("menuitem", { name: "Mehrfach-Umbenennen …" }));
     expect(screen.queryByRole("dialog")).toBeNull(); // Fokus auf „..“
     await app.user.click(app.row(0, "notizen.txt"));
     await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(toolbar.getByRole("menuitem", { name: "Mehrfach-Umbenennen" }));
+  await app.user.click(toolbar.getByRole("menuitem", { name: "Mehrfach-Umbenennen …" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
@@ -82,11 +82,11 @@ describe("Strg+M öffnet den Dialog nur mit gültiger Auswahl", () => {
     const app = await setupApp({ left: DOCS });
     await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, "..") });
     const upMenu = await screen.findByRole("menu", { name: "Kontextmenü" });
-    expect(within(upMenu).queryByRole("menuitem", { name: "Mehrfach-Umbenennen" })).toBeNull();
+    expect(within(upMenu).queryByRole("menuitem", { name: "Mehrfach-Umbenennen …" })).toBeNull();
     await app.user.keyboard("{Escape}");
     await app.user.pointer({ keys: "[MouseRight]", target: app.row(0, "notizen.txt") });
     const menu = await screen.findByRole("menu", { name: "Kontextmenü" });
-    await app.user.click(within(menu).getByRole("menuitem", { name: "Mehrfach-Umbenennen" }));
+    await app.user.click(within(menu).getByRole("menuitem", { name: "Mehrfach-Umbenennen …" }));
     expect(await screen.findByRole("dialog", { name: /Mehrfach-Umbenennen/ })).toBeInTheDocument();
   });
 });

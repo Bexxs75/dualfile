@@ -89,8 +89,9 @@ test("menu reopens notes and skipped versions have their own headings", async ()
   expect(screen.getByRole("heading", { name: /0.3.3/ })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: new RegExp(currentVersion) })).toBeInTheDocument();
   await app.user.keyboard("{Escape}");
-  await app.user.click(screen.getByRole("button", { name: "Werkzeuge" }));
-  await app.user.click(screen.getByRole("menuitem", { name: "Neuigkeiten" }));
+  await app.user.click(screen.getByRole("button", { name: "Einstellungen …" }));
+  await app.user.click(screen.getByRole("tab", { name: "Info & Hilfe" }));
+  await app.user.click(screen.getByRole("button", { name: "Neuigkeiten" }));
   expect(screen.getByRole("dialog", { name: `Neu in Dualfile ${currentVersion}` })).toBeInTheDocument();
   expect(screen.queryByText(/mehrere Versionen/)).toBeNull();
 });

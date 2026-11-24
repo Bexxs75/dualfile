@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
+import { t } from "../i18n";
+import appCss from "../styles/app.css?raw";
 import {
   accentPresets,
+  accentPresetsForTheme,
+  accentAdjustment,
+  darkenForContrast,
+  displayAccent,
+  effectiveAccent,
+  fontWeights,
   accentWarning,
   applyTheme,
   contrastRatio,
@@ -63,7 +71,9 @@ describe("Tokens", () => {
     for (const surface of [theme.bg, theme.panel, theme.panel2, theme.raised, theme.accentSoft]) {
       for (const text of [theme.fg, theme.muted]) expect(contrastRatio(text, surface), `${name}: ${text} on ${surface}`).toBeGreaterThanOrEqual(4.5);
     }
-    expect(themeVariables({ ...base, theme: name, accentAutomatic: true })["--accent-soft"]).toContain("color-mix");
+    const soft = themeVariables({ ...base, theme: name, accentAutomatic: true })["--accent-soft"]!;
+    if (theme.colorScheme === "dark") expect(soft).toContain("color-mix");
+    else for (const text of [theme.fg, theme.muted]) expect(contrastRatio(text, soft)).toBeGreaterThanOrEqual(4.5);
   });
 
   test.each(themeNames)("Standard-Akzent und Text darauf sind im Theme %s ohne Warnung", (name) => {
@@ -120,7 +130,7 @@ describe("accentWarning", () => {
 
   test("zu wenig Kontrast zum Hintergrund (unter 3:1) wird gemeldet", () => {
     expect(contrastRatio("#f2eee5", themes.papier.bg)).toBeLessThan(3);
-    expect(accentWarning("#f2eee5", "papier")).toContain("lowContrastBackground");
+    expect(accentWarning("#f2eee5", "papier")).not.toContain("lowContrastBackground");
     expect(accentWarning("#202428", "schiefer")).toContain("lowContrastBackground");
   });
 
@@ -135,8 +145,8 @@ describe("accentWarning", () => {
     for (const preset of accentPresets) expect(accentWarning(preset, "schiefer"), preset).toEqual([]);
   });
 
-  test("helle Vorgaben auf dem hellen Papier-Theme werden zu Recht beanstandet", () => {
-    expect(accentWarning("#e0a45c", "papier")).toContain("lowContrastBackground");
+  test("helle Vorgaben auf Papier werden vor der Kontrastprüfung abgedunkelt", () => {
+    expect(accentWarning("#e0a45c", "papier")).not.toContain("lowContrastBackground");
   });
 
   test("Akzent auf gleichem Wert wie der Hintergrund meldet beides sinnvoll", () => {
@@ -223,4 +233,169 @@ test.each(themeNames)("list text and metadata contrast on actual mixed selection
       for (const text of [theme.fg, theme.muted]) expect(contrastRatio(text, surface), `${name} ${text} / ${surface}`).toBeGreaterThanOrEqual(4.5);
     }
   }
+});
+
+
+describe("designabhängige Akzente", () => {
+  test.each(themeNames)("alle Vorgaben erfüllen Akzent- und Ink-Kontrast (%s)", theme => {
+    for (const accent of accentPresetsForTheme(theme)) {
+      const vars = themeVariables({ ...base, theme, accent });
+      expect(vars["--accent"]).toBe(accent);
+      expect(contrastRatio(accent, themes[theme].bg)).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(vars["--accent-ink"]!, accent)).toBeGreaterThanOrEqual(4.5);
+      expect(accentWarning(accent, theme)).toEqual([]);
+    }
+  });
+
+  test.each(["weiss", "papier"] as const)("abgeleitete Flächen und Ordner sind lesbar (%s)", theme => {
+    for (const accent of [...accentPresetsForTheme(theme), ...accentPresets, themes[theme].accent, "#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff"]) {
+      const settings = { ...base, theme, accent };
+      const vars = themeVariables(settings);
+      expect(settings.accent).toBe(accent);
+      expect(vars["--accent"]).toBe(effectiveAccent(settings));
+      for (const surface of ["--panel", "--sel", "--cur"]) {
+        expect(contrastRatio(vars["--dir"]!, vars[surface]!), `${theme} ${accent} ${surface}`).toBeGreaterThanOrEqual(4.5);
+        expect(contrastRatio(vars["--fg"]!, vars[surface]!)).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const ink of ["--fg", "--muted"]) expect(contrastRatio(vars[ink]!, vars["--accent-soft"]!)).toBeGreaterThanOrEqual(4.5);
+      expect(vars["--sel"]).not.toBe(vars["--cur"]);
+    }
+    expect(themeVariables({ ...base, theme, accent: "#be185d" })["--sel"])
+      .not.toBe(themeVariables({ ...base, theme, accent: "#1f7a3a" })["--sel"]);
+  });
+
+  test("Abdunkeln terminiert auch bei unerreichbarem Kontrast und ist idempotent", () => {
+    expect(darkenForContrast("#ffffff", ["#000000", "#ffffff"], 21)).toBe("#000000");
+    expect(darkenForContrast("#010101", ["#000000"], 21)).toBe("#000000");
+    for (const theme of ["weiss", "papier"] as const) {
+      for (const accent of [...accentPresets, "#ffffff", "#000000", "#010101"]) {
+        const displayed = displayAccent(accent, theme);
+        expect(displayAccent(displayed, theme)).toBe(displayed);
+        expect(contrastRatio(displayed, themes[theme].bg)).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  test("Hinweis enthält die angewandte Farbe in DE/EN und erscheint nur bei Abdunklung", () => {
+    for (const theme of ["weiss", "papier"] as const) {
+      const color = accentAdjustment("#E0A45C", theme);
+      expect(color).toBe(effectiveAccent({ theme, accent: "#e0a45c" }));
+      expect(t("settings.accent.adjusted", { color: color! }, "de")).toBe(`Auf hellem Design zu hell: wird zu ${color} abgedunkelt`);
+      expect(t("settings.accent.adjusted", { color: color! }, "en")).toBe(`Too bright on a light design: darkened to ${color}`);
+      expect(accentAdjustment("bad", theme)).toBeUndefined();
+      expect(accentAdjustment("#2563EB", theme)).toBeUndefined();
+      expect(accentAdjustment(color!, theme)).toBeUndefined();
+      const automatic = { ...base, theme, accentAutomatic: true };
+      expect(effectiveAccent(automatic)).toBe(themes[theme].accent);
+    }
+    expect(accentAdjustment("#ffffff", "schiefer")).toBeUndefined();
+    expect(accentWarning("#777777", "weiss")).toContain("lowContrastInk");
+  });
+
+  test("dunkle Designs behalten ihre CSS-Tokens und Vorgaben", () => {
+    for (const theme of ["schiefer", "werkstatt"] as const) {
+      expect(accentPresetsForTheme(theme)).toEqual(["#e0a45c", "#6fb3d9", "#7bc08a", "#e07a9f", "#c98fe0"]);
+    }
+    expect(["schiefer", "werkstatt"].map(theme => themeVariables({ ...base, theme: theme as ThemeName }))).toMatchInlineSnapshot(`
+      [
+        {
+          "--accent": "#e0a45c",
+          "--accent-ink": "#1a1307",
+          "--accent-soft": "color-mix(in srgb, #e0a45c 12%, #1c2229)",
+          "--bg": "#161a1f",
+          "--connection-warning": "#e6c36a",
+          "--cur": "#38506a",
+          "--dir": "#9cc3e6",
+          "--fg": "#d9dee4",
+          "--fs": "13px",
+          "--fw": "400",
+          "--fw-strong": "500",
+          "--line": "#2c3540",
+          "--line-soft": "#252e38",
+          "--muted": "#a0aab6",
+          "--ok": "#7bc08a",
+          "--panel": "#1c2229",
+          "--panel2": "#212932",
+          "--raised": "#212932",
+          "--rowh": "28px",
+          "--sel": "#2b3b4d",
+          "--warn": "#e07a5f",
+        },
+        {
+          "--accent": "#e0a45c",
+          "--accent-ink": "#15110a",
+          "--accent-soft": "color-mix(in srgb, #e0a45c 12%, #241e18)",
+          "--bg": "#1b1713",
+          "--connection-warning": "#e6c36a",
+          "--cur": "#5a3d22",
+          "--dir": "#e8c27a",
+          "--fg": "#eadfce",
+          "--fs": "13px",
+          "--fw": "400",
+          "--fw-strong": "500",
+          "--line": "#3a3025",
+          "--line-soft": "#332a21",
+          "--muted": "#b3a28d",
+          "--ok": "#9bc47b",
+          "--panel": "#241e18",
+          "--panel2": "#2b241c",
+          "--raised": "#2b241c",
+          "--rowh": "28px",
+          "--sel": "#40301f",
+          "--warn": "#e8745a",
+        },
+      ]
+    `);
+  });
+});
+
+describe("light designs: heavier text and darker muted (#37)", () => {
+  const light = themeNames.filter(name => themes[name].colorScheme === "light");
+  const dark = themeNames.filter(name => themes[name].colorScheme === "dark");
+
+  test("White and Paper are the light designs; Slate and Workshop the dark ones", () => {
+    expect([...light].sort()).toEqual(["papier", "weiss"]);
+    expect([...dark].sort()).toEqual(["schiefer", "werkstatt"]);
+  });
+
+  test.each(light)("%s uses weight 500 for text and 600 for emphasis", name => {
+    const vars = themeVariables({ ...base, theme: name });
+    expect([vars["--fw"], vars["--fw-strong"]]).toEqual(["500", "600"]);
+  });
+
+  test.each(dark)("%s keeps weight 400 for text and 500 for emphasis", name => {
+    const vars = themeVariables({ ...base, theme: name });
+    expect([vars["--fw"], vars["--fw-strong"]]).toEqual(["400", "500"]);
+  });
+
+  test("weights are bundled Inter cuts", () => {
+    for (const { text, strong } of Object.values(fontWeights)) for (const weight of [text, strong]) expect([400, 500, 600]).toContain(weight);
+  });
+
+  test("White muted text is darker and reaches 7:1 on every surface", () => {
+    const theme = themes.weiss;
+    expect(theme.muted).toBe("#434b57");
+    for (const surface of [theme.bg, theme.panel, theme.panel2, theme.raised, theme.accentSoft]) {
+      expect(contrastRatio(theme.muted, surface), surface).toBeGreaterThanOrEqual(7);
+    }
+  });
+
+  test("the stylesheet takes body and emphasis weights from the tokens", () => {
+    expect(appCss).toMatch(/body \{[^}]*font: var\(--fw\) var\(--fs\)/);
+    expect(appCss).not.toMatch(/font-weight:\s*(normal|400|500)\b/);
+    // The font shorthand resets the weight to 400 unless it names one: plain text must take --fw.
+    const shorthands = [...appCss.matchAll(/(?:^|[;{\s])font:\s*([^;}]+)/g)].map(m => m[1]!.trim()).filter(value => value !== "inherit");
+    expect(shorthands.length).toBeGreaterThan(5);
+    for (const value of shorthands) expect(value, value).toMatch(/^(var\(--fw(-strong)?\)|[5-9]00)\s/);
+    expect(appCss).not.toMatch(/font:\s*(normal|400)\s/);
+    expect(appCss).toContain("--fw: 400; --fw-strong: 500;");
+  });
+
+  test("applyTheme sets the weights on the root element", () => {
+    const root = document.createElement("div");
+    applyTheme(root, { ...base, theme: "weiss" });
+    expect(root.style.getPropertyValue("--fw")).toBe("500");
+    applyTheme(root, { ...base, theme: "schiefer" });
+    expect(root.style.getPropertyValue("--fw")).toBe("400");
+  });
 });
