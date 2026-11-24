@@ -12,7 +12,7 @@ export interface RemoteConnection {
 export type RemoteConnections = Readonly<Record<string, RemoteConnection>>;
 
 export function parseRemotePath(path: string): { protocol: string; id: string; inner: string; root: string } | null {
-  const match = /^(sftp|ftp|ftps|smb):([^!]+)!(\/.*)$/.exec(path);
+  const match = /^(sftp|ftp|ftps|smb|nfs|webdav):([^!]+)!(\/.*)$/.exec(path);
   return match ? { protocol: match[1]!, id: match[2]!, inner: match[3]!, root: `${match[1]}:${match[2]}!` } : null;
 }
 

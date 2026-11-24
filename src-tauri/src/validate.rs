@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 /// Start of every serialized archive location (local paths start with `/`).
 const ARCHIVE_PREFIX: &str = "archive:";
 /// Starts of serialized server locations (`ftp:<connection id>!<path>`).
-const REMOTE_PREFIXES: [&str; 4] = ["ftp:", "sftp:", "smb:", "webdav:"];
+const REMOTE_PREFIXES: [&str; 5] = ["ftp:", "sftp:", "smb:", "nfs:", "webdav:"];
 /// Start of a serialized plugin location (`plugin:<plugin id>!<path>`).
 const PLUGIN_PREFIX: &str = "plugin:";
 
@@ -97,7 +97,7 @@ pub fn parse_path(raw: &str, home: &Path) -> Result<VPath, UiError> {
 /// The scan API never resolves archive, connection or plugin locations.
 pub fn scan_path(raw: &str, home: &Path) -> Result<PathBuf, UiError> {
     if [
-        "archive:", "ftp:", "sftp:", "smb:", "webdav:", "conn:", "plugin:",
+        "archive:", "ftp:", "sftp:", "smb:", "nfs:", "webdav:", "conn:", "plugin:",
     ]
     .iter()
     .any(|prefix| raw.starts_with(prefix))
@@ -712,7 +712,7 @@ mod scan_tests {
 
 #[cfg(test)]
 mod smb_tests {
-    use super::parse_path;
+    use super::{parse_path, scan_path};
     use dualfile_core::vfs::Scheme;
     use std::path::Path;
     #[test]
@@ -733,6 +733,18 @@ mod smb_tests {
             Scheme::Webdav
         );
         assert!(parse_path("webdav:id!/../folder", home).is_err());
+    }
+
+    #[test]
+    fn nfs_paths_are_remote_and_traversal_is_rejected() {
+        let home = Path::new("/home/demo");
+        assert_eq!(
+            parse_path("nfs:id!/folder", home).unwrap().scheme(),
+            Scheme::Nfs
+        );
+        assert!(parse_path("nfs:id!/../folder", home).is_err());
+        assert!(scan_path("nfs:id!/folder", home).is_err());
+        assert!(scan_path("webdav:id!/folder", home).is_err());
     }
 }
 

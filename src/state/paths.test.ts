@@ -136,3 +136,13 @@ describe("currentRemotePath", () => {
     expect(currentRemotePath("/home/x", conns)).toBe("/home/x");
   });
 });
+
+describe("Serverpfade aller Protokolle", () => {
+  test.each(["ftp", "ftps", "sftp", "smb", "nfs", "webdav"])("%s: die Wurzel behält ihren Schrägstrich und wird nie als lokaler Pfad gekürzt", (scheme) => {
+    const root = `${scheme}:c1-e289b!/`;
+    expect(normalizePath(root)).toBe(root);
+    expect(parentPath(`${scheme}:c1-e289b!/docs`)).toBe(root);
+    expect(joinPath(root, "bild a.jpg")).toBe(`${scheme}:c1-e289b!/bild a.jpg`);
+    expect(crumbsOf(`${scheme}:c1-e289b!/docs/x`).map((c) => c.path).at(-1)).toBe(`${scheme}:c1-e289b!/docs/x`);
+  });
+});
