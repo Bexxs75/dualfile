@@ -39,6 +39,15 @@ fn secret_removal_failed() -> UiError {
     )
 }
 
+/// The WebDAV base path of a profile: empty means the server root, a missing leading slash is added.
+fn webdav_base_path(share: &str) -> String {
+    match share.trim() {
+        "" => "/".into(),
+        path if path.starts_with('/') => path.into(),
+        path => format!("/{path}"),
+    }
+}
+
 fn invalid(message: &str) -> UiError {
     UiError::new("invalidInput", message)
 }
@@ -607,7 +616,8 @@ impl AppState {
                     host: profile.host.clone(),
                     port: profile.port,
                     user: profile.user.clone(),
-                    base_path: profile.share.clone(),
+                    // An empty base path field means the server root.
+                    base_path: webdav_base_path(&profile.share),
                     tls: profile.tls != ConnectionTls::None,
                     allow_plaintext: profile.allow_plaintext,
                     start_folder: profile.start_folder.clone(),
@@ -1694,6 +1704,14 @@ mod tests {
             .connection_connect(&id, Some(PW.into()), None)
             .unwrap_err();
         assert_eq!(error.kind, "trust");
+    }
+
+    #[test]
+    fn an_empty_webdav_base_path_means_the_server_root() {
+        assert_eq!(super::webdav_base_path(""), "/");
+        assert_eq!(super::webdav_base_path("  "), "/");
+        assert_eq!(super::webdav_base_path("/dav"), "/dav");
+        assert_eq!(super::webdav_base_path("dav/files"), "/dav/files");
     }
 
     #[test]

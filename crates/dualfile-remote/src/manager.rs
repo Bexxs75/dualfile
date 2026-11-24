@@ -407,10 +407,14 @@ impl<C: Connector, S: SftpConnector> ConnectionManager<C, S> {
                     return ConnectError::Transport(TransportError::Trust(trust));
                 }
                 match e {
+                    // A wrong password is a login failure (UI kind "auth"), not invalid input;
+                    // the "ask for the password again" paths key on that kind.
                     dualfile_core::error::Error::PermissionDenied(_) => {
-                        ConnectError::Invalid("WebDAV-Anmeldung fehlgeschlagen")
+                        ConnectError::Transport(TransportError::Auth)
                     }
-                    _ => ConnectError::Invalid("WebDAV-Server nicht erreichbar"),
+                    _ => ConnectError::Transport(TransportError::Connection(
+                        "WebDAV-Server nicht erreichbar".into(),
+                    )),
                 }
             })?;
             verifier.finish();

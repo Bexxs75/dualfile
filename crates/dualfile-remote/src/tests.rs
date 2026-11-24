@@ -1537,7 +1537,9 @@ fn manager_connects_a_webdav_profile_and_registers_it() {
             Secret::new(""),
             Arc::new(Ask(TrustDecision::TrustOnce, Default::default()))
         ),
-        Err(ConnectError::Invalid(_))
+        Err(ConnectError::Transport(
+            crate::error::TransportError::Connection(_)
+        ))
     ));
 
     assert!(m.disconnect(&info.id));
@@ -1667,9 +1669,7 @@ fn manager_webdav_wrong_password_fails_connect_with_auth_message() {
         Secret::new("wrong"),
         Arc::new(Ask(TrustDecision::TrustOnce, Default::default())),
     ) {
-        Err(ConnectError::Invalid(msg)) => {
-            assert_eq!(msg, "WebDAV-Anmeldung fehlgeschlagen")
-        }
+        Err(ConnectError::Transport(crate::error::TransportError::Auth)) => {}
         other => panic!("expected auth failure, got {other:?}"),
     }
     // The probe runs before register_remote, so a failed connect leaves no router entry; a fresh
