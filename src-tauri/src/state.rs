@@ -5,6 +5,7 @@ use crate::compare::{CompareStore, SyncStore};
 use crate::conflict::{BridgeResolver, ConflictBridge, JobIdCell};
 use crate::connections::{ConnectionState, RemoteParts};
 use crate::convert::{
+    SkippedTrashDto, TrashEmptyDto,
     delete_plan_dto, entry_dto, file_info_dto, io_error, job_status_dto, path_text, token_text,
     vpath_text, ConflictAnswerDto, CoreEventDto, DeletePlanDto, DeletePlanInput, DirectionDto,
     FileInfoDto, JobStatusDto, JobTitleDto, ListingDto, LoadedSettingsDto, PackFormatDto,
@@ -1151,29 +1152,39 @@ impl AppState {
         self.transfer(sources, destination, true)
     }
 
-    pub fn trash_empty(&self) -> Result<u64, UiError> {
+    pub fn trash_empty(&self) -> Result<TrashEmptyDto, UiError> {
         let table = dualfile_core::packaging::read_host_file(
             std::path::Path::new("/proc/self/mountinfo"),
             4 * 1024 * 1024,
         )
         .map_err(|_| UiError::new("timeout", "timeout"))?;
-        let dirs = dualfile_core::trash_empty::discover(
+        let discovery = dualfile_core::trash_empty::discover_report(
             &table,
             &dualfile_core::system_places::DiscoveryPaths::system().data,
         )
         .map_err(UiError::from)?;
+        let skipped = discovery
+            .skipped
+            .iter()
+            .map(|s| SkippedTrashDto {
+                path: s.path.to_string_lossy().into_owned(),
+                mode: s.mode,
+            })
+            .collect();
+        let dirs = discovery.found;
         let touched: Vec<_> = dirs
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
         // This second lease is retained by isolated deletion workers even after a response timeout.
         let lease = Arc::new(crate::mount_guard::job(&touched)?);
-        self.submit_job_titled(
+        let id = self.submit_job_titled(
             "Empty trash".into(),
             JobTitleDto::new("emptyTrash", "", 0),
             JobPaths::read(touched),
             move |_| Box::new(move |job| dualfile_core::trash_empty::empty(dirs, job, lease)),
-        )
+        )?;
+        Ok(TrashEmptyDto { id, skipped })
     }
 
     pub fn trash(&self, items: &[String]) -> Result<u64, UiError> {

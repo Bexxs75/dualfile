@@ -341,6 +341,23 @@ pub struct PathMessage {
     pub message: String,
 }
 
+/// An empty-trash directory that was left alone because group or others may write to it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedTrashDto {
+    pub path: String,
+    /// Permission bits, e.g. `0o775` = 509.
+    pub mode: u32,
+}
+
+/// Answer of "empty trash": the job plus the trash directories it refused to touch.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashEmptyDto {
+    pub id: u64,
+    pub skipped: Vec<SkippedTrashDto>,
+}
+
 /// Language-neutral job title: the UI builds "Copy: x (+2)" from it in the interface language.
 /// `name` of the job stays as the German fallback for older clients.
 #[derive(Clone, Debug, PartialEq, Serialize)]

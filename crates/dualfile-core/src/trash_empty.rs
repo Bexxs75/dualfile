@@ -69,25 +69,71 @@ fn open_dir(path: &Path) -> std::io::Result<File> {
     }
     Ok(fd.into())
 }
-fn owned(file: &File, uid: u32) -> bool {
+/// Why an owned directory was refused: it is writable by group or others.
+#[derive(Debug)]
+struct OtherWritable(u32);
+impl std::fmt::Display for OtherWritable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "directory is writable by others (mode {:03o})", self.0)
+    }
+}
+impl std::error::Error for OtherWritable {}
+/// `Ok(None)` = fine, `Ok(Some(mode))` = owned but writable by others, `Err(())` = not ours.
+fn check_owned(file: &File, uid: u32) -> Result<Option<u32>, ()> {
     use std::os::unix::fs::MetadataExt;
-    file.metadata()
-        .is_ok_and(|m| m.uid() == uid && m.mode() & 0o022 == 0)
+    let meta = file.metadata().map_err(|_| ())?;
+    if meta.uid() != uid {
+        return Err(());
+    }
+    Ok((meta.mode() & 0o022 != 0).then_some(meta.mode() & 0o777))
 }
 fn open_trash(path: &Path, uid: u32) -> std::io::Result<(File, File, File)> {
     let root = open_dir(path)?;
     let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
     let files = File::from(openat(&root, "files", flags, Mode::empty())?);
     let info = File::from(openat(&root, "info", flags, Mode::empty())?);
-    if ![&root, &files, &info].into_iter().all(|f| owned(f, uid)) {
-        return Err(std::io::ErrorKind::PermissionDenied.into());
+    let mut loose = None;
+    for dir in [&root, &files, &info] {
+        match check_owned(dir, uid) {
+            Ok(mode) => loose = loose.or(mode),
+            Err(()) => return Err(std::io::ErrorKind::PermissionDenied.into()),
+        }
+    }
+    if let Some(mode) = loose {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            OtherWritable(mode),
+        ));
     }
     Ok((root, files, info))
 }
+/// A trash directory that was left out because group or others may write to it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedTrash {
+    pub path: PathBuf,
+    /// Permission bits, e.g. `0o775`.
+    pub mode: u32,
+}
+/// Usable trash directories plus the ones refused for their permissions.
+#[derive(Debug, Default)]
+pub struct Discovery {
+    pub found: Vec<PathBuf>,
+    pub skipped: Vec<SkippedTrash>,
+}
+enum Probe {
+    Usable,
+    Unusable,
+    OtherWritable(u32),
+}
 /// Missing directories are ignored; a timed-out probe fails closed before queueing work.
 pub fn discover(table: &str, data: &Path) -> crate::Result<Vec<PathBuf>> {
+    discover_report(table, data).map(|d| d.found)
+}
+/// Like [`discover`], but also names owned directories that were refused because group or
+/// others may write to them (they stay untouched; the caller tells the user).
+pub fn discover_report(table: &str, data: &Path) -> crate::Result<Discovery> {
     let uid = unsafe { libc::geteuid() };
-    let mut found = Vec::new();
+    let mut found = Discovery::default();
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     // Home and XDG_DATA_HOME are trusted roots and may contain symlinks. Resolve
     // only that root, never Trash or its children, before classifying its mount.
@@ -106,10 +152,17 @@ pub fn discover(table: &str, data: &Path) -> crate::Result<Vec<PathBuf>> {
         match pool().run_keyed(
             path.to_string_lossy().into_owned(),
             deadline.saturating_duration_since(std::time::Instant::now()),
-            move || open_trash(&probe, uid).is_ok(),
+            move || match open_trash(&probe, uid) {
+                Ok(_) => Probe::Usable,
+                Err(e) => e
+                    .get_ref()
+                    .and_then(|inner| inner.downcast_ref::<OtherWritable>())
+                    .map_or(Probe::Unusable, |loose| Probe::OtherWritable(loose.0)),
+            },
         ) {
-            Some(true) => found.push(path),
-            Some(false) => {}
+            Some(Probe::Usable) => found.found.push(path),
+            Some(Probe::OtherWritable(mode)) => found.skipped.push(SkippedTrash { path, mode }),
+            Some(Probe::Unusable) => {}
             None => return Err(Error::Unsupported("trashPurgeFailed")),
         }
     }
@@ -361,6 +414,24 @@ mod tests {
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
         root
+    }
+    #[test]
+    fn a_trash_writable_by_group_is_left_alone_but_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("share");
+        let root = trash_fixture(&data);
+        std::fs::write(root.join("files/item"), b"trash").unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o775)).unwrap();
+        let table = format!("1 0 8:1 / {} rw - ext4 /dev/a rw", temp.path().display());
+        let found = discover_report(&table, &data).unwrap();
+        assert!(found.found.is_empty());
+        assert_eq!(
+            found.skipped,
+            vec![SkippedTrash { path: root.clone(), mode: 0o775 }]
+        );
+        assert!(discover(&table, &data).unwrap().is_empty());
+        assert!(root.join("files/item").exists());
     }
     #[test]
     fn a_symlinked_data_parent_is_resolved_before_mount_classification() {

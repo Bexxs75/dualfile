@@ -105,7 +105,7 @@ export interface DualfileApi extends SystemApi {
   trashOpenSystem(): Promise<void>;
   placesMountAffected(mountKey: string, paths: string[]): Promise<number[]>;
   placesSaveConnection(key: string): Promise<void>;
-  trashEmpty(): Promise<number>;
+  trashEmpty(): Promise<import("./types").TrashEmptyStarted>;
   /** Trash view: items of the local trash (newest first, capped). */
   trashList(): Promise<import("./types").TrashList>;
   /** Restores by id to the original locations (`exists` if occupied); returns the restored original paths. */

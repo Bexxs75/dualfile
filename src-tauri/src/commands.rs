@@ -1027,7 +1027,10 @@ mod tests {
 }
 
 #[tauri::command]
-pub async fn trash_empty(window: tauri::WebviewWindow, state: Shared<'_>) -> Result<u64, UiError> {
+pub async fn trash_empty(
+    window: tauri::WebviewWindow,
+    state: Shared<'_>,
+) -> Result<crate::convert::TrashEmptyDto, UiError> {
     job_main_window(window.label())?;
     run(state, |s| s.trash_empty()).await
 }

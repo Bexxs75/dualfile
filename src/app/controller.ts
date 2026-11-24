@@ -353,8 +353,9 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     if (["unmount", "eject", "powerOff"].includes(dialog.action) && dialog.key) { await unmountPlace(dialog.key, true, dialog.action as "unmount" | "eject" | "powerOff"); return; }
     try {
       if (dialog.action !== "emptyTrash") return;
-      const id = await api.trashEmpty();
+      const { id, skipped } = await api.trashEmpty();
       dispatch({ type: "jobKind", id, kind: "delete" });
+      if (skipped.length) toast(tr("sidebar.trashSkipped", { count: skipped.length, modes: [...new Set(skipped.map(s => (s.mode & 0o777).toString(8)))].join(", ") }), "error");
       await refreshPlaces();
     } catch (error) { fail(error); }
   }

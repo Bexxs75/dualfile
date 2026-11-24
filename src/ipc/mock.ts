@@ -78,6 +78,7 @@ import type {
   SyncPlan,
   SyncPlanNote,
   SyncPlanPage,
+  TrashEmptyStarted,
 } from "./types";
 
 /** Zeitgeber, den Tests durch eine von Hand gesteuerte Fassung ersetzen. */
@@ -2247,10 +2248,10 @@ export function createMockApi(options: MockOptions = {}): MockApi {
     async placesSpace() { return { available: 12e9, total: 32e9 }; },
     async placesSetVisible() {},
     async trashOpenSystem() {},
-    async trashEmpty() {
+    async trashEmpty(): Promise<TrashEmptyStarted> {
       const job = newJob("Empty trash", 0, null, { kind: "emptyTrash", first: "", more: 0 });
       job.timer = scheduler.setTimeout(() => { if (job.cancelled) return; trashed.clear(); places.trash.empty = true; publish(job.id, { state: "done" }); emit({ type: "placesChanged" }); }, 0);
-      return job.id;
+      return { id: job.id, skipped: [] };
     },
     async trashList() {
       const entries = [...trashed].map(([id, { originalPath, node }]) => ({

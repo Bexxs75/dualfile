@@ -364,6 +364,15 @@ test("empty trash context action requires confirmation and properties do not sta
   expect(space).not.toHaveBeenCalled();
 });
 
+test("empty trash tells about trash folders skipped for their permissions (#47)", async () => {
+  const app = await setupApp();
+  vi.spyOn(app.api, "trashEmpty").mockResolvedValueOnce({ id: 4711, skipped: [{ path: "/home/demo/.local/share/Trash", mode: 0o775 }, { path: "/mnt/x/.Trash-1000", mode: 0o775 }] });
+  fireEvent.contextMenu(item(/^Papierkorb/));
+  await app.user.click(screen.getByRole("menuitem", { name: "Papierkorb leeren …" }));
+  await app.user.click(screen.getByRole("button", { name: "Bestätigen" }));
+  expect(await screen.findByText("2 Papierkorb-Ordner übersprungen, weil sie anderen Schreibzugriff erlauben (Rechte 775).")).toBeInTheDocument();
+});
+
 test("unmount confirms inactive locked tabs, retains them on failure, and resets them only on success", async () => {
   let reject = true;
   const unmount = vi.fn(async () => { if (reject) throw new CoreError("busy", "busy"); });
