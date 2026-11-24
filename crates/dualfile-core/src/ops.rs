@@ -2648,14 +2648,29 @@ mod tests {
             .collect();
         let report = duplicate(&LocalVfs, &sources, &JobHandle::silent());
         assert!(report.failed.is_empty(), "{:?}", report.failed);
-        assert_eq!(fs::read_to_string(dir.join("foto_copy.jpg")).unwrap(), "vorhanden");
-        assert_eq!(fs::read_to_string(dir.join("foto_copy2.jpg")).unwrap(), "orig");
-        assert_eq!(fs::read_to_string(dir.join("a_copy.tar.gz")).unwrap(), "tar");
-        assert_eq!(fs::read_to_string(dir.join("ordner_copy/sub/x.txt")).unwrap(), "x");
+        assert_eq!(
+            fs::read_to_string(dir.join("foto_copy.jpg")).unwrap(),
+            "vorhanden"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("foto_copy2.jpg")).unwrap(),
+            "orig"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("a_copy.tar.gz")).unwrap(),
+            "tar"
+        );
+        assert_eq!(
+            fs::read_to_string(dir.join("ordner_copy/sub/x.txt")).unwrap(),
+            "x"
+        );
         // Created covers the copied items (folder contents included), roots are among them.
         for name in ["foto_copy2.jpg", "a_copy.tar.gz", "ordner_copy"] {
             assert!(
-                report.created.iter().any(|(_, t)| t.path() == dir.join(name)),
+                report
+                    .created
+                    .iter()
+                    .any(|(_, t)| t.path() == dir.join(name)),
                 "{name}"
             );
         }

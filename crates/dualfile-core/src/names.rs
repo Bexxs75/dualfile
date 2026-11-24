@@ -134,7 +134,10 @@ mod tests {
     #[test]
     fn copy_names_keep_extensions_and_count_up() {
         assert_eq!(name("foto.jpg", false, &[]), "foto_copy.jpg");
-        assert_eq!(name("foto.jpg", false, &["foto_copy.jpg"]), "foto_copy2.jpg");
+        assert_eq!(
+            name("foto.jpg", false, &["foto_copy.jpg"]),
+            "foto_copy2.jpg"
+        );
         assert_eq!(
             name("foto.jpg", false, &["foto_copy.jpg", "foto_copy2.jpg"]),
             "foto_copy3.jpg"
@@ -149,9 +152,16 @@ mod tests {
 
     #[test]
     fn copy_of_a_copy_continues_the_numbering() {
-        assert_eq!(name("foto_copy.jpg", false, &["foto_copy.jpg"]), "foto_copy2.jpg");
         assert_eq!(
-            name("foto_copy2.jpg", false, &["foto_copy.jpg", "foto_copy2.jpg"]),
+            name("foto_copy.jpg", false, &["foto_copy.jpg"]),
+            "foto_copy2.jpg"
+        );
+        assert_eq!(
+            name(
+                "foto_copy2.jpg",
+                false,
+                &["foto_copy.jpg", "foto_copy2.jpg"]
+            ),
             "foto_copy3.jpg"
         );
         // `_copy1` and `_copy0` are not generated names, they stay ordinary stems.
