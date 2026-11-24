@@ -346,6 +346,8 @@ pub struct PathMessage {
 #[serde(rename_all = "camelCase")]
 pub struct SkippedTrashDto {
     pub path: String,
+    /// `otherWritable` (group/others may write) or `noAccess` (cannot be opened, e.g. mode 000).
+    pub reason: &'static str,
     /// Permission bits, e.g. `0o775` = 509.
     pub mode: u32,
 }

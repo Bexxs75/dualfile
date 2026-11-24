@@ -355,7 +355,10 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
       if (dialog.action !== "emptyTrash") return;
       const { id, skipped } = await api.trashEmpty();
       dispatch({ type: "jobKind", id, kind: "delete" });
-      if (skipped.length) toast(tr("sidebar.trashSkipped", { count: skipped.length, modes: [...new Set(skipped.map(s => (s.mode & 0o777).toString(8)))].join(", ") }), "error");
+      const modes = (list: typeof skipped) => [...new Set(list.map(s => (s.mode & 0o777).toString(8).padStart(3, "0")))].join(", ");
+      const noAccess = skipped.filter(s => s.reason === "noAccess"), loose = skipped.filter(s => s.reason !== "noAccess");
+      if (loose.length) toast(tr("sidebar.trashSkipped", { count: loose.length, modes: modes(loose) }), "error");
+      if (noAccess.length) toast(tr("sidebar.trashNoAccess", { count: noAccess.length, modes: modes(noAccess) }), "error");
       await refreshPlaces();
     } catch (error) { fail(error); }
   }

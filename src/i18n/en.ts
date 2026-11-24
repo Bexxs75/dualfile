@@ -123,6 +123,7 @@ const en: Record<keyof typeof de, string> = {
   "sidebar.pinHere": "Pin folder here",
   "sidebar.errorTrash": "The trash could not be emptied completely.",
   "sidebar.trashSkipped": "{count} trash folder(s) skipped because they allow write access to others (permissions {modes}).",
+  "sidebar.trashNoAccess": "{count} trash folder(s) skipped because they cannot be opened (permissions {modes}); their contents were not deleted.",
   "sidebar.errorBusy": "Mount is busy. Finish running or queued jobs first.",
   "sidebar.errorPermission": "Mount operation is not permitted. Check system permissions.",
   "sidebar.errorMissing": "The mount is no longer available.",

@@ -1219,6 +1219,10 @@ impl AppState {
             .iter()
             .map(|s| SkippedTrashDto {
                 path: s.path.to_string_lossy().into_owned(),
+                reason: match s.reason {
+                    dualfile_core::trash_empty::SkipReason::OtherWritable => "otherWritable",
+                    dualfile_core::trash_empty::SkipReason::NoAccess => "noAccess",
+                },
                 mode: s.mode,
             })
             .collect();

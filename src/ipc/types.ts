@@ -788,7 +788,7 @@ export interface TrashEntry {
 /** „Papierkorb leeren“: der Auftrag und die Papierkorb-Ordner, die wegen ihrer Rechte (Schreibzugriff für andere) unangetastet blieben. */
 export interface TrashEmptyStarted {
   id: number;
-  skipped: { path: string; mode: number }[];
+  skipped: { path: string; mode: number; reason?: "otherWritable" | "noAccess" }[];
 }
 
 export interface TrashList {

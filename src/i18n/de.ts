@@ -123,6 +123,7 @@ const de = {
   "sidebar.pinHere": "Ordner hier anheften",
   "sidebar.errorTrash": "Der Papierkorb konnte nicht vollständig geleert werden.",
   "sidebar.trashSkipped": "{count} Papierkorb-Ordner übersprungen, weil sie anderen Schreibzugriff erlauben (Rechte {modes}).",
+  "sidebar.trashNoAccess": "{count} Papierkorb-Ordner übersprungen, weil du sie nicht öffnen darfst (Rechte {modes}); ihr Inhalt wurde nicht gelöscht.",
   "sidebar.errorBusy": "Laufwerk wird noch verwendet. Laufende oder wartende Aufträge zuerst beenden.",
   "sidebar.errorPermission": "Die Einbindung ist nicht erlaubt. Bitte die Systemberechtigungen prüfen.",
   "sidebar.errorMissing": "Die Einbindung ist nicht mehr vorhanden.",

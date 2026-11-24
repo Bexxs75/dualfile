@@ -107,11 +107,20 @@ fn open_trash(path: &Path, uid: u32) -> std::io::Result<(File, File, File)> {
     }
     Ok((root, files, info))
 }
-/// A trash directory that was left out because group or others may write to it.
+/// Why a trash directory was left out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipReason {
+    /// Group or others may write to it.
+    OtherWritable,
+    /// Our own directory (or one of its parts) cannot be opened, e.g. mode 000.
+    NoAccess,
+}
+/// A trash directory that was left out; nothing in it is touched.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkippedTrash {
     pub path: PathBuf,
-    /// Permission bits, e.g. `0o775`.
+    pub reason: SkipReason,
+    /// Permission bits, e.g. `0o775` (for `NoAccess` the first part that lacks owner access).
     pub mode: u32,
 }
 /// Usable trash directories plus the ones refused for their permissions.
@@ -124,6 +133,28 @@ enum Probe {
     Usable,
     Unusable,
     OtherWritable(u32),
+    NoAccess(u32),
+}
+/// The mode of the first of root, `files`, `info` that the owner cannot read and search;
+/// the root's mode when all look fine. `None` when the root is gone or not ours.
+fn denied_mode(path: &Path, uid: u32) -> Option<u32> {
+    use std::os::unix::fs::MetadataExt;
+    let root = std::fs::symlink_metadata(path).ok()?;
+    if !root.is_dir() || root.uid() != uid {
+        return None;
+    }
+    let lacking = |mode: u32| mode & 0o500 != 0o500;
+    if lacking(root.mode()) {
+        return Some(root.mode() & 0o777);
+    }
+    for name in ["files", "info"] {
+        if let Ok(meta) = std::fs::symlink_metadata(path.join(name)) {
+            if meta.uid() == uid && lacking(meta.mode()) {
+                return Some(meta.mode() & 0o777);
+            }
+        }
+    }
+    Some(root.mode() & 0o777)
 }
 /// Missing directories are ignored; a timed-out probe fails closed before queueing work.
 pub fn discover(table: &str, data: &Path) -> crate::Result<Vec<PathBuf>> {
@@ -154,14 +185,28 @@ pub fn discover_report(table: &str, data: &Path) -> crate::Result<Discovery> {
             deadline.saturating_duration_since(std::time::Instant::now()),
             move || match open_trash(&probe, uid) {
                 Ok(_) => Probe::Usable,
-                Err(e) => e
-                    .get_ref()
-                    .and_then(|inner| inner.downcast_ref::<OtherWritable>())
-                    .map_or(Probe::Unusable, |loose| Probe::OtherWritable(loose.0)),
+                Err(e) => match e.get_ref().and_then(|i| i.downcast_ref::<OtherWritable>()) {
+                    Some(loose) => Probe::OtherWritable(loose.0),
+                    // A real EACCES from open (not our own "not owned" refusal, which has no
+                    // OS error): report it instead of dropping it silently.
+                    None if e.raw_os_error() == Some(libc::EACCES) => {
+                        denied_mode(&probe, uid).map_or(Probe::Unusable, Probe::NoAccess)
+                    }
+                    None => Probe::Unusable,
+                },
             },
         ) {
             Some(Probe::Usable) => found.found.push(path),
-            Some(Probe::OtherWritable(mode)) => found.skipped.push(SkippedTrash { path, mode }),
+            Some(Probe::OtherWritable(mode)) => found.skipped.push(SkippedTrash {
+                path,
+                reason: SkipReason::OtherWritable,
+                mode,
+            }),
+            Some(Probe::NoAccess(mode)) => found.skipped.push(SkippedTrash {
+                path,
+                reason: SkipReason::NoAccess,
+                mode,
+            }),
             Some(Probe::Unusable) => {}
             None => return Err(Error::Unsupported("trashPurgeFailed")),
         }
@@ -430,11 +475,56 @@ mod tests {
             found.skipped,
             vec![SkippedTrash {
                 path: root.clone(),
+                reason: SkipReason::OtherWritable,
                 mode: 0o775
             }]
         );
         assert!(discover(&table, &data).unwrap().is_empty());
         assert!(root.join("files/item").exists());
+    }
+    #[test]
+    fn an_own_trash_without_access_is_reported_and_left_alone() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("share");
+        let root = trash_fixture(&data);
+        std::fs::write(root.join("files/item"), b"trash").unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let table = format!("1 0 8:1 / {} rw - ext4 /dev/a rw", temp.path().display());
+        let found = discover_report(&table, &data).unwrap();
+        let sub = root.join("files");
+        // Restore access before any assertion so the temp dir can be removed.
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(found.found.is_empty());
+        assert_eq!(
+            found.skipped,
+            vec![SkippedTrash {
+                path: root.clone(),
+                reason: SkipReason::NoAccess,
+                mode: 0
+            }]
+        );
+        assert!(sub.join("item").exists());
+        // Only the unreadable root is refused; a missing trash stays silent.
+        let none = discover_report(&table, &temp.path().join("other")).unwrap();
+        assert!(none.found.is_empty() && none.skipped.is_empty());
+    }
+    #[test]
+    fn an_unreadable_files_folder_reports_its_own_mode() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let data = temp.path().join("share");
+        let root = trash_fixture(&data);
+        std::fs::set_permissions(root.join("files"), std::fs::Permissions::from_mode(0o000))
+            .unwrap();
+        let table = format!("1 0 8:1 / {} rw - ext4 /dev/a rw", temp.path().display());
+        let found = discover_report(&table, &data).unwrap();
+        std::fs::set_permissions(root.join("files"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        assert!(found.found.is_empty());
+        assert_eq!(found.skipped.len(), 1);
+        assert_eq!(found.skipped[0].reason, SkipReason::NoAccess);
+        assert_eq!(found.skipped[0].mode, 0);
     }
     #[test]
     fn a_symlinked_data_parent_is_resolved_before_mount_classification() {
