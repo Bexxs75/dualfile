@@ -491,6 +491,14 @@ mod tests {
             zip_with(&[("in/inner.zip", &inner2), ("top.txt", b"top")]),
         )
         .unwrap();
+        // The cache key is modification time plus size and the rewrite has the same size: a
+        // rewrite within the file system's timestamp granularity would look unchanged, so move
+        // the time explicitly (as the test above does) instead of hoping the clock advanced.
+        let handle = fs::File::options().write(true).open(&outer).unwrap();
+        handle
+            .set_modified(SystemTime::now() + std::time::Duration::from_secs(120))
+            .unwrap();
+        drop(handle);
         let vfs = router.vfs_for(&target).unwrap();
         assert_eq!(read(&*vfs, &target), b"DEEP");
     }
