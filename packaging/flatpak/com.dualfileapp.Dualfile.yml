@@ -1,12 +1,13 @@
-# Draft only: resolve all TODOs and generate both source lists before building.
+# Erstbau 24.11.2026 auf ObiWan erfolgreich; fuer Flathub dir-Quelle durch git (Tag+Commit) ersetzen.
 app-id: com.dualfileapp.Dualfile
 runtime: org.gnome.Platform
-runtime-version: '50' # geprüft 21.11.2026: GNOME 50 (50.6), Basis freedesktop 26.08, WebKitGTK 4.1 2.54.1
+runtime-version: '50' # geprüft 21.11.2026: GNOME 50 (50.6), Extension-Branch 25.08 laut SDK-Metadaten, WebKitGTK 4.1 2.54.1
 sdk: org.gnome.Sdk
 sdk-extensions:
-  # Branch 26.08 passt zur freedesktop-Basis von GNOME 50.
+  # Der Extension-Punkt des GNOME-50-SDK (org.freedesktop.Sdk.Extension) steht auf 25.08;
+  # flatpak-builder verlangt deshalb rust-stable//25.08 und node22//25.08 (beide installiert, Erstbau 24.11.2026).
   - org.freedesktop.Sdk.Extension.rust-stable
-  # node22 ist für 26.08 freigegeben und erfüllt Vite (>=20.19).
+  # node22 erfüllt Vite (>=20.19).
   - org.freedesktop.Sdk.Extension.node22
 command: dualfile
 finish-args:
@@ -18,6 +19,8 @@ finish-args:
   - --socket=wayland
   # X11 only as fallback when Wayland is unavailable.
   - --socket=fallback-x11
+  # Pflicht laut flatpak-builder-lint, sobald X11 genutzt wird (MIT-SHM).
+  - --share=ipc
   # WebKitGTK rendering through the GPU.
   - --device=dri
   # SFTP authentication using the user's SSH agent.

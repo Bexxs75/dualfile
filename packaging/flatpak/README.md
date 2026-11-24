@@ -1,7 +1,7 @@
 # Flatpak draft / Flatpak-Entwurf
 
-**DE:** Stufe 3, nur Vorbereitung zu Forgejo #30. Nicht baubar, bevor die unten
-aufgeführten TODOs erledigt sind. Keine Veröffentlichung oder Flathub-Freigabe.
+**DE:** Stufe 3 zu Forgejo #30. Erstbau auf ObiWan am 24.11.2026 erfolgreich (Abschnitt
+"Erstbau" unten). Keine Veröffentlichung oder Flathub-Freigabe.
 Alle Pfade beziehen sich auf diesen Checkout. Die beiden Skripte liegen bewusst
 unter `packaging/flatpak/scripts/`, entsprechend „alles unter packaging/flatpak“.
 Der vollständige `FLATPAK-PLAN.md` liegt hier nicht vor; Grundlage ist der
@@ -12,6 +12,41 @@ not a published package or Flathub approval. All paths refer to this checkout.
 Scripts are nested here to keep every new file under `packaging/flatpak/`.
 The full `FLATPAK-PLAN.md` is absent; the frozen work order and stage 2 handoff
 are the available specification.
+
+## Erstbau 24.11.2026 / First build
+
+**DE:** Gebaut auf ObiWan im Benutzerbereich (kein sudo), Quelle = lokaler Checkout
+(`type: dir`, `../..`). `flatpak-builder` 1.4.12 (Flatpak-App), Befehl:
+`nice -n 10 flatpak run --user org.flatpak.Builder --user --install --force-clean --disable-rofiles-fuse --repo=repo-out build-flatpak packaging/flatpak/com.dualfileapp.Dualfile.yml`
+(Exit 0). Danach `flatpak build-bundle repo-out dualfile-test.flatpak com.dualfileapp.Dualfile`.
+Die Quellenlisten stammen aus flatpak-builder-tools (Commit 9d86d336) in einer venv
+unter `~/claude-builds/flatpak-tools` (aiohttp, tomlkit):
+
+```sh
+flatpak-cargo-generator.py src-tauri/Cargo.lock -o packaging/flatpak/generated-sources.json
+flatpak-node-generator npm package-lock.json -o packaging/flatpak/node-sources.json
+```
+
+`generated-sources.json` stammt nur aus dem Tauri-Lock (nur der gebaut wird); der
+Core-Workspace-Lock (`Cargo.lock`) enthaelt 11 weitere Crates (Test-/Dev-Abhaengigkeiten,
+z. B. rcgen, wasm-bindgen), die der App-Build nicht braucht. `vendor/trash-5.3.0` ist
+Pfad-Abhaengigkeit und kommt aus dem Quellbaum (nicht aus der Liste).
+
+**Fuer Flathub:** die `dir`-Quelle durch `type: git` mit der oeffentlichen URL und dem
+Release-Tag/Commit ersetzen (`tag:` + `commit:`), die zwei JSON-Listen nach jeder
+Aenderung der Lockfiles neu erzeugen (Lockfiles muessen zum Tag passen).
+
+**EN:** First build succeeded on ObiWan (user installation, no sudo) from a local
+checkout. For Flathub switch to `type: git` with the release tag + commit and
+regenerate both source lists whenever lockfiles change. The generated cargo list is
+from the Tauri lock only.
+
+Befunde / findings: (1) GNOME 50 SDK extension point is **25.08**, so the SDK extensions
+must be `//25.08`, not 26.08. (2) `flatpak-builder-lint manifest` reported
+`finish-args-x11-without-ipc` (fixed with `--share=ipc`) and the warning
+`finish-args-flatpak-spawn-access` (needs a Flathub exception request, see below).
+(3) A missing `use std::process::Command` in `src-tauri/src/devices.rs` (stage 2, not
+compiled without Tauri/GTK before) was found and fixed by this build.
 
 ## Metadata / Metadaten (offline)
 
@@ -68,12 +103,12 @@ and extensions installed. Acquiring generators, downloading dependencies,
 installing the app and submitting it remain outside this offline task.
 
 1. **DE – geprüft durch den Koordinator:** `org.gnome.Platform//50` und
-   `org.gnome.Sdk//50` (50.6, freedesktop-Basis 26.08), dazu `rust-stable//26.08`
-   und freigegebenes `node22//26.08`. Node 22 erfüllt Vites Anforderung >=20.19.
+   `org.gnome.Sdk//50` (50.6), dazu `rust-stable//25.08`
+   und `node22//25.08` (Extension-Branch laut SDK-Metadaten; 26.08 wird von flatpak-builder für GNOME 50 nicht gefunden, Befund Erstbau 24.11.). Node 22 erfüllt Vites Anforderung >=20.19.
    TODO: Generatorversionen festlegen und deren CLI-Hilfe prüfen.
 
-   **EN – coordinator verified:** GNOME Platform/SDK 50 (50.6, freedesktop 26.08),
-   rust-stable and approved node22 on branch 26.08. Node 22 meets Vite's >=20.19
+   **EN – coordinator verified:** GNOME Platform/SDK 50 (50.6),
+   rust-stable and node22 on branch 25.08 (extension point of the GNOME 50 SDK; 26.08 is not resolved by flatpak-builder, first-build finding 24 Nov). Node 22 meets Vite's >=20.19
    requirement. TODO: pin generator versions and verify their CLI help.
 2. **DE – geprüft durch den Koordinator:** SDK 50 enthält WebKitGTK 4.1 2.54.1,
    GTK3 3.24.52, libsoup-3.0, librsvg, OpenSSL 3.5.9, libsecret und dbus. Die Runtime
