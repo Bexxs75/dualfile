@@ -1,5 +1,6 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
+import type { Timers } from "./app/controller";
 import type { LoadOutcome, Settings } from "./ipc/types";
 import { DOCS, DOWNLOADS, HOME, setupApp } from "./test-utils";
 
@@ -212,8 +213,28 @@ describe("Dialoge", () => {
 
 describe("Speichern und Hinweise", () => {
   test("Änderungen werden entprellt gespeichert, auch Tabs und aktives Fenster", async () => {
+    // Die Entprellung läuft über einen von Hand gesteuerten Zeitgeber, nicht über die Uhr: Auf einem
+    // ausgelasteten Rechner feuerte der echte 20-ms-Zeitgeber schon während des Starts oder zwischen den
+    // Tastenfolgen (#39, #42). Andere Zeitgeber (Toasts, Orte-Abfrage) bleiben echt.
+    const saveDelayMs = 7777;
+    const held = new Map<number, () => void>();
+    let scheduled = 0;
+    const timers: Timers = {
+      set: (callback, ms) => {
+        if (ms !== saveDelayMs) return setTimeout(callback, ms);
+        scheduled++;
+        held.set(scheduled, callback);
+        return scheduled;
+      },
+      clear: (handle) => {
+        if (typeof handle === "number") held.delete(handle);
+        else clearTimeout(handle as ReturnType<typeof setTimeout>);
+      },
+    };
+    const flush = () => act(async () => { [...held.values()].forEach((run) => run()); held.clear(); });
     const saved: Settings[] = [];
     const app = await setupApp({
+      options: { saveDelayMs, timers },
       wrap: (api) => ({
         ...api,
         saveSettings: async (settings) => {
@@ -222,15 +243,25 @@ describe("Speichern und Hinweise", () => {
         },
       }),
     });
+    // Der Start trägt den Zeitpunkt der Update-Prüfung ein (asynchron): erst danach ist die Startphase
+    // vorbei. Das ist eine echte Änderung, aber sie wird nur geplant und nicht geschrieben.
+    await waitFor(() => expect(app.runtime.store.getState().settings.lastUpdateCheck).not.toBeNull());
     expect(saved).toHaveLength(0);
+    await flush();
+    await waitFor(() => expect(saved).toHaveLength(1));
+    held.clear();
+    const before = scheduled;
     await app.user.keyboard("{Control>}t{/Control}{Tab}");
     await app.user.keyboard("{Control>}h{/Control}"); // Ctrl+H gehört nicht zu den gespeicherten Werten
-    await waitFor(() => expect(saved.length).toBeGreaterThan(0));
+    expect(saved).toHaveLength(1); // nichts wird vor Ablauf der Wartezeit geschrieben
+    expect(scheduled - before).toBeGreaterThanOrEqual(2); // mehrere Änderungen ...
+    expect(held.size).toBe(1); // ... aber nur ein ausstehendes Speichern
+    await flush();
+    await waitFor(() => expect(saved).toHaveLength(2)); // genau ein Schreibvorgang für alles zusammen
     const last = saved.at(-1)!;
     expect(last.session.windows[0]?.tabs).toHaveLength(2);
     expect(last.session.windows[1]?.tabs[0]?.path).toBe(DOWNLOADS);
     expect(last.session.activeWindow).toBe(1);
-    expect(saved.length).toBeLessThanOrEqual(2); // entprellt, nicht je Taste
     expect((await app.api.loadSettings()).settings.session.windows[0]?.tabs).toHaveLength(2);
   });
 
