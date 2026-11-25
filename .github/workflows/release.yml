@@ -86,10 +86,14 @@ jobs:
             runner: ubuntu-22.04
             appimagetool: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
             appimagetool_sha256: ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+            sevenzip: https://github.com/ip7z/7zip/releases/download/26.06/7z2606-linux-x64.tar.xz
+            sevenzip_sha256: 2b539cf067b2ad48e1baa5093dbaa8818b73542d1222a0ffde9dc5f2922ea62e
           - arch: aarch64
             runner: ubuntu-22.04-arm
             appimagetool: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-aarch64.AppImage
             appimagetool_sha256: f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158
+            sevenzip: https://github.com/ip7z/7zip/releases/download/26.06/7z2606-linux-arm64.tar.xz
+            sevenzip_sha256: edcc408aacce77da5223728f2eceb5e9f6dc713b8a9df934ad21e2a7f7560627
     env:
       CARGO_TARGET_DIR: ${{ github.workspace }}/target-tauri
       OUTPUT_DIR: ${{ github.workspace }}/dist-appimage
@@ -115,9 +119,19 @@ jobs:
           curl --fail --location --retry 3 "$APPIMAGETOOL_URL" -o "$RUNNER_TEMP/appimagetool"
           echo "$APPIMAGETOOL_SHA256  $RUNNER_TEMP/appimagetool" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/appimagetool"
+      # 7-Zip console build for RAR (LGPL + unRAR restriction, see docs/third-party-7zip.md).
+      # Version 26.06 is pinned; bump URL and SHA-256 together and re-check the release page.
+      - name: Download 7-Zip for RAR
+        env:
+          SEVENZIP_URL: ${{ matrix.sevenzip }}
+          SEVENZIP_SHA256: ${{ matrix.sevenzip_sha256 }}
+        run: |
+          curl --fail --location --retry 3 "$SEVENZIP_URL" -o "$RUNNER_TEMP/7zip.tar.xz"
+          echo "$SEVENZIP_SHA256  $RUNNER_TEMP/7zip.tar.xz" | sha256sum -c -
       - name: Build final AppImage and tarball
         env:
           ARCH: ${{ matrix.arch }}
+          SEVENZIP_ARCHIVE: ${{ runner.temp }}/7zip.tar.xz
           APPIMAGETOOL: ${{ runner.temp }}/appimagetool
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: bash scripts/build-appimage.sh
