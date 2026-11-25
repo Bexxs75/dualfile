@@ -268,7 +268,9 @@ describe("Anzeige und Navigation", () => {
     const app = await setupApp({
       wrap: (api) => ({ ...api, list: async (p: string) => (p === HOME ? { path: HOME, entries } : api.list(p)) }),
     });
-    expect(app.rows(0)).toHaveLength(5001);
+    // Since #63 only a window of rows is in the DOM; the grid still announces all of them.
+    expect(within(app.pane(0)).getByRole("grid")).toHaveAttribute("aria-rowcount", "5002");
+    expect(app.rows(0).length).toBeLessThan(300);
     await app.user.keyboard("{End}");
     expect(app.focused(0)).toBe("datei-4999.txt");
     await app.user.keyboard("{Control>}a{/Control}");

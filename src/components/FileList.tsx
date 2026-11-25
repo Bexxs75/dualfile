@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useAppState, useController, useLanguage, useT } from "../app/context";
 import { activeTabOf, visibleEntries, type WinIdx } from "../app/state";
 import { createTranslator, formatBytes, formatDate, type Language } from "../i18n";
@@ -7,6 +7,7 @@ import { clampColumn, COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, COLUMN_STEP, allW
 import { isArchivePath } from "../state/paths";
 import { fileType, visibleSort, type SortKey } from "../state/sort";
 import { formatPermissions } from "../state/permissions";
+import { rowHeights } from "../themes/tokens";
 import { ListBody } from "./ListBody";
 import { EntryIcon, Icon } from "./Icon";
 
@@ -33,6 +34,22 @@ const OWNER_COLUMNS: typeof COLUMNS = [
 
 export const rowId = (w: WinIdx, index: number): string => `pane${w}-row-${index}`;
 
+/** Rows rendered above and below the visible part of the list (issue #63). */
+export const OVERSCAN_ROWS = 20;
+/** Viewport assumed while the list has no layout yet (first paint, jsdom). */
+const FALLBACK_VIEWPORT_PX = 1200;
+
+/**
+ * Index range [first, last) of the rows to render for a list of `count` rows with fixed
+ * `rowHeight`, given the row at the top of the viewport. Only this window plus the focus row
+ * is in the DOM; spacers stand in for the rest so the scroll height stays the same.
+ */
+export function rowWindow(count: number, topRow: number, viewport: number, rowHeight: number, overscan = OVERSCAN_ROWS): { first: number; last: number } {
+  const visible = Math.ceil(viewport / Math.max(1, rowHeight)) + 1;
+  const top = Math.max(0, Math.min(topRow, count - visible));
+  return { first: Math.max(0, top - overscan), last: Math.min(count, top + visible + overscan) };
+}
+
 function typeLabel(entry: Entry, language: Language): string {
   const tr = createTranslator(language);
   if (entry.name === "..") return tr("type.up");
@@ -53,9 +70,11 @@ interface RowProps {
   order: ColumnKey[];
   local: boolean;
   dropInto: boolean;
+  /** Only for the focus row while it lies outside the rendered window. */
+  style?: CSSProperties;
 }
 
-const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, order, local, dropInto }: RowProps) {
+const Row = memo(function Row({ w, index, entry, selected, current, language, extCol, order, local, dropInto, style }: RowProps) {
   const controller = useController();
   const isDir = entry.kind === "dir";
   const classes = ["row", entry.name === ".." ? "parent-entry" : "", isDir ? "d" : "", entry.kind === "symlink" ? "l" : "", entry.brokenLink ? "broken" : "", entry.hidden ? "hid" : "", entry.error ? "err" : "", selected ? "sel" : "", current ? "cur" : "", extCol ? "ext-split" : "", dropInto ? "drop-into" : ""]
@@ -98,6 +117,7 @@ const Row = memo(function Row({ w, index, entry, selected, current, language, ex
       aria-rowindex={index + 2}
       aria-selected={selected}
       className={classes}
+      style={style}
       title={entry.error ?? (entry.linkTarget ? `→ ${entry.linkTarget}` : undefined)}
       draggable={draggable}
       onClick={(event: MouseEvent) => controller.clickRow(w, index, { ctrl: event.ctrlKey || event.metaKey, shift: event.shiftKey })}
@@ -327,6 +347,8 @@ export function FileList({ w }: { w: WinIdx }) {
   // Wichtig: nur scrollen, wenn sich der Fokus bewegt hat oder der Ordner wechselte.
   // Sonst würde jede Neuzeichnung (neue entries-Referenz) die manuelle Mausrad-Position
   // in großen Ordnern immer wieder auf die Auswahl zurückreißen.
+  // The focus row is always rendered (inside the window or positioned on its own), so this
+  // works for rows the user has not scrolled to yet.
   const prevFocus = useRef(focusIndex);
   const prevPath = useRef(listing.path);
   useEffect(() => {
@@ -341,6 +363,62 @@ export function FileList({ w }: { w: WinIdx }) {
     const rowHeight = row?.getBoundingClientRect().height ?? 0;
     if (rowHeight > 0 && list.clientHeight > 0) controller.setPageSize(w, Math.floor(list.clientHeight / rowHeight) - 1);
   }, [controller, entries, focusIndex, w, listing.path]);
+
+  // Windowing (issue #63): every row is exactly `--rowh` high (app.css `.row`), which tokens.ts
+  // derives from the density setting alone, so the row height is known without measuring.
+  const rowHeight = rowHeights[settings.density] ?? rowHeights.normal;
+  const headRef = useRef<HTMLDivElement>(null);
+  const [topRow, setTopRow] = useState(0);
+  const [viewport, setViewport] = useState(0);
+  const syncScroll = () => {
+    const list = ref.current;
+    if (!list) return;
+    const head = headRef.current?.offsetHeight ?? 0;
+    // Same number → React skips the render, so plain scrolling within a row costs nothing.
+    setTopRow(Math.max(0, Math.floor((list.scrollTop - head) / rowHeight)));
+    setViewport(list.clientHeight);
+  };
+  // Re-read the position after the list changed (filter shortened it, folder changed, density changed).
+  useLayoutEffect(syncScroll, [entries, rowHeight]);
+  useEffect(() => {
+    const list = ref.current;
+    if (!list || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setViewport(list.clientHeight));
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, []);
+  const { first, last } = rowWindow(entries.length, topRow, viewport > 0 ? viewport : FALLBACK_VIEWPORT_PX, rowHeight);
+
+  const local = listing.path?.startsWith("/") === true;
+  const renderRow = (index: number, style?: CSSProperties) => {
+    const entry = entries[index]!;
+    return (
+      <Row
+        key={entry.name}
+        w={w}
+        index={index}
+        entry={entry}
+        selected={selection.selected.has(entry.name)}
+        current={index === focusIndex}
+        language={language}
+        extCol={extCol}
+        order={visibleOrder}
+        local={local}
+        dropInto={dropFolder === entry.name}
+        style={style}
+      />
+    );
+  };
+  // One flat keyed array: the focus row keeps its DOM node when it moves into or out of the window.
+  // Spacer keys contain NUL, which no file name can.
+  const renderRows = () => {
+    if (entries.length === 0) return null;
+    const rows = [<div key={"\u0000top"} className="row-spacer" aria-hidden="true" style={{ height: first * rowHeight }} />];
+    for (let index = first; index < last; index++) rows.push(renderRow(index));
+    rows.push(<div key={"\u0000bottom"} className="row-spacer" aria-hidden="true" style={{ height: (entries.length - last) * rowHeight }} />);
+    if (focusIndex < first || focusIndex >= last) rows.push(renderRow(focusIndex, { position: "absolute", top: focusIndex * rowHeight, left: 0, right: 0 }));
+    return rows;
+  };
 
   const realCount = entries.filter((e) => e.name !== "..").length;
   const message = listing.error
@@ -365,12 +443,13 @@ export function FileList({ w }: { w: WinIdx }) {
       aria-rowcount={entries.length + 1}
       aria-activedescendant={entries.length > 0 ? rowId(w, focusIndex) : undefined}
       onFocus={() => controller.setActive(w)}
+      onScroll={syncScroll}
       onContextMenu={(event) => {
         event.preventDefault();
         controller.openContextMenu(w, null, event.clientX, event.clientY);
       }}
     >
-      <div role="row" aria-rowindex={1} className={extCol ? "head ext-split" : "head"}>
+      <div ref={headRef} role="row" aria-rowindex={1} className={extCol ? "head ext-split" : "head"}>
         {shownColumns.map((column) => {
           const sorted = spec.key === column.key;
           const name = tr(column.label);
@@ -427,21 +506,7 @@ export function FileList({ w }: { w: WinIdx }) {
       </div>
       <span className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</span>
       <ListBody w={w}>
-        {entries.map((entry, index) => (
-          <Row
-            key={entry.name}
-            w={w}
-            index={index}
-            entry={entry}
-            selected={selection.selected.has(entry.name)}
-            current={index === focusIndex}
-            language={language}
-            extCol={extCol}
-            order={visibleOrder}
-            local={listing.path?.startsWith("/") === true}
-            dropInto={dropFolder === entry.name}
-          />
-        ))}
+        {renderRows()}
         {listing.error ? (
           <div className="pane-msg error" role="alert">
             {listing.error}
