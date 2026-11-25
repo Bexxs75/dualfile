@@ -4,6 +4,8 @@
   "sidebarCollapsed": [],
   "sidebarHidden": [],
   "sidebarDiscovery": false,
+  "settingsWindowSizeMode": "ask",
+  "settingsWindowSize": { "width": 0, "height": 0 },
   "version": 6,
   "verifyPolicy": "auto",
   "theme": "schiefer",

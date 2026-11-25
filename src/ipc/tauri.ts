@@ -87,7 +87,9 @@ export function createTauriApi(): DualfileApi {
     terminalClose: id => call("terminal_close", { id }),
     onTerminalOutput: handler => terminalListener("terminal-output", handler),
     onTerminalExit: handler => terminalListener("terminal-exit", handler),
-    settingsWindowOpen: async (tab, title, appearance) => await call<boolean>("settings_window_open", { tab, title, appearance }) ? "opened" : "focused",
+    settingsWindowOpen: async (tab, title, appearance, size = null) => await call<boolean>("settings_window_open", { tab, title, appearance, ...(size ? { size } : {}) }) ? "opened" : "focused",
+    settingsWindowZoomed: () => call("settings_window_zoomed"),
+    settingsWindowHold: (session, on) => call("settings_window_hold", { session, on }),
     settingsWindowClose: (session, lastSeq, force = false, cancel = false) => call("settings_window_close", { session, lastSeq, force, cancel }),
     settingsWindowAttach: handler => {
       const channel = new Channel<SettingsWindowDelivery>();

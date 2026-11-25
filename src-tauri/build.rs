@@ -6,6 +6,8 @@ const COMMANDS: &[&str] = &[
     "settings_window_attach",
     "settings_window_push",
     "settings_window_send",
+    "settings_window_zoomed",
+    "settings_window_hold",
     "terminal_open",
     "terminal_write",
     "terminal_resize",

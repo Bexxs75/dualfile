@@ -224,6 +224,12 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     {
         return Err(bad_settings("sidebar"));
     }
+    if !dualfile_core::settings::SETTINGS_WINDOW_SIZE_MODES
+        .contains(&s.settings_window_size_mode.as_str())
+        || !s.settings_window_size.is_valid()
+    {
+        return Err(bad_settings("settings_window_size"));
+    }
     if s.last_seen_version
         .as_deref()
         .is_some_and(|v| !dualfile_core::settings::valid_seen_version(v))
@@ -567,6 +573,8 @@ mod tests {
             sidebar_collapsed: vec![],
             sidebar_hidden: vec![],
             sidebar_discovery: false,
+            settings_window_size_mode: "ask".into(),
+            settings_window_size: Default::default(),
             version: 1,
             verify_policy: Default::default(),
             theme: "schiefer".into(),
@@ -778,5 +786,35 @@ mod sidebar_validation_tests {
             "system:0123456789abcdef0123456789abcdef".into(),
         ];
         assert!(validate_settings(&s).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod settings_window_size_validation_tests {
+    use super::*;
+    #[test]
+    fn settings_window_size_fields_are_strictly_validated() {
+        let mut s = SettingsDto::from(&dualfile_core::settings::Settings::default());
+        assert!(validate_settings(&s).is_ok());
+        for mode in ["ask", "always", "never"] {
+            s.settings_window_size_mode = mode.into();
+            assert!(validate_settings(&s).is_ok());
+        }
+        s.settings_window_size_mode = "sometimes".into();
+        assert!(validate_settings(&s).is_err());
+        s.settings_window_size_mode = "always".into();
+        for (width, height, ok) in [
+            (900, 700, true),
+            (520, 420, true),
+            (0, 0, true),
+            (519, 700, false),
+            (900, 419, false),
+            (900, 0, false),
+            (0, 700, false),
+            (16385, 700, false),
+        ] {
+            s.settings_window_size = dualfile_core::settings::WindowSize { width, height };
+            assert_eq!(validate_settings(&s).is_ok(), ok, "{width}x{height}");
+        }
     }
 }

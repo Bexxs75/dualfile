@@ -134,6 +134,7 @@ export interface AppState {
 
 export const defaultSettings: Settings = {
   sidebarMode: "full", sidebarWidth: 210, sidebarCollapsed: [], sidebarHidden: [], sidebarDiscovery: false,
+  settingsWindowSizeMode: "ask", settingsWindowSize: { width: 0, height: 0 },
   version: 6,
   verifyPolicy: "auto",
   theme: "schiefer",

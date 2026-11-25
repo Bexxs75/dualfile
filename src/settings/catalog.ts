@@ -20,6 +20,8 @@ export const catalog: readonly SettingEntry[] = [
   { id: "language", section: "allgemein", group: "language", label: "settings.language", kind: "segment", options: ["auto", "de", "en"] },
   { id: "trayEnabled", section: "allgemein", group: "start", label: "system.tray", help: "system.trayHelp", kind: "switch" },
   { id: "checkUpdatesOnStart", section: "allgemein", group: "updates", label: "updates.onStart", help: "updates.onStartHelp", kind: "switch" },
+  { id: "settingsWindowSizeMode", section: "allgemein", group: "window", label: "settings.windowSize", kind: "segment", options: ["ask", "always", "never"],
+    keywords: ["settings.windowSize.hint.ask", "settings.windowSize.hint.always", "settings.windowSize.hint.never", "settings.windowSize.rememberedNone"] },
   { id: "theme", section: "darstellung", group: "design", label: "settings.theme", kind: "custom", options: ["schiefer", "papier", "werkstatt", "weiss"] },
   { id: "accentAutomatic", section: "darstellung", group: "design", label: "settings.accent.default", kind: "custom" },
   { id: "accent", section: "darstellung", group: "design", label: "settings.accent", kind: "custom", keywords: ["settings.accent.default"] },
@@ -50,6 +52,7 @@ export const actionCatalog = [
   { id: "troubleshoot", section: "info", text: ["log.heading", "log.intro", "log.view", "log.openFolder", "log.report", "log.reportHelp"] },
 ] satisfies readonly { id: string; section: Section; group?: string; text: TranslationKey[] }[];
 
+const sizeOf = (settings: Settings) => JSON.stringify(settings.settingsWindowSize ?? defaultSettings.settingsWindowSize);
 export function settingDefault(id: keyof Settings): Settings[keyof Settings] {
   return defaultSettings[id] ?? (id === "paneColorLeft" || id === "paneColorRight" ? "" : undefined);
 }
@@ -64,6 +67,8 @@ export function settingChanged(settings: Settings, base: SettingsBase | null | u
     const auto = !!(settings.accentAutomatic ?? defaultSettings.accentAutomatic), baseAuto = !!(base.settings.accentAutomatic ?? defaultSettings.accentAutomatic);
     return auto !== baseAuto || !auto && settings.accent !== base.settings.accent;
   }
+  // The remembered window size belongs to the "remember size" row: changing or forgetting it counts there.
+  if (id === "settingsWindowSizeMode") return (settings.settingsWindowSizeMode ?? "ask") !== (base.settings.settingsWindowSizeMode ?? "ask") || sizeOf(settings) !== sizeOf(base.settings);
   if ((id === "terminalBg" || id === "terminalFg") && settings.terminalColors !== "custom") return false;
   // Hidden sidebar entries are managed in the sidebar; the row here is an action with its own count.
   if (id === "sidebarHidden") return false;
@@ -77,6 +82,7 @@ export function settingChanged(settings: Settings, base: SettingsBase | null | u
 /** Resets one entry to the factory default (only used by "Reset everything"). */
 export function resetSetting(settings: Settings, id: keyof Settings): Settings {
   if (id === "accent" || id === "accentAutomatic") return { ...settings, accent: defaultSettings.accent, accentAutomatic: defaultSettings.accentAutomatic };
+  if (id === "settingsWindowSizeMode") return { ...settings, settingsWindowSizeMode: defaultSettings.settingsWindowSizeMode, settingsWindowSize: defaultSettings.settingsWindowSize };
   // Keep the network section's state: it is collapsed in the sidebar only, not in this dialog.
   if (id === "sidebarCollapsed") return { ...settings, sidebarCollapsed: (settings.sidebarCollapsed ?? []).filter(section => section === "network") };
   return { ...settings, [id]: settingDefault(id) };
@@ -85,6 +91,7 @@ export function resetSetting(settings: Settings, id: keyof Settings): Settings {
 export function revertSetting(settings: Settings, base: SettingsBase | null | undefined, id: keyof Settings): Settings {
   if (!base) return settings;
   if (id === "accent" || id === "accentAutomatic") return { ...settings, accent: base.settings.accent ?? defaultSettings.accent, accentAutomatic: base.settings.accentAutomatic ?? defaultSettings.accentAutomatic };
+  if (id === "settingsWindowSizeMode") return { ...settings, settingsWindowSizeMode: base.settings.settingsWindowSizeMode ?? defaultSettings.settingsWindowSizeMode, settingsWindowSize: base.settings.settingsWindowSize ?? defaultSettings.settingsWindowSize };
   if (id === "sidebarCollapsed") return { ...settings, sidebarCollapsed: [...(base.settings.sidebarCollapsed ?? []).filter(section => section !== "network"), ...(settings.sidebarCollapsed ?? []).filter(section => section === "network")] };
   return { ...settings, [id]: baseValue(base, id) };
 }

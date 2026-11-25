@@ -2402,6 +2402,8 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       unmountedSystemPlaces.add(profile.systemUrl);
     },
     async settingsWindowOpen() { return "inline"; },
+    async settingsWindowZoomed() { return false; },
+    async settingsWindowHold() {},
     async settingsWindowClose() {},
     async settingsWindowAttach() {},
     async settingsWindowSend() {},

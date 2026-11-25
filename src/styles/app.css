@@ -703,6 +703,11 @@ html.editor-window-root body { padding: 0; }
 .setting-row > label, .setting-row > .setting-label { text-align: right; padding-top: 3px; }
 .setting-control { min-width: 0; }
 .setting-control .field-help { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.size-prompt-check { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.size-prompt-check input { accent-color: var(--accent); }
+.size-prompt .field-help { margin: 4px 0 0 22px; color: var(--muted); font-size: 12px; }
+.window-size-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 5px; }
+.window-size-state .field-help { margin: 0; }
 .setting-control .seg, .setting-control .accent { flex-wrap: wrap; }
 .setting-control .range { display: flex; align-items: center; gap: 8px; }
 .setting-control .range input { min-width: 40px; width: 100%; }

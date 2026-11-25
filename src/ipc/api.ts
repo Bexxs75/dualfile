@@ -1,4 +1,4 @@
-import type { SettingsTab, SettingsWindowMessage, SettingsWindowSnapshot, SettingsWindowDelivery } from "./types";
+import type { SettingsTab, SettingsWindowMessage, SettingsWindowSnapshot, SettingsWindowDelivery, WindowSize } from "./types";
 import type { SystemApi } from "./system";
 import type { SimilarRule, SimilarPage, SimilarChoice, Thumbnail } from "./types";
 import type {
@@ -315,7 +315,12 @@ export interface DualfileApi extends SystemApi {
   connectionEditorOpen(profileId: string | null, title: string, appearance: EditorAppearance, discoveryKey?: string): Promise<boolean>;
   /** Schließt das Editor-Fenster, aus dem der Aufruf kommt. */
   connectionEditorClose(): Promise<void>;
-  settingsWindowOpen(tab: SettingsTab | null, title: string, appearance: EditorAppearance): Promise<"opened" | "focused" | "inline">;
+  /** `size`: remembered inner size (logical px) of the window, or null/omitted for the standard size. */
+  settingsWindowOpen(tab: SettingsTab | null, title: string, appearance: EditorAppearance, size?: WindowSize | null): Promise<"opened" | "focused" | "inline">;
+  /** Called by the settings window itself: is it maximized, fullscreen or minimized? (Its size then is not a size the user chose.) */
+  settingsWindowZoomed(): Promise<boolean>;
+  /** The settings window is asking the user something before it closes; the native close timeout waits. */
+  settingsWindowHold(session: string, on: boolean): Promise<void>;
   settingsWindowClose(session: string, lastSeq: number, force?: boolean, cancel?: boolean): Promise<void>;
   settingsWindowAttach(handler: (delivery: SettingsWindowDelivery) => void): Promise<void>;
   settingsWindowSend(message: SettingsWindowMessage): Promise<void>;

@@ -684,6 +684,10 @@ pub struct SettingsDto {
     pub sidebar_hidden: Vec<String>,
     #[serde(default)]
     pub sidebar_discovery: bool,
+    #[serde(default = "default_settings_window_size_mode")]
+    pub settings_window_size_mode: String,
+    #[serde(default)]
+    pub settings_window_size: settings::WindowSize,
     pub density: String,
     pub font_size: u8,
     pub language: String,
@@ -724,6 +728,10 @@ fn default_sidebar_collapsed() -> Vec<String> {
 }
 fn default_sidebar_hidden() -> Vec<String> {
     Vec::new()
+}
+
+fn default_settings_window_size_mode() -> String {
+    "ask".into()
 }
 
 fn default_show_parent_entry() -> bool {
@@ -778,6 +786,8 @@ impl From<&settings::Settings> for SettingsDto {
             sidebar_collapsed: s.sidebar_collapsed.clone(),
             sidebar_hidden: s.sidebar_hidden.clone(),
             sidebar_discovery: s.sidebar_discovery,
+            settings_window_size_mode: s.settings_window_size_mode.clone(),
+            settings_window_size: s.settings_window_size,
             density: s.density.clone(),
             font_size: s.font_size,
             language: s.language.clone(),
@@ -854,6 +864,8 @@ impl From<&SettingsDto> for settings::Settings {
             sidebar_collapsed: s.sidebar_collapsed.clone(),
             sidebar_hidden: s.sidebar_hidden.clone(),
             sidebar_discovery: s.sidebar_discovery,
+            settings_window_size_mode: s.settings_window_size_mode.clone(),
+            settings_window_size: s.settings_window_size,
             density: s.density.clone(),
             font_size: s.font_size,
             language: s.language.clone(),
