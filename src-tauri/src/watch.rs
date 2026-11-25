@@ -266,6 +266,8 @@ mod tests {
         }
     }
 
+    const WRITES: usize = 40;
+
     #[test]
     fn a_burst_of_writes_is_debounced_into_far_fewer_events() {
         let dir = tempfile::tempdir().unwrap();
@@ -278,18 +280,28 @@ mod tests {
         .expect("watcher starts");
         service.set_paths(&set(&[root.to_str().unwrap()]));
         let file = root.join("busy");
-        for round in 0..40 {
+        let started = std::time::Instant::now();
+        for round in 0..WRITES {
             std::fs::write(&file, format!("{round}")).unwrap();
         }
+        let write_time = started.elapsed();
         // Drain until the stream goes quiet rather than sampling at a fixed instant: under load
         // the OS may deliver the watch events late, and the debouncer may split a long burst.
-        // The point is that 40 writes coalesce into only a handful of events, not that the exact
-        // count is deterministic (this uses the real OS watcher and wall-clock timing).
+        // This uses the real OS watcher and wall-clock timing, so the exact count is not
+        // deterministic. What is: the debouncer can report at most one event per quiet period
+        // (300 ms) while the writes last, plus one for the first write and one for the tail. A
+        // burst that takes longer because the machine is slow may therefore legitimately split
+        // into more events, so the bound grows with the measured write time. Either way the
+        // writes must stay clearly below one event each.
         let mut events = 0;
         while rx.recv_timeout(Duration::from_millis(900)).is_ok() {
             events += 1;
         }
-        assert!((1..=8).contains(&events), "40 writes gave {events} events");
+        let limit = (write_time.as_millis() / 300) as usize + 2;
+        assert!(
+            (1..=limit.min(WRITES / 2)).contains(&events),
+            "{WRITES} writes in {write_time:?} gave {events} events (limit {limit})"
+        );
     }
 
     #[test]
