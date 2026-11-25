@@ -918,6 +918,113 @@ fn encrypted_7z_is_reported() {
     }
 }
 
+// Hand-made 7z headers: tiny files that declare more work than the limits allow.
+
+fn seven_number(value: u64) -> Vec<u8> {
+    let mut first = 0u8;
+    let mut mask = 0x80u8;
+    let mut extra = 0usize;
+    while extra < 8 {
+        if value < (1u64 << (7 * (extra + 1))) {
+            first |= (value >> (8 * extra)) as u8;
+            break;
+        }
+        first |= mask;
+        mask >>= 1;
+        extra += 1;
+    }
+    let mut out = vec![first];
+    out.extend((0..extra).map(|k| (value >> (8 * k)) as u8));
+    out
+}
+
+/// 7z file with `packed` as pack area and `header` as next header.
+fn seven_container(packed: &[u8], header: &[u8]) -> Vec<u8> {
+    let mut tail = Vec::new();
+    tail.extend_from_slice(&(packed.len() as u64).to_le_bytes());
+    tail.extend_from_slice(&(header.len() as u64).to_le_bytes());
+    tail.extend_from_slice(&crc32fast::hash(header).to_le_bytes());
+    let mut out = b"7z\xbc\xaf\x27\x1c\x00\x04".to_vec();
+    out.extend_from_slice(&crc32fast::hash(&tail).to_le_bytes());
+    out.extend_from_slice(&tail);
+    out.extend_from_slice(packed);
+    out.extend_from_slice(header);
+    out
+}
+
+/// StreamsInfo with one pack stream and one folder with one coder.
+fn seven_streams(method: &[u8], props: &[u8], unpack: u64, pack: u64) -> Vec<u8> {
+    let mut h = vec![0x06];
+    h.extend(seven_number(0));
+    h.extend(seven_number(1));
+    h.push(0x09);
+    h.extend(seven_number(pack));
+    h.push(0x00);
+    h.extend([0x07, 0x0b]);
+    h.extend(seven_number(1));
+    h.push(0x00);
+    h.extend(seven_number(1));
+    h.push(method.len() as u8 | if props.is_empty() { 0 } else { 0x20 });
+    h.extend(method);
+    if !props.is_empty() {
+        h.extend(seven_number(props.len() as u64));
+        h.extend(props);
+    }
+    h.push(0x0c);
+    h.extend(seven_number(unpack));
+    h.push(0x00);
+    h.push(0x00);
+    h
+}
+
+fn open_seven(bytes: &[u8]) -> Result<ArchiveVfs> {
+    let tmp = tempfile::tempdir().unwrap();
+    open_with(tmp.path(), "crafted.7z", bytes, ArchiveLimits::default())
+}
+
+fn assert_too_large(result: Result<ArchiveVfs>) {
+    match result {
+        Err(error) => assert_eq!(error.to_string(), "Archiv zu groß für die Anzeige"),
+        Ok(_) => panic!("must be rejected"),
+    }
+}
+
+#[test]
+fn seven_huge_lzma2_dictionary_is_rejected_before_allocating() {
+    // Encoded header, LZMA2 dictionary property 0x24 = 1 GiB, one end-of-stream byte.
+    let mut header = vec![0x17];
+    header.extend(seven_streams(&[0x21], &[0x24], 64, 1));
+    assert_too_large(open_seven(&seven_container(&[0x00], &header)));
+    // The same with an LZMA coder (dictionary 1 GiB) and a PPMd coder (1 GiB of memory).
+    let lzma = [&[0x5d][..], &(1u32 << 30).to_le_bytes()].concat();
+    let mut header = vec![0x17];
+    header.extend(seven_streams(&[0x03, 0x01, 0x01], &lzma, 64, 1));
+    assert_too_large(open_seven(&seven_container(&[0x00], &header)));
+    let ppmd = [&[6][..], &(1u32 << 30).to_le_bytes()].concat();
+    let mut header = vec![0x17];
+    header.extend(seven_streams(&[0x03, 0x04, 0x01], &ppmd, 64, 1));
+    assert_too_large(open_seven(&seven_container(&[0x00], &header)));
+}
+
+#[test]
+fn seven_huge_dictionary_in_a_plain_header_is_rejected() {
+    let mut header = vec![0x01, 0x04];
+    header.extend(seven_streams(&[0x21], &[0x24], 64, 1));
+    header.push(0x00);
+    assert_too_large(open_seven(&seven_container(&[0x00], &header)));
+}
+
+#[test]
+fn seven_small_dictionary_is_not_a_limit_error() {
+    // 1 MiB dictionary: the bogus stream is simply damaged, as before.
+    let mut header = vec![0x17];
+    header.extend(seven_streams(&[0x21], &[0x10], 64, 1));
+    match open_seven(&seven_container(&[0x00], &header)) {
+        Err(error) => assert!(error.to_string().contains("beschädigt"), "{error}"),
+        Ok(_) => panic!("bogus archive"),
+    }
+}
+
 // ------------------------------------------------------------ range and cost
 
 fn noise(len: usize) -> Vec<u8> {
