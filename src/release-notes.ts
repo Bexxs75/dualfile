@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.6": {
+    date: "2026-11-25",
+    de: {
+      new: [],
+      improved: [],
+      fixed: ["Sicherheit: Ein Papierkorb auf einem anderen Laufwerk wird nur noch genutzt, wenn er dir gehört und sonst niemand darin schreiben kann. Verschieben in den Papierkorb weicht sonst auf deinen Papierkorb im Heimordner aus.", "WebDAV: Dateien mit nicht darstellbaren Namen werden als Fehler aufgelistet, und ein Verschieben löscht sie nicht mehr mit.", "7z-Archive: Sehr große Wörterbuch- oder Eintragsangaben werden abgelehnt, statt den Arbeitsspeicher zu füllen."],
+    },
+    en: {
+      new: [],
+      improved: [],
+      fixed: ["Security: a trash folder on another drive is only used when it belongs to you and nobody else can write to it. Otherwise moving to the trash falls back to your trash in the home folder.", "WebDAV: files with names that cannot be shown are listed as errors, and moving them no longer deletes them along the way.", "7z archives: very large dictionary or entry counts are rejected instead of filling up memory."],
+    },
+  },
   "0.4.5": {
     date: "2026-11-25",
     de: {

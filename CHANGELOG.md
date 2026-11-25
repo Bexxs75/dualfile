@@ -5,6 +5,8 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-11-25
+
 ### Security
 
 - Trash view: trash folders on other drives (`.Trash-<uid>`, `.Trash/<uid>`) are only listed, restored from or deleted from when they are real folders that belong to you and that nobody else can write to. A trash folder prepared by another account or on a foreign USB stick (for example with a link into your home folder) is now ignored, so "Delete permanently" and "Restore" can no longer delete or move files outside the trash. Your own trash in the home folder works as before (#56).
