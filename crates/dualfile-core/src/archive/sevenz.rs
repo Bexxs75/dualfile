@@ -259,27 +259,107 @@ fn read_link_targets(
     found
 }
 
-// Only the encoded-header descriptor is parsed here: decompression must not start until
-// every declared output size fits the directory budget. Counts are bounded by descriptor
-// bytes, so this check cannot itself allocate from untrusted stream counts.
+// Only the header descriptors are parsed here: nothing is decompressed or allocated from
+// untrusted counts until every declared output size fits the directory budget, every coder
+// fits the memory limit and the number of files fits `max_entries`. Counts are bounded by
+// descriptor bytes, so this check cannot itself allocate from untrusted stream counts.
+const MAX_CODER_MEMORY_KB: u64 = 512 * 1024;
+const MAX_CODERS: u64 = 64;
+
+/// Estimated decoder memory in KiB for one coder, `None` when the properties are not usable
+/// (the library rejects those itself when it decodes).
+fn coder_memory_kb(id: &[u8], props: &[u8]) -> Option<u64> {
+    let word = || -> Option<u32> { Some(u32::from_le_bytes(props.get(1..5)?.try_into().ok()?)) };
+    if id == EncoderMethod::ID_LZMA2 {
+        let dict = lzma2_dict(props)?;
+        let kb = dict >> 10;
+        if kb > MAX_CODER_MEMORY_KB {
+            return Some(kb);
+        }
+        Some(u64::from(lzma_rust2::lzma2_get_memory_usage(dict as u32)))
+    } else if id == EncoderMethod::ID_LZMA {
+        let dict = word()?;
+        let kb = u64::from(dict >> 10);
+        if kb > MAX_CODER_MEMORY_KB {
+            return Some(kb);
+        }
+        lzma_rust2::lzma_get_memory_usage_by_props(dict, props[0])
+            .ok()
+            .map(u64::from)
+    } else if id == EncoderMethod::ID_PPMD {
+        Some(u64::from(word()? >> 10))
+    } else {
+        Some(0)
+    }
+}
+
+/// LZMA2 dictionary size in bytes from its one property byte.
+fn lzma2_dict(props: &[u8]) -> Option<u64> {
+    let bits = u32::from(*props.first()?);
+    match bits {
+        0..=39 => Some(u64::from(2 | (bits & 1)) << (bits / 2 + 11)),
+        40 => Some(0xFFFF_FFFF),
+        _ => None,
+    }
+}
+
+fn check_coder(id: &[u8], props: &[u8]) -> io::Result<()> {
+    match coder_memory_kb(id, props) {
+        Some(kb) if kb > MAX_CODER_MEMORY_KB => Err(super::budget::limit(MSG_INDEX_BYTES)),
+        _ => Ok(()),
+    }
+}
+
+enum Defined<'a> {
+    None,
+    All,
+    Bits(&'a [u8]),
+}
+
+impl Defined<'_> {
+    fn get(&self, index: u64) -> bool {
+        match self {
+            Defined::None => false,
+            Defined::All => true,
+            Defined::Bits(bits) => usize::try_from(index / 8)
+                .ok()
+                .and_then(|i| bits.get(i))
+                .is_some_and(|b| b & (0x80 >> (index % 8)) != 0),
+        }
+    }
+}
+
+struct Streams<'a> {
+    pack_pos: u64,
+    pack_size: u64,
+    folders: u64,
+    /// Coders (id, properties) of the first folder.
+    first: Vec<(&'a [u8], &'a [u8])>,
+    /// First declared unpack size.
+    unpack: u64,
+}
+
 struct HeaderProbe<'a> {
     bytes: &'a [u8],
     bound: u64,
 }
 
-impl HeaderProbe<'_> {
+impl<'a> HeaderProbe<'a> {
     fn skip(&mut self, n: u64) -> io::Result<()> {
+        self.take(n).map(|_| ())
+    }
+
+    fn take(&mut self, n: u64) -> io::Result<&'a [u8]> {
         if n > self.bytes.len() as u64 {
             return Err(corrupt(MSG_CORRUPT));
         }
-        self.bytes = &self.bytes[n as usize..];
-        Ok(())
+        let (head, tail) = self.bytes.split_at(n as usize);
+        self.bytes = tail;
+        Ok(head)
     }
 
     fn byte(&mut self) -> io::Result<u8> {
-        let value = *self.bytes.first().ok_or_else(|| corrupt(MSG_CORRUPT))?;
-        self.skip(1)?;
-        Ok(value)
+        Ok(self.take(1)?[0])
     }
 
     fn number(&mut self) -> io::Result<u64> {
@@ -310,33 +390,44 @@ impl HeaderProbe<'_> {
         Ok(())
     }
 
-    fn digests(&mut self, count: u64) -> io::Result<()> {
-        let defined = if self.byte()? != 0 {
-            count
-        } else {
-            let mut defined = 0;
-            for offset in (0..count).step_by(8) {
-                let bits = self.byte()?;
-                for bit in 0..(count - offset).min(8) {
-                    defined += u64::from(bits & (0x80 >> bit) != 0);
-                }
-            }
-            defined
-        };
-        self.skip(defined * 4)
+    fn digests(&mut self, count: u64) -> io::Result<Defined<'a>> {
+        if self.byte()? != 0 {
+            self.skip(count.checked_mul(4).ok_or_else(|| corrupt(MSG_CORRUPT))?)?;
+            return Ok(Defined::All);
+        }
+        let bits = self.take(count.div_ceil(8))?;
+        let mut defined = 0u64;
+        for (i, byte) in bits.iter().enumerate() {
+            let valid = (count - 8 * i as u64).min(8) as u32;
+            defined += u64::from((byte & (0xFFu8 << (8 - valid))).count_ones());
+        }
+        self.skip(defined * 4)?;
+        Ok(Defined::Bits(bits))
     }
 
-    fn encoded_sizes(&mut self, max: u64) -> io::Result<()> {
+    /// StreamsInfo up to and including its closing 0. `size_limit` caps every declared
+    /// unpack size (used for the encoded header, not for file data).
+    fn streams(&mut self, size_limit: Option<u64>) -> io::Result<Streams<'a>> {
+        let mut out = Streams {
+            pack_pos: 0,
+            pack_size: 0,
+            folders: 0,
+            first: Vec::new(),
+            unpack: 0,
+        };
         let mut id = self.byte()?;
         if id == 0x06 {
             // PackInfo
-            self.number()?;
+            out.pack_pos = self.number()?;
             let count = self.count()?;
             id = self.byte()?;
             if id == 0x09 {
                 // Size
-                for _ in 0..count {
-                    self.number()?;
+                for i in 0..count {
+                    let size = self.number()?;
+                    if i == 0 {
+                        out.pack_size = size;
+                    }
                 }
                 id = self.byte()?;
             }
@@ -350,20 +441,27 @@ impl HeaderProbe<'_> {
             }
             id = self.byte()?;
         }
+        if id == 0 {
+            return Ok(out);
+        }
         if id != 0x07 {
             // UnpackInfo
             return Err(corrupt(MSG_CORRUPT));
         }
         self.expect(0x0b)?; // Folder
         let folders = self.count()?;
+        out.folders = folders;
         self.expect(0)?; // External folders are unsupported by the decoder.
         let mut outputs = 0u64;
-        for _ in 0..folders {
+        for index in 0..folders {
             let coders = self.count()?;
+            if coders > MAX_CODERS {
+                return Err(corrupt(MSG_CORRUPT));
+            }
             let (mut input, mut output) = (0u64, 0u64);
             for _ in 0..coders {
                 let flags = self.byte()?;
-                self.skip(u64::from(flags & 0x0f))?;
+                let coder_id = self.take(u64::from(flags & 0x0f))?;
                 let (ins, outs) = if flags & 0x10 == 0 {
                     (1, 1)
                 } else {
@@ -377,12 +475,17 @@ impl HeaderProbe<'_> {
                     .checked_add(outs)
                     .filter(|v| *v <= self.bound)
                     .ok_or_else(|| corrupt(MSG_CORRUPT))?;
+                let mut props: &[u8] = &[];
                 if flags & 0x20 != 0 {
                     let size = self.count()?;
-                    self.skip(size)?;
+                    props = self.take(size)?;
                 }
                 if flags & 0x80 != 0 {
                     return Err(corrupt(MSG_CORRUPT));
+                }
+                check_coder(coder_id, props)?;
+                if index == 0 {
+                    out.first.push((coder_id, props));
                 }
             }
             let pairs = output.checked_sub(1).ok_or_else(|| corrupt(MSG_CORRUPT))?;
@@ -404,16 +507,162 @@ impl HeaderProbe<'_> {
                 .ok_or_else(|| corrupt(MSG_CORRUPT))?;
         }
         self.expect(0x0c)?; // CodersUnpackSize
-        for _ in 0..outputs {
-            if self.number()? > max {
+        for i in 0..outputs {
+            let size = self.number()?;
+            if size_limit.is_some_and(|max| size > max) {
                 return Err(super::budget::limit(MSG_INDEX_BYTES));
             }
+            if i == 0 {
+                out.unpack = size;
+            }
+        }
+        let mut crcs = Defined::None;
+        let mut id = self.byte()?;
+        if id == 0x0a {
+            crcs = self.digests(folders)?;
+            id = self.byte()?;
+        }
+        if id == 0x08 {
+            self.substreams(folders, &crcs)?;
+            id = self.byte()?;
+        }
+        if id != 0 {
+            return Err(corrupt(MSG_CORRUPT));
+        }
+        Ok(out)
+    }
+
+    /// SubStreamsInfo (after its 0x08), including its closing 0.
+    fn substreams(&mut self, folders: u64, crcs: &Defined) -> io::Result<()> {
+        fn next(counts: &mut Option<HeaderProbe>) -> io::Result<u64> {
+            counts.as_mut().map_or(Ok(1), HeaderProbe::count)
+        }
+        let mut id = self.byte()?;
+        let region = self.bytes;
+        let has_counts = id == 0x0d;
+        if has_counts {
+            for _ in 0..folders {
+                self.count()?;
+            }
+            id = self.byte()?;
+        }
+        let bound = self.bound;
+        let again = || {
+            has_counts.then_some(HeaderProbe {
+                bytes: region,
+                bound,
+            })
+        };
+        if id == 0x09 {
+            let mut counts = again();
+            for _ in 0..folders {
+                for _ in 1..next(&mut counts)? {
+                    self.number()?;
+                }
+            }
+            id = self.byte()?;
+        }
+        if id == 0x0a {
+            let mut counts = again();
+            let mut total = 0u64;
+            for index in 0..folders {
+                let n = next(&mut counts)?;
+                if !(n == 1 && crcs.get(index)) {
+                    total = total
+                        .checked_add(n)
+                        .filter(|v| *v <= self.bound)
+                        .ok_or_else(|| corrupt(MSG_CORRUPT))?;
+                }
+            }
+            self.digests(total)?;
+            id = self.byte()?;
+        }
+        if id != 0 {
+            return Err(corrupt(MSG_CORRUPT));
+        }
+        Ok(())
+    }
+
+    /// Header (after its 0x01): checks the coders and the number of files.
+    fn header(&mut self, max_entries: usize) -> io::Result<()> {
+        let mut id = self.byte()?;
+        if id == 0x02 {
+            // ArchiveProperties
+            while self.byte()? != 0 {
+                let size = self.count()?;
+                self.skip(size)?;
+            }
+            id = self.byte()?;
+        }
+        if id == 0x04 {
+            self.streams(None)?;
+            id = self.byte()?;
+        }
+        if id == 0x05 && self.number()? > max_entries as u64 {
+            return Err(super::budget::limit(MSG_INDEX_BYTES));
         }
         Ok(())
     }
 }
 
-fn check_header_size<R: Read + Seek>(reader: &mut R, max: u64) -> io::Result<()> {
+/// Decodes the encoded header when it is a single Copy/LZMA/LZMA2 coder (everything a
+/// 7z writer produces) so that its file count can be checked before the library allocates
+/// for it. `None` when the library will report the header as encrypted.
+fn decode_header<R: Read + Seek>(
+    reader: &mut R,
+    streams: &Streams,
+    len: u64,
+) -> io::Result<Option<Vec<u8>>> {
+    if streams
+        .first
+        .iter()
+        .any(|(id, _)| *id == EncoderMethod::ID_AES256_SHA256)
+    {
+        return Ok(None);
+    }
+    let [(id, props)] = streams.first.as_slice() else {
+        return Err(corrupt(MSG_CORRUPT));
+    };
+    if streams.folders != 1 {
+        return Err(corrupt(MSG_CORRUPT));
+    }
+    let start = 32u64
+        .checked_add(streams.pack_pos)
+        .filter(|start| {
+            start
+                .checked_add(streams.pack_size)
+                .is_some_and(|end| end <= len)
+        })
+        .ok_or_else(|| corrupt(MSG_CORRUPT))?;
+    reader.seek(SeekFrom::Start(start))?;
+    let input = io::BufReader::new((&mut *reader).take(streams.pack_size));
+    let size = streams.unpack;
+    let decoder: Box<dyn Read + '_> = if *id == EncoderMethod::ID_COPY {
+        Box::new(input)
+    } else if *id == EncoderMethod::ID_LZMA2 {
+        let dict = lzma2_dict(props).ok_or_else(|| corrupt(MSG_CORRUPT))?;
+        Box::new(lzma_rust2::Lzma2Reader::new(input, dict as u32, None))
+    } else if *id == EncoderMethod::ID_LZMA && props.len() >= 5 {
+        let dict = u32::from_le_bytes(props[1..5].try_into().unwrap());
+        let reader = lzma_rust2::LzmaReader::new_with_props(input, size, props[0], dict, None)
+            .map_err(|_| corrupt(MSG_CORRUPT))?;
+        Box::new(reader)
+    } else {
+        return Err(corrupt(MSG_CORRUPT));
+    };
+    let mut out = Vec::new();
+    decoder.take(size).read_to_end(&mut out)?;
+    if out.len() as u64 != size {
+        return Err(corrupt(MSG_CORRUPT));
+    }
+    Ok(Some(out))
+}
+
+fn check_header_size<R: Read + Seek>(
+    reader: &mut R,
+    max: u64,
+    max_entries: usize,
+) -> io::Result<()> {
     let len = reader.seek(SeekFrom::End(0))?;
     reader.rewind()?;
     let mut start = [0u8; 32];
@@ -449,8 +698,21 @@ fn check_header_size<R: Read + Seek>(reader: &mut R, max: u64) -> io::Result<()>
         bytes: &descriptor,
         bound: size,
     };
-    if probe.byte()? == 0x17 {
-        probe.encoded_sizes(max)?;
+    match probe.byte()? {
+        0x17 => {
+            let streams = probe.streams(Some(max))?;
+            if let Some(decoded) = decode_header(reader, &streams, len)? {
+                let mut inner = HeaderProbe {
+                    bytes: &decoded,
+                    bound: decoded.len() as u64,
+                };
+                // A nested encoded header is never written by a 7z implementation.
+                inner.expect(0x01)?;
+                inner.header(max_entries)?;
+            }
+        }
+        0x01 => probe.header(max_entries)?,
+        _ => {}
     }
     reader.rewind()?;
     Ok(())
@@ -470,11 +732,19 @@ pub(crate) fn index(
         Arc::new(Stats::default()),
         None,
     );
-    check_header_size(&mut reader, limits.index_dir_bytes).map_err(|e| map_io(e, path))?;
+    check_header_size(&mut reader, limits.index_dir_bytes, limits.max_entries)
+        .map_err(|e| map_io(e, path))?;
     let archive =
         Archive::read(&mut reader, &Password::empty()).map_err(|e| seven_error(e, path))?;
     if archive.files.len() > limits.max_entries {
         return Err(Error::Archive(MSG_INDEX_BYTES));
+    }
+    // The probe saw the same coders; this guards against a header it parsed differently.
+    for block in &archive.blocks {
+        for coder in &block.coders {
+            check_coder(coder.encoder_method_id(), coder.properties())
+                .map_err(|e| map_io(e, path))?;
+        }
     }
     let encrypted_block = |block: usize| {
         archive.blocks[block]
