@@ -583,8 +583,8 @@ impl<'a> HeaderProbe<'a> {
         Ok(())
     }
 
-    /// Header (after its 0x01): checks the coders.
-    fn header(&mut self) -> io::Result<()> {
+    /// Header (after its 0x01): checks the coders and the number of files.
+    fn header(&mut self, max_entries: usize) -> io::Result<()> {
         let mut id = self.byte()?;
         if id == 0x02 {
             // ArchiveProperties
@@ -598,12 +598,71 @@ impl<'a> HeaderProbe<'a> {
             self.streams(None)?;
             id = self.byte()?;
         }
-        let _ = id;
+        if id == 0x05 && self.number()? > max_entries as u64 {
+            return Err(super::budget::limit(MSG_INDEX_BYTES));
+        }
         Ok(())
     }
 }
 
-fn check_header_size<R: Read + Seek>(reader: &mut R, max: u64) -> io::Result<()> {
+/// Decodes the encoded header when it is a single Copy/LZMA/LZMA2 coder (everything a
+/// 7z writer produces) so that its file count can be checked before the library allocates
+/// for it. `None` when the library will report the header as encrypted.
+fn decode_header<R: Read + Seek>(
+    reader: &mut R,
+    streams: &Streams,
+    len: u64,
+) -> io::Result<Option<Vec<u8>>> {
+    if streams
+        .first
+        .iter()
+        .any(|(id, _)| *id == EncoderMethod::ID_AES256_SHA256)
+    {
+        return Ok(None);
+    }
+    let [(id, props)] = streams.first.as_slice() else {
+        return Err(corrupt(MSG_CORRUPT));
+    };
+    if streams.folders != 1 {
+        return Err(corrupt(MSG_CORRUPT));
+    }
+    let start = 32u64
+        .checked_add(streams.pack_pos)
+        .filter(|start| {
+            start
+                .checked_add(streams.pack_size)
+                .is_some_and(|end| end <= len)
+        })
+        .ok_or_else(|| corrupt(MSG_CORRUPT))?;
+    reader.seek(SeekFrom::Start(start))?;
+    let input = io::BufReader::new((&mut *reader).take(streams.pack_size));
+    let size = streams.unpack;
+    let decoder: Box<dyn Read + '_> = if *id == EncoderMethod::ID_COPY {
+        Box::new(input)
+    } else if *id == EncoderMethod::ID_LZMA2 {
+        let dict = lzma2_dict(props).ok_or_else(|| corrupt(MSG_CORRUPT))?;
+        Box::new(lzma_rust2::Lzma2Reader::new(input, dict as u32, None))
+    } else if *id == EncoderMethod::ID_LZMA && props.len() >= 5 {
+        let dict = u32::from_le_bytes(props[1..5].try_into().unwrap());
+        let reader = lzma_rust2::LzmaReader::new_with_props(input, size, props[0], dict, None)
+            .map_err(|_| corrupt(MSG_CORRUPT))?;
+        Box::new(reader)
+    } else {
+        return Err(corrupt(MSG_CORRUPT));
+    };
+    let mut out = Vec::new();
+    decoder.take(size).read_to_end(&mut out)?;
+    if out.len() as u64 != size {
+        return Err(corrupt(MSG_CORRUPT));
+    }
+    Ok(Some(out))
+}
+
+fn check_header_size<R: Read + Seek>(
+    reader: &mut R,
+    max: u64,
+    max_entries: usize,
+) -> io::Result<()> {
     let len = reader.seek(SeekFrom::End(0))?;
     reader.rewind()?;
     let mut start = [0u8; 32];
@@ -641,9 +700,18 @@ fn check_header_size<R: Read + Seek>(reader: &mut R, max: u64) -> io::Result<()>
     };
     match probe.byte()? {
         0x17 => {
-            probe.streams(Some(max))?;
+            let streams = probe.streams(Some(max))?;
+            if let Some(decoded) = decode_header(reader, &streams, len)? {
+                let mut inner = HeaderProbe {
+                    bytes: &decoded,
+                    bound: decoded.len() as u64,
+                };
+                // A nested encoded header is never written by a 7z implementation.
+                inner.expect(0x01)?;
+                inner.header(max_entries)?;
+            }
         }
-        0x01 => probe.header()?,
+        0x01 => probe.header(max_entries)?,
         _ => {}
     }
     reader.rewind()?;
@@ -664,7 +732,8 @@ pub(crate) fn index(
         Arc::new(Stats::default()),
         None,
     );
-    check_header_size(&mut reader, limits.index_dir_bytes).map_err(|e| map_io(e, path))?;
+    check_header_size(&mut reader, limits.index_dir_bytes, limits.max_entries)
+        .map_err(|e| map_io(e, path))?;
     let archive =
         Archive::read(&mut reader, &Password::empty()).map_err(|e| seven_error(e, path))?;
     if archive.files.len() > limits.max_entries {

@@ -1025,6 +1025,35 @@ fn seven_small_dictionary_is_not_a_limit_error() {
     }
 }
 
+#[test]
+fn seven_huge_file_count_is_rejected_before_allocating() {
+    // Plain header: FilesInfo declaring 8 Mi files in an 8 MiB header.
+    let mut header = vec![0x01, 0x05];
+    header.extend(seven_number((8 << 20) - 16));
+    header.resize(8 << 20, 0);
+    assert_too_large(open_seven(&seven_container(&[], &header)));
+    // Encoded header (Copy coder) hiding the same declaration.
+    let mut inner = vec![0x01, 0x05];
+    inner.extend(seven_number(10_000_000));
+    inner.resize(64, 0);
+    let mut header = vec![0x17];
+    header.extend(seven_streams(
+        &[0x00],
+        &[],
+        inner.len() as u64,
+        inner.len() as u64,
+    ));
+    assert_too_large(open_seven(&seven_container(&inner, &header)));
+    // A realistic count in the same shape is no limit error.
+    let mut header = vec![0x01, 0x05];
+    header.extend(seven_number(10));
+    header.resize(64, 0);
+    match open_seven(&seven_container(&[], &header)) {
+        Err(error) => assert!(error.to_string().contains("beschädigt"), "{error}"),
+        Ok(_) => panic!("bogus archive"),
+    }
+}
+
 // ------------------------------------------------------------ range and cost
 
 fn noise(len: usize) -> Vec<u8> {

@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- 7z archives: a tiny archive can no longer make the reader allocate gigabytes. Coders that need more than 512 MiB (LZMA/LZMA2 dictionary, PPMd memory) and headers that declare more files than the entry limit are now rejected as too large before anything is allocated (#60, #61).
+
 ## [0.4.5] - 2026-11-25
 
 ### Fixed
