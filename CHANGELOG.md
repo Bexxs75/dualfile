@@ -5,9 +5,17 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-11-25
+
 ### Added
 
 - RAR: the AppImage now carries its own 7-Zip (`7zz`), so RAR archives open without `unrar` or `7z` installed. An installed `unrar` is still used first, then the shipped `7zz`, then `7zz`/`7z` from the system (#31).
+
+### Changed
+
+- Large folders: the file list now only draws the rows that are visible (virtual list). A folder with about 44,000 entries opens in 0.6 s instead of 30 s, sorting and filtering take about 0.3 s, and the web view needs about 0.6 GiB instead of 4 GiB (#63, measured in #28).
+- Settings window: the size can be remembered (ask / always / never) (#62).
+- WebDAV (https) and NFS places known to the system are now offered as their own connections; `gio` runs on the host inside Flatpak (#31).
 
 ### Notes
 

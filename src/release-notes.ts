@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.7": {
+    date: "2026-11-25",
+    de: {
+      new: ["RAR-Archive öffnen sich jetzt auch ohne installiertes unrar oder 7z: Das AppImage bringt ein eigenes 7-Zip mit."],
+      improved: ["Große Ordner: Die Dateiliste zeichnet nur noch die sichtbaren Zeilen. Ein Ordner mit rund 44.000 Einträgen öffnet in 0,6 Sekunden statt in 30, Sortieren und Filtern dauern etwa 0,3 Sekunden, der Speicherbedarf sinkt von 4 auf 0,6 GiB.", "Einstellungen: Die Fenstergröße kann gemerkt werden (Fragen, Immer merken, Nie merken).", "WebDAV- (https) und NFS-Orte des Systems erscheinen als eigene Verbindungen."],
+      fixed: [],
+    },
+    en: {
+      new: ["RAR archives now open even without unrar or 7z installed: the AppImage ships its own 7-Zip."],
+      improved: ["Large folders: the file list only draws the visible rows. A folder with about 44,000 entries opens in 0.6 seconds instead of 30, sorting and filtering take about 0.3 seconds, and memory use drops from 4 to 0.6 GiB.", "Settings: the window size can be remembered (ask, always, never).", "WebDAV (https) and NFS places known to the system appear as their own connections."],
+      fixed: [],
+    },
+  },
   "0.4.6": {
     date: "2026-11-25",
     de: {
