@@ -20,6 +20,13 @@ Keep required upstream notices and license texts when distributing binaries; thi
 - Cargo `r-efi` 5.3.0: `MIT OR Apache-2.0 OR LGPL-2.1-or-later`
 - Cargo `r-efi` 6.0.0: `MIT OR Apache-2.0 OR LGPL-2.1-or-later`
 
+## Shipped helper programs (not in the lockfiles)
+
+- **7-Zip 26.06** (`7zzs`, installed as `usr/bin/7zz`) in the AppImage and tarball, one static build per architecture (x86_64, aarch64) from https://github.com/ip7z/7zip/releases/tag/26.06 (see https://www.7-zip.org/). Dualfile starts it as a separate program to read RAR archives; it is not linked into Dualfile.
+  Licenses: GNU LGPL (most code), GNU LGPL with the unRAR license restriction (RAR decoder), and further notices for some files; the full text is shipped as `usr/share/doc/7zip/License.txt`.
+  The unRAR restriction: the unRAR sources cannot be used to re-create the RAR compression algorithm, which is proprietary; the RAR code may not be used to develop a RAR (WinRAR) compatible archiver.
+  Source code (LGPL offer): https://github.com/ip7z/7zip/releases/download/26.06/7z2606-src.tar.xz (SHA-256 `a4e374c8f864f51df48c2cfd0e1413ec3b2ea030deae852d6a655402ebb61ac4`). Details: `docs/third-party-7zip.md`.
+
 ## Inventory
 
 | Ecosystem | Package | Version | License |

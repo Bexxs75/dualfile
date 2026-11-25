@@ -1,5 +1,5 @@
-//! RAR, read only, through an external helper (`unrar`, `7zz` or `7z`) found in the PATH at
-//! run time. The helper is started without a shell, with an argument list that ends option
+//! RAR, read only, through an external helper (`unrar`, `7zz` or `7z`) found at run time: on the
+//! system, or the `7zz` shipped with the AppImage/Flatpak. The helper is started without a shell, with an argument list that ends option
 //! parsing (`--`), an empty temporary working folder, a cleaned environment and no stdin.
 //! A helper that shows no progress for `RarConfig::timeout` is killed.
 
@@ -8,6 +8,7 @@ use super::index::{ArchiveLimits, IndexBuilder, Loc, RawEntry, RawKind};
 use super::zipfmt::{days_from_civil, unix_time};
 use super::{RarConfig, Source};
 use crate::error::{Error, Result};
+use crate::helpers::{self, HelperEnv, HelperKind};
 use std::ffi::OsString;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -42,50 +43,19 @@ pub(crate) struct RarBackend {
     config: RarConfig,
 }
 
-fn is_executable(path: &Path) -> bool {
-    let Ok(meta) = std::fs::metadata(path) else {
-        return false;
-    };
-    if !meta.is_file() {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        meta.permissions().mode() & 0o111 != 0
-    }
-    #[cfg(not(unix))]
-    {
-        true
-    }
-}
-
-/// Finds `unrar`, then `7zz`, then `7z` in the configured search path (default: `PATH`).
+/// Finds `unrar` on the system, then the `7zz` shipped with the package, then `7zz` and `7z`
+/// on the system (see [`crate::helpers`]).
 pub(crate) fn find_tool(config: &RarConfig) -> Option<Tool> {
-    let search = config
-        .search_path
-        .clone()
-        .or_else(|| std::env::var_os("PATH"))?;
-    let dirs: Vec<PathBuf> = std::env::split_paths(&search).collect();
-    for (name, kind) in [
-        ("unrar", ToolKind::Unrar),
-        ("7zz", ToolKind::SevenZip),
-        ("7z", ToolKind::SevenZip),
-    ] {
-        for dir in &dirs {
-            if dir.as_os_str().is_empty() {
-                continue;
-            }
-            let candidate = dir.join(name);
-            if is_executable(&candidate) {
-                return Some(Tool {
-                    kind,
-                    program: candidate,
-                });
-            }
-        }
-    }
-    None
+    let env = config.helper_env.clone().unwrap_or_else(HelperEnv::current);
+    let spec = helpers::spec("rar")?;
+    let found = helpers::locate(spec, config.search_path.as_deref(), &env)?;
+    Some(Tool {
+        kind: match found.kind {
+            HelperKind::Unrar => ToolKind::Unrar,
+            HelperKind::SevenZip => ToolKind::SevenZip,
+        },
+        program: found.program,
+    })
 }
 
 /// A path argument that can never be read as an option.

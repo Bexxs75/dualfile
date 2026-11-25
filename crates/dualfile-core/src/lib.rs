@@ -5,6 +5,7 @@ pub mod compare;
 pub mod connections;
 pub mod dupes;
 pub mod error;
+pub mod helpers;
 pub mod jobs;
 pub mod lister;
 pub mod mediatags;

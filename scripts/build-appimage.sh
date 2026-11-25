@@ -31,6 +31,23 @@ for library in \
     libxcb-render.so.0 libxcb-shm.so.0 libXau.so.6 libXdmcp.so.6; do
     rm -f -- "$WORK_DIR/AppDir/usr/lib/$library"
 done
+
+# RAR helper: the static 7-Zip console build (7zzs) ships as usr/bin/7zz (found by rar.rs,
+# see docs/third-party-7zip.md). The archive must be downloaded and its SHA-256 verified by the
+# caller (release.yml); this script does not download anything. SKIP_7ZZ=1 builds without it.
+if [[ "${SKIP_7ZZ:-0}" != 1 ]]; then
+    : "${SEVENZIP_ARCHIVE:?SEVENZIP_ARCHIVE muss auf das geprüfte 7z*-linux-*.tar.xz zeigen (oder SKIP_7ZZ=1)}"
+    [[ -f "$SEVENZIP_ARCHIVE" ]] || { echo 'SEVENZIP_ARCHIVE nicht gefunden' >&2; exit 1; }
+    mkdir -p -- "$WORK_DIR/7zip"
+    tar -xJf "$SEVENZIP_ARCHIVE" -C "$WORK_DIR/7zip" 7zzs License.txt
+    install -D -m 0755 -- "$WORK_DIR/7zip/7zzs" "$WORK_DIR/AppDir/usr/bin/7zz"
+    install -D -m 0644 -- "$WORK_DIR/7zip/License.txt" "$WORK_DIR/AppDir/usr/share/doc/7zip/License.txt"
+    # Fail the build instead of shipping a broken or dynamically linked helper.
+    [[ -x "$WORK_DIR/AppDir/usr/bin/7zz" && -s "$WORK_DIR/AppDir/usr/share/doc/7zip/License.txt" ]] \
+        || { echo '7zz oder Lizenzdatei fehlt in der AppDir' >&2; exit 1; }
+    file -b -- "$WORK_DIR/AppDir/usr/bin/7zz" | grep -q 'statically linked' \
+        || { echo '7zz ist nicht statisch gelinkt' >&2; exit 1; }
+fi
 cd -- "$WORK_DIR"
 ARCH="$ARCH" "$APPIMAGETOOL" AppDir "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.AppImage"
 
@@ -38,3 +55,8 @@ ARCH="$ARCH" "$APPIMAGETOOL" AppDir "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.AppImag
 # with a single named top-level directory, runnable via ./Dualfile-*/AppRun.
 tar -czf "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.tar.gz" -C "$WORK_DIR" \
     --transform "s,^AppDir,Dualfile-$VERSION-$ARCH," AppDir
+
+if [[ "${SKIP_7ZZ:-0}" != 1 ]]; then
+    tar -tzf "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.tar.gz" | grep -q "^Dualfile-$VERSION-$ARCH/usr/bin/7zz$" \
+        || { echo '7zz fehlt im Tarball' >&2; exit 1; }
+fi

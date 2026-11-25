@@ -298,8 +298,11 @@ impl<R: Seek> Seek for Counted<R> {
 /// Settings for the external RAR helper programs.
 #[derive(Clone, Debug)]
 pub struct RarConfig {
-    /// Directories searched for `unrar`/`7zz`/`7z`; `None` means the `PATH` of the process.
+    /// Directories searched for `unrar`/`7zz`/`7z` on the system; `None` means the `PATH` of the process.
     pub search_path: Option<OsString>,
+    /// Environment used to find the helper shipped with the package; `None` means the
+    /// running process (AppImage `APPDIR`, Flatpak `/app/bin`).
+    pub helper_env: Option<crate::helpers::HelperEnv>,
     /// A helper that shows no progress (no output) for this long is killed.
     pub timeout: Duration,
     /// Upper bound for the listing output.
@@ -310,6 +313,7 @@ impl Default for RarConfig {
     fn default() -> Self {
         Self {
             search_path: None,
+            helper_env: None,
             timeout: Duration::from_secs(60),
             output_limit: 64 << 20,
         }

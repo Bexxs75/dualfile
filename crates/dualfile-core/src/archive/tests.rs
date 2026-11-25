@@ -1512,9 +1512,20 @@ mod rar_tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
+    fn plain_env() -> crate::helpers::HelperEnv {
+        crate::helpers::HelperEnv {
+            packaging: dualfile_platform::Packaging::Plain,
+            appdir: None,
+            exe_dir: None,
+            flatpak_bin: std::path::PathBuf::from("/nonexistent"),
+        }
+    }
+
     fn config(dir: &Path) -> RarConfig {
         RarConfig {
             search_path: Some(dir.as_os_str().to_owned()),
+            // no shipped helper, whatever the test machine looks like
+            helper_env: Some(plain_env()),
             timeout: Duration::from_millis(400),
             output_limit: 1 << 20,
         }
@@ -1574,6 +1585,36 @@ mod rar_tests {
         let plain = tempfile::tempdir().unwrap();
         fs::write(plain.path().join("unrar"), "x").unwrap();
         assert!(rar::find_tool(&config(plain.path())).is_none());
+    }
+
+    #[test]
+    fn shipped_7zz_comes_after_system_unrar_and_before_path_7zz() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let sys = tempfile::tempdir().unwrap();
+        let shipped = tempfile::tempdir().unwrap();
+        script(shipped.path(), "7zz", "exit 0");
+        let mut cfg = config(sys.path());
+        cfg.helper_env = Some(crate::helpers::HelperEnv {
+            packaging: dualfile_platform::Packaging::Flatpak,
+            flatpak_bin: shipped.path().to_path_buf(),
+            ..plain_env()
+        });
+        // only the shipped copy
+        let tool = rar::find_tool(&cfg).unwrap();
+        assert_eq!(tool.kind, rar::ToolKind::SevenZip);
+        assert_eq!(tool.program, shipped.path().join("7zz"));
+        // a 7zz / 7z in PATH does not replace it
+        script(sys.path(), "7zz", "exit 0");
+        script(sys.path(), "7z", "exit 0");
+        assert_eq!(
+            rar::find_tool(&cfg).unwrap().program,
+            shipped.path().join("7zz")
+        );
+        // an installed unrar still wins, as before
+        script(sys.path(), "unrar", "exit 0");
+        let tool = rar::find_tool(&cfg).unwrap();
+        assert_eq!(tool.kind, rar::ToolKind::Unrar);
+        assert_eq!(tool.program, sys.path().join("unrar"));
     }
 
     #[test]

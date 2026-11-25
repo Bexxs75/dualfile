@@ -5,6 +5,14 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Added
+
+- RAR: the AppImage now carries its own 7-Zip (`7zz`), so RAR archives open without `unrar` or `7z` installed. An installed `unrar` is still used first, then the shipped `7zz`, then `7zz`/`7z` from the system (#31).
+
+### Notes
+
+- Licenses: the shipped 7-Zip is LGPL with the unRAR restriction; notice and source link are in `THIRD-PARTY-LICENSES.md` and `docs/third-party-7zip.md` (#31).
+
 ## [0.4.6] - 2026-11-25
 
 ### Security
