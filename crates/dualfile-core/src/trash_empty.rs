@@ -5,7 +5,7 @@ use crate::{
     places_pool::{Pool, ProgressWatchdog},
     Error, VPath,
 };
-use rustix::fs::{openat, Mode, OFlags, CWD};
+use dualfile_platform::trash_dir::{device, OtherWritable};
 use std::{
     fs::File,
     path::{Path, PathBuf},
@@ -54,58 +54,11 @@ fn candidates(table: &str, data: Option<&Path>, uid: u32) -> Vec<PathBuf> {
     result.dedup();
     result
 }
-fn open_dir(path: &Path) -> std::io::Result<File> {
-    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
-    let mut fd = openat(CWD, "/", flags, Mode::empty())?;
-    if !path.is_absolute() {
-        return Err(std::io::ErrorKind::InvalidInput.into());
-    }
-    for part in path.components() {
-        match part {
-            std::path::Component::RootDir => {}
-            std::path::Component::Normal(name) => fd = openat(&fd, name, flags, Mode::empty())?,
-            _ => return Err(std::io::ErrorKind::InvalidInput.into()),
-        }
-    }
-    Ok(fd.into())
-}
-/// Why an owned directory was refused: it is writable by group or others.
-#[derive(Debug)]
-struct OtherWritable(u32);
-impl std::fmt::Display for OtherWritable {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "directory is writable by others (mode {:03o})", self.0)
-    }
-}
-impl std::error::Error for OtherWritable {}
-/// `Ok(None)` = fine, `Ok(Some(mode))` = owned but writable by others, `Err(())` = not ours.
-fn check_owned(file: &File, uid: u32) -> Result<Option<u32>, ()> {
-    use std::os::unix::fs::MetadataExt;
-    let meta = file.metadata().map_err(|_| ())?;
-    if meta.uid() != uid {
-        return Err(());
-    }
-    Ok((meta.mode() & 0o022 != 0).then_some(meta.mode() & 0o777))
-}
+/// The shared trust check (#56): root, `files` and `info` opened without following symlinks,
+/// owned by `uid` and not writable by group or others.
 fn open_trash(path: &Path, uid: u32) -> std::io::Result<(File, File, File)> {
-    let root = open_dir(path)?;
-    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
-    let files = File::from(openat(&root, "files", flags, Mode::empty())?);
-    let info = File::from(openat(&root, "info", flags, Mode::empty())?);
-    let mut loose = None;
-    for dir in [&root, &files, &info] {
-        match check_owned(dir, uid) {
-            Ok(mode) => loose = loose.or(mode),
-            Err(()) => return Err(std::io::ErrorKind::PermissionDenied.into()),
-        }
-    }
-    if let Some(mode) = loose {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            OtherWritable(mode),
-        ));
-    }
-    Ok((root, files, info))
+    let trash = dualfile_platform::trash_dir::owned_trash_dir(path, uid)?;
+    Ok((trash.root, trash.files, trash.info))
 }
 /// Why a trash directory was left out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,10 +177,6 @@ fn remove_entry(
 ) -> std::io::Result<bool> {
     remove_entry_with_device(parent, name, job, progress, root_device, device)
 }
-fn device(file: &File) -> std::io::Result<u64> {
-    use std::os::unix::fs::MetadataExt;
-    Ok(file.metadata()?.dev())
-}
 fn same_device(file: &File, root_device: u64) -> std::io::Result<()> {
     if device(file)? != root_device {
         return Err(std::io::ErrorKind::PermissionDenied.into());
@@ -242,67 +191,14 @@ fn remove_entry_with_device(
     root_device: u64,
     device: impl Fn(&File) -> std::io::Result<u64>,
 ) -> std::io::Result<bool> {
-    use rustix::fs::{statat, unlinkat, AtFlags, FileType};
-    use std::os::unix::ffi::OsStrExt;
-    struct Frame {
-        directory: File,
-        entries: rustix::fs::Dir,
-        name: std::ffi::OsString,
-    }
-    let mut stack: Vec<Frame> = Vec::new();
-    let mut pending = Some(name.to_os_string());
-    loop {
-        if progress.checkpoint(|| job.checkpoint()) {
-            return Ok(false);
-        }
-        if let Some(name) = pending.take() {
-            let parent = stack.last().map_or(parent, |frame| &frame.directory);
-            let meta = statat(parent, &name, AtFlags::SYMLINK_NOFOLLOW)?;
-            if FileType::from_raw_mode(meta.st_mode) == FileType::Directory {
-                let child = File::from(openat(
-                    parent,
-                    &name,
-                    OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-                    Mode::empty(),
-                )?);
-                // Check the opened handle, not the preceding lstat: a mount or
-                // replacement may have appeared between those two syscalls.
-                if device(&child)? != root_device {
-                    return Err(std::io::ErrorKind::PermissionDenied.into());
-                }
-                let entries = rustix::fs::Dir::read_from(&child)?;
-                stack.push(Frame {
-                    directory: child,
-                    entries,
-                    name,
-                });
-            } else {
-                if progress.checkpoint(|| job.checkpoint()) {
-                    return Ok(false);
-                }
-                unlinkat(parent, &name, AtFlags::empty())?;
-                progress.progress();
-            }
-        } else if let Some(frame) = stack.last_mut() {
-            if let Some(entry) = frame.entries.next() {
-                let entry = entry?;
-                let name = entry.file_name().to_bytes();
-                if name != b"." && name != b".." {
-                    pending = Some(std::ffi::OsStr::from_bytes(name).to_os_string());
-                }
-            } else {
-                let frame = stack.pop().expect("frame was present");
-                let parent = stack.last().map_or(parent, |frame| &frame.directory);
-                if progress.checkpoint(|| job.checkpoint()) {
-                    return Ok(false);
-                }
-                unlinkat(parent, &frame.name, AtFlags::REMOVEDIR)?;
-                progress.progress();
-            }
-        } else {
-            return Ok(true);
-        }
-    }
+    dualfile_platform::trash_dir::remove_tree_at(
+        parent,
+        name,
+        root_device,
+        device,
+        || progress.checkpoint(|| job.checkpoint()),
+        || progress.progress(),
+    )
 }
 fn invalidate_sizes(root: &File) -> std::io::Result<()> {
     for cache in ["directorysizes", ".trashsize"] {
@@ -450,6 +346,7 @@ fn empty_with<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dualfile_platform::trash_dir::open_dir_nofollow as open_dir;
     fn trash_fixture(data: &Path) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let root = data.join("Trash");

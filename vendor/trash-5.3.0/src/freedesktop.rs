@@ -297,7 +297,14 @@ fn eval_trash_folders() -> Result<EvaluatedTrashFolders, Error> {
     let sorted_mount_points = get_sorted_mount_points()?;
     for mount in &sorted_mount_points {
         execute_on_mounted_trash_folders(uid, &mount.mnt_dir, false, false, |trash_path| {
-            trash_folders.insert(trash_path);
+            // dualfile patch (#56): only trusted per-mount trash folders (no symlink, owned by
+            // us, not writable by others) are listed, so restore/purge never reach another one.
+            match dualfile_platform::trash_dir::owned_trash_dir(&trash_path, unsafe { libc::geteuid() }) {
+                Ok(_) => {
+                    trash_folders.insert(trash_path);
+                }
+                Err(e) => warn!("Skipping the untrusted trash folder {:?}: {}", trash_path, e),
+            }
             Ok(())
         })
         .map_err(|(p, e)| fs_error(p, e))?;
@@ -360,18 +367,19 @@ where
         // that either there's a bug in this code or the target system didn't follow
         // the specification.
         let file = restorable_file_in_trash_from_info_file(info_file);
-        if file.is_dir() {
-            std::fs::remove_dir_all(&file).map_err(|e| fs_error(&file, e))?;
-        // TODO Update directory size cache if there's one.
-        } else {
+        // dualfile patch (#56): remove through the handles of a trusted trash folder only,
+        // never following a symlink (formerly `remove_dir_all`/`remove_file` on paths).
+        let (trash, name, record) = open_item_trash(info_file)?;
+        let root_device = dualfile_platform::trash_dir::device(&trash.files).map_err(|e| fs_error(&file, e))?;
+        let device = dualfile_platform::trash_dir::device;
+        match dualfile_platform::trash_dir::remove_tree_at(&trash.files, &name, root_device, device, || false, || {}) {
+            Ok(_) => {}
             // Ignore the error if the file is already missing.
-            match std::fs::remove_file(&file) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-                Err(e) => return Err(fs_error(&file, e)),
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(fs_error(&file, e)),
         }
-        std::fs::remove_file(info_file).map_err(|e| fs_error(info_file, e))?;
+        // TODO Update directory size cache if there's one.
+        dualfile_platform::trash_dir::unlink_at(&trash.info, &record).map_err(|e| fs_error(info_file, e))?;
     }
 
     Ok(())
@@ -401,14 +409,23 @@ where
         // that either there's a bug in this code or the target system didn't follow
         // the specification.
         let file = restorable_file_in_trash_from_info_file(info_file);
-        ensure_virtually_exists(&file)?;
+        // dualfile patch (#56): restore only from a trusted trash folder, through its handles;
+        // the target from the .trashinfo is only used once the folder passed the check.
+        let (trash, name, record) = open_item_trash(info_file)?;
+        let is_dir = match dualfile_platform::trash_dir::is_dir_at(&trash.files, &name) {
+            Ok(is_dir) => is_dir,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Err(fs_error(&file, std::io::Error::new(std::io::ErrorKind::NotFound, MISSING_TRASH_FILE)))
+            }
+            Err(e) => return Err(fs_error(&file, e)),
+        };
         // TODO add option to forcefully replace any target at the restore location
         // if it already exists.
         let original_path = item.original_path();
         // Make sure the parent exists so that `create_dir` doesn't faile due to that.
         std::fs::create_dir_all(&item.original_parent).map_err(|e| fs_error(&item.original_parent, e))?;
         let mut collision = false;
-        if file.is_dir() {
+        if is_dir {
             // NOTE create_dir_all succeeds when the path already exist but create_dir
             // fails with `std::io::ErrorKind::AlreadyExists`.
             if let Err(e) = std::fs::create_dir(&original_path) {
@@ -432,10 +449,37 @@ where
             let remaining: Vec<_> = std::iter::once(item).chain(iter).collect();
             return Err(Error::RestoreCollision { path: original_path, remaining_items: remaining });
         }
-        std::fs::rename(&file, &original_path).map_err(|e| fs_error(&file, e))?;
-        std::fs::remove_file(info_file).map_err(|e| fs_error(info_file, e))?;
+        // dualfile patch (#56): rename and unlink through the trusted handles.
+        dualfile_platform::trash_dir::rename_out(&trash.files, &name, &original_path).map_err(|e| fs_error(&file, e))?;
+        dualfile_platform::trash_dir::unlink_at(&trash.info, &record).map_err(|e| fs_error(info_file, e))?;
     }
     Ok(())
+}
+
+/// dualfile patch (#56): opens the trash folder of an item (`<trash>/info/<name>.trashinfo`).
+/// The home trash is trusted as it is; any other folder must pass the shared ownership and
+/// mode check, or the item is refused with `PermissionDenied`. Returns the handles, the
+/// in-trash name and the info file name.
+fn open_item_trash(
+    info_file: &OsStr,
+) -> Result<(dualfile_platform::trash_dir::OwnedTrashDir, OsString, OsString), Error> {
+    let info_path = Path::new(info_file);
+    let invalid = || Error::Unknown { description: format!("Invalid trash item id {info_path:?}") };
+    let info_dir = info_path.parent().ok_or_else(invalid)?;
+    let folder = info_dir.parent().ok_or_else(invalid)?;
+    let (Some(name), Some(record)) = (info_path.file_stem(), info_path.file_name()) else {
+        return Err(invalid());
+    };
+    if info_dir.file_name() != Some(OsStr::new("info")) {
+        return Err(invalid());
+    }
+    let trash = if home_trash().ok().as_deref() == Some(folder) {
+        dualfile_platform::trash_dir::home_trash_dir(folder)
+    } else {
+        dualfile_platform::trash_dir::owned_trash_dir(folder, unsafe { libc::geteuid() })
+    }
+    .map_err(|e| fs_error(folder, e))?;
+    Ok((trash, name.to_owned(), record.to_owned()))
 }
 
 /// According to the specification (see at the top of the file) there are two kinds of

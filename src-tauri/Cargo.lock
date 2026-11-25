@@ -1426,6 +1426,9 @@ dependencies = [
 [[package]]
 name = "dualfile-platform"
 version = "0.4.5"
+dependencies = [
+ "rustix",
+]
 
 [[package]]
 name = "dualfile-plugin"

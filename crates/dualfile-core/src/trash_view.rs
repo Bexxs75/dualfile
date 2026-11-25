@@ -204,4 +204,144 @@ mod tests {
     fn empty_selection_is_rejected() {
         assert!(matches!(select(&[]), Err(Error::InvalidInput(_))));
     }
+
+    /// A per-mount style trash `<base>/.Trash-<uid>` with `files/` and `info/` (mode 0700) and
+    /// one entry `name` whose .trashinfo points to `<base>/dest/<name>`.
+    #[cfg(target_os = "linux")]
+    fn mount_trash(base: &Path, name: &str) -> (PathBuf, trash::TrashItem) {
+        use std::os::unix::fs::PermissionsExt;
+        let root = base.join(format!(".Trash-{}", unsafe { libc::geteuid() }));
+        for dir in [root.clone(), root.join("files"), root.join("info")] {
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let dest = base.join("dest");
+        std::fs::create_dir_all(&dest).unwrap();
+        let info = root.join(format!("info/{name}.trashinfo"));
+        std::fs::write(
+            &info,
+            format!(
+                "[Trash Info]\nPath={}\nDeletionDate=2026-11-25T10:00:00\n",
+                dest.join(name).display()
+            ),
+        )
+        .unwrap();
+        let item = trash::TrashItem {
+            id: info.into_os_string(),
+            name: name.into(),
+            original_parent: dest,
+            time_deleted: 0,
+        };
+        (root, item)
+    }
+
+    /// The victim: a directory outside any trash with a file inside.
+    #[cfg(target_os = "linux")]
+    fn victim(base: &Path, name: &str) -> PathBuf {
+        let victim = base.join("victim");
+        std::fs::create_dir_all(victim.join(name)).unwrap();
+        std::fs::write(victim.join(name).join("keep"), b"keep").unwrap();
+        victim
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn own_trusted_mount_trash_restores_and_purges() {
+        let temp = tempfile::tempdir().unwrap();
+        let (root, item) = mount_trash(temp.path(), "doc");
+        std::fs::write(root.join("files/doc"), b"doc").unwrap();
+        trash::os_limited::restore_all([item.clone()]).unwrap();
+        assert_eq!(std::fs::read(temp.path().join("dest/doc")).unwrap(), b"doc");
+        assert!(!root.join("files/doc").exists());
+        assert!(!root.join("info/doc.trashinfo").exists());
+
+        let (root, item) = mount_trash(temp.path(), "tree");
+        std::fs::create_dir_all(root.join("files/tree/sub")).unwrap();
+        std::fs::write(root.join("files/tree/sub/payload"), b"x").unwrap();
+        // A symlink inside the trashed tree is unlinked, its target stays.
+        let outside = victim(temp.path(), "linked");
+        std::os::unix::fs::symlink(outside.join("linked"), root.join("files/tree/link")).unwrap();
+        trash::os_limited::purge_all([item]).unwrap();
+        assert!(!root.join("files/tree").exists());
+        assert!(!root.join("info/tree.trashinfo").exists());
+        assert!(outside.join("linked/keep").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn foreign_trash_with_files_symlinked_into_home_is_not_touched() {
+        let temp = tempfile::tempdir().unwrap();
+        let (root, item) = mount_trash(temp.path(), "doc");
+        let victim = victim(temp.path(), "doc");
+        // The attack: files/ is a link to a directory of the victim.
+        std::fs::remove_dir(root.join("files")).unwrap();
+        std::os::unix::fs::symlink(&victim, root.join("files")).unwrap();
+        assert!(
+            dualfile_platform::trash_dir::owned_trash_dir(&root, unsafe { libc::geteuid() })
+                .is_err()
+        );
+        assert!(trash::os_limited::purge_all([item.clone()]).is_err());
+        assert!(victim.join("doc/keep").exists());
+        assert!(trash::os_limited::restore_all([item]).is_err());
+        assert!(victim.join("doc/keep").exists());
+        assert!(!temp.path().join("dest/doc").exists());
+        assert!(root.join("info/doc.trashinfo").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn symlinked_trash_root_is_not_touched() {
+        let temp = tempfile::tempdir().unwrap();
+        let elsewhere = temp.path().join("elsewhere");
+        std::fs::create_dir(&elsewhere).unwrap();
+        let (real, item) = mount_trash(&elsewhere, "doc");
+        std::fs::write(real.join("files/doc"), b"doc").unwrap();
+        let mount = temp.path().join("mount");
+        std::fs::create_dir(&mount).unwrap();
+        let link = mount.join(real.file_name().unwrap());
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let item = trash::TrashItem {
+            id: link.join("info/doc.trashinfo").into_os_string(),
+            ..item
+        };
+        assert!(trash::os_limited::purge_all([item.clone()]).is_err());
+        assert!(trash::os_limited::restore_all([item]).is_err());
+        assert!(real.join("files/doc").exists());
+        assert!(real.join("info/doc.trashinfo").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn trash_writable_by_others_is_not_trusted() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let (root, item) = mount_trash(temp.path(), "doc");
+        std::fs::write(root.join("files/doc"), b"doc").unwrap();
+        for part in [root.clone(), root.join("files"), root.join("info")] {
+            for mode in [0o777, 0o775] {
+                std::fs::set_permissions(&part, std::fs::Permissions::from_mode(mode)).unwrap();
+                let checked = dualfile_platform::trash_dir::owned_trash_dir(&root, unsafe {
+                    libc::geteuid()
+                });
+                let refused = checked.unwrap_err();
+                assert!(refused
+                    .get_ref()
+                    .and_then(|e| e.downcast_ref::<dualfile_platform::trash_dir::OtherWritable>())
+                    .is_some_and(|loose| loose.0 == mode));
+                assert!(trash::os_limited::purge_all([item.clone()]).is_err());
+                assert!(trash::os_limited::restore_all([item.clone()]).is_err());
+                assert!(root.join("files/doc").exists());
+                assert!(!temp.path().join("dest/doc").exists());
+            }
+            std::fs::set_permissions(&part, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        // A foreign owner is refused too (checked without changing UIDs).
+        assert!(dualfile_platform::trash_dir::owned_trash_dir(
+            &root,
+            unsafe { libc::geteuid() }.wrapping_add(1)
+        )
+        .is_err());
+        trash::os_limited::purge_all([item]).unwrap();
+        assert!(!root.join("files/doc").exists());
+    }
 }

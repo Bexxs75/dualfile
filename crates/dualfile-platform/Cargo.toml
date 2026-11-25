@@ -3,3 +3,6 @@ name = "dualfile-platform"
 version.workspace = true
 edition = "2021"
 publish = false
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", features = ["fs"] }

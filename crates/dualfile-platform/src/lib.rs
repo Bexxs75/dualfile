@@ -5,6 +5,9 @@ use std::{
     process::Command,
 };
 
+#[cfg(unix)]
+pub mod trash_dir;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Packaging {
     AppImage,
