@@ -5,6 +5,10 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+### Fixed
+
+- WebDAV: folder children with names that cannot be shown (backslash, control characters, invalid UTF-8) or without a size are now listed as failed entries instead of being hidden, and deleting a folder is refused while the server still reports any child. Moving such a folder to a local location no longer deletes the files that were never copied (#59).
+
 ## [0.4.5] - 2026-11-25
 
 ### Fixed

@@ -127,10 +127,8 @@ fn remote(msg: &str) -> Error {
     Error::Remote(msg.to_owned())
 }
 
-/// Decodes `%XX` escapes in a single path segment (invalid escapes are kept literally). Returns
-/// `None` if the decoded bytes are not valid UTF-8, so two distinct hrefs can never collapse to the
-/// same lossily-replaced name.
-fn percent_decode(segment: &str) -> Option<String> {
+/// Decodes `%XX` escapes in a single path segment to raw bytes (invalid escapes are kept literally).
+fn percent_decode_bytes(segment: &str) -> Vec<u8> {
     let bytes = segment.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -147,7 +145,7 @@ fn percent_decode(segment: &str) -> Option<String> {
         out.push(bytes[i]);
         i += 1;
     }
-    String::from_utf8(out).ok()
+    out
 }
 
 /// The path portion of an href (an absolute URL's scheme/host is stripped).
@@ -161,15 +159,41 @@ fn href_path_str(href: &str) -> &str {
     }
 }
 
-/// Splits a raw (still percent-encoded) href path into decoded segments. Each segment is decoded on
-/// its own, so `%2F` stays inside one segment instead of forging a separator. Returns `None` if any
-/// segment is not valid UTF-8 after decoding.
-fn decoded_segments(href: &str) -> Option<Vec<String>> {
-    href_path_str(href)
+/// The name of a response that sits exactly one level under the requested collection, with the
+/// decoding being lossy (a non-UTF-8 name still counts as a child; the flag says it was not clean).
+/// Used for the "is the folder really empty" check and for marking children that cannot be shown.
+fn child_of(href: &str, requested: &[String]) -> Option<(String, bool)> {
+    let raw: Vec<&str> = href_path_str(href)
         .trim_matches('/')
         .split('/')
         .filter(|s| !s.is_empty())
-        .map(percent_decode)
+        .collect();
+    if raw.len() != requested.len() + 1 {
+        return None;
+    }
+    let mut clean = true;
+    let mut decoded = Vec::with_capacity(raw.len());
+    for seg in raw {
+        let bytes = percent_decode_bytes(seg);
+        match String::from_utf8(bytes) {
+            Ok(t) => decoded.push(t),
+            Err(e) => {
+                clean = false;
+                decoded.push(String::from_utf8_lossy(e.as_bytes()).into_owned());
+            }
+        }
+    }
+    if decoded[..requested.len()] != requested[..] {
+        return None;
+    }
+    let name = decoded.pop().unwrap_or_default();
+    Some((name, clean))
+}
+
+/// A name made safe to display: control characters replaced.
+fn display_name(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
         .collect()
 }
 
@@ -627,32 +651,40 @@ impl Vfs for WebdavVfs {
         let mut entries = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for r in responses {
-            // Drop a resource the server marked as errored, one without a usable resourcetype (its
-            // kind is unknown), or a file without a usable size (a remote copy needs the size).
-            if r.response_status.is_some_and(|s| !(200..300).contains(&s))
-                || !r.resourcetype_known
-                || (!r.is_collection && !r.size_known)
-            {
-                continue;
-            }
-            // A non-UTF-8 href is skipped, never lossily substituted into a colliding name.
-            let Some(child) = decoded_segments(&r.href) else {
+            // Only entries exactly one level under the requested collection are children.
+            let Some((name, clean)) = child_of(&r.href, &requested) else {
                 continue;
             };
-            // Accept only an entry exactly one level under the requested collection.
-            if child.len() != requested.len() + 1 || child[..requested.len()] != requested[..] {
-                continue;
-            }
-            let name = child.last().cloned().unwrap_or_default();
-            // Apply the shared server-name policy (separators, control chars, length, dots).
-            if crate::names::name_problem(&name).is_some() {
-                continue;
-            }
-            // A correct server never lists the same name twice; drop any later collision.
-            if !seen.insert(name.clone()) {
-                continue;
-            }
-            entries.push(entry_from(name, r.is_collection, r.size));
+            // A child that cannot be shown or copied faithfully is returned as an entry carrying an
+            // error (like SFTP does), never dropped: the core then counts it as a failure, so a
+            // move/delete of the parent cannot silently take it along.
+            let problem = if !clean {
+                Some("Der Name vom Server ist kein gültiges UTF-8")
+            } else if let Some(p) = crate::names::name_problem(&name) {
+                Some(p)
+            } else if r.response_status.is_some_and(|s| !(200..300).contains(&s)) {
+                Some("Der Server meldete für den Eintrag einen Fehler")
+            } else if !r.resourcetype_known {
+                Some("Der Server lieferte keinen Ressourcentyp")
+            } else if !r.is_collection && !r.size_known {
+                Some("Der Server lieferte keine Dateigröße")
+            } else if !seen.insert(name.clone()) {
+                // A correct server never lists the same name twice.
+                Some("Der Name kommt mehrfach vor")
+            } else {
+                None
+            };
+            let mut entry = entry_from(
+                if problem.is_some() {
+                    display_name(&name)
+                } else {
+                    name
+                },
+                r.is_collection,
+                if r.size_known { r.size } else { 0 },
+            );
+            entry.error = problem.map(str::to_owned);
+            entries.push(entry);
         }
         Ok(entries)
     }
@@ -747,10 +779,17 @@ impl Vfs for WebdavVfs {
         // only child entries (empty for a plain file or an empty collection), so this stays a no-op
         // for files. Residual: a child appearing between this check and the DELETE is still inherent
         // to plain WebDAV (no atomic conditional delete), matching the core's own lstat/unlink window.
-        if !self.list(p)?.is_empty() {
+        // The check runs on the RAW multistatus (every child href, also names `list` could not show
+        // or that lack a size), so an unlisted child can never be deleted along with its parent.
+        let path = self.server_path(p);
+        let requested = raw_segments(&path);
+        let responses = self.propfind(&path, 1, p)?;
+        if responses
+            .iter()
+            .any(|r| child_of(&r.href, &requested).is_some())
+        {
             return Err(Error::DirectoryNotEmpty(p.path().to_path_buf()));
         }
-        let path = self.server_path(p);
         let resp = self.transport.request("DELETE", &path, &[], None)?;
         match resp.status {
             200 | 204 => Ok(()),
@@ -1077,7 +1116,46 @@ mod tests {
           <d:response><d:href>/dav/ordner/%2e%2e%2fescape</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
         </d:multistatus>"#;
         let v = vfs(vec![(207, body.to_vec())]);
-        assert!(v.list(&vpath("/ordner")).unwrap().is_empty());
+        let entries = v.list(&vpath("/ordner")).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].error.is_some());
+    }
+
+    const MIXED: &[u8] = br#"<d:multistatus xmlns:d="DAV:">
+      <d:response><d:href>/dav/d/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+      <d:response><d:href>/dav/d/ok.txt</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>2</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+      <d:response><d:href>/dav/d/a%5Cb.txt</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>2</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+    </d:multistatus>"#;
+
+    #[test]
+    fn unusable_child_is_listed_with_an_error_not_dropped() {
+        // Fixes #59: a backslash name must stay visible as a failed entry so a move cannot succeed.
+        let v = vfs(vec![(207, MIXED.to_vec())]);
+        let mut entries = v.list(&vpath("/d")).unwrap();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].name, "a\\b.txt");
+        assert!(entries[0].error.is_some());
+        assert_eq!(entries[1].name, "ok.txt");
+        assert!(entries[1].error.is_none());
+    }
+
+    #[test]
+    fn delete_refuses_a_folder_whose_only_children_are_unlistable() {
+        // Fixes #59: the emptiness check looks at the raw multistatus, so children `list` cannot
+        // show (bad name, no size) still block the recursive DELETE.
+        let body = br#"<d:multistatus xmlns:d="DAV:">
+          <d:response><d:href>/dav/d/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+          <d:response><d:href>/dav/d/a%5Cb.txt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
+        </d:multistatus>"#;
+        let (v, t) = vfs_t(vec![(207, body.to_vec())]);
+        assert!(matches!(
+            v.remove_permanent(&vpath("/d")).unwrap_err(),
+            Error::DirectoryNotEmpty(_)
+        ));
+        let calls = t.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].method, "PROPFIND");
     }
 
     #[test]
@@ -1124,9 +1202,16 @@ mod tests {
         </d:multistatus>"#;
         let v = vfs(vec![(207, body.to_vec())]);
         let entries = v.list(&vpath("/ordner")).unwrap();
-        // "weg.txt" (404 response) and "nurgroesse.txt" (no usable resourcetype) are both dropped.
-        assert_eq!(sorted_names(entries.clone()), vec!["da.txt"]);
-        assert_eq!(entries[0].size, 7);
+        // Fixes #59: "weg.txt" (404 response) and "nurgroesse.txt" (no usable resourcetype) are
+        // listed with an error instead of being dropped; only "da.txt" is clean.
+        assert_eq!(
+            sorted_names(entries.clone()),
+            vec!["da.txt", "nurgroesse.txt", "weg.txt"]
+        );
+        let clean: Vec<_> = entries.iter().filter(|e| e.error.is_none()).collect();
+        assert_eq!(clean.len(), 1);
+        assert_eq!(clean[0].name, "da.txt");
+        assert_eq!(clean[0].size, 7);
     }
 
     #[test]
@@ -1137,7 +1222,9 @@ mod tests {
           <d:response><d:href>/dav/ordner/kaputt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 403 Forbidden</d:status></d:propstat></d:response>
         </d:multistatus>"#;
         let v = vfs(vec![(207, body.to_vec())]);
-        assert!(v.list(&vpath("/ordner")).unwrap().is_empty());
+        let entries = v.list(&vpath("/ordner")).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].error.is_some());
     }
 
     #[test]
@@ -1217,7 +1304,10 @@ mod tests {
           <d:response><d:href>/dav/ordner/a%5Cb</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>1</d:getcontentlength></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
         </d:multistatus>"#;
         let v = vfs(vec![(207, body.to_vec())]);
-        assert!(v.list(&vpath("/ordner")).unwrap().is_empty());
+        // Fixes #59: never dropped, returned as entries carrying an error.
+        let entries = v.list(&vpath("/ordner")).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|e| e.error.is_some()));
     }
 
     #[test]
@@ -1262,7 +1352,9 @@ mod tests {
           <d:response><d:href>/dav/ordner/ohnegroesse.txt</d:href><d:propstat><d:prop><d:resourcetype/></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>
         </d:multistatus>"#;
         let v = vfs(vec![(207, body.to_vec())]);
-        assert!(v.list(&vpath("/ordner")).unwrap().is_empty());
+        let entries = v.list(&vpath("/ordner")).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].error.is_some());
     }
 
     #[test]
@@ -1349,19 +1441,27 @@ mod tests {
     }
 
     #[test]
-    fn decoded_segments_split_before_decoding() {
+    fn child_of_splits_before_decoding_and_flags_bad_utf8() {
+        let req = vec!["dav".to_owned(), "a".to_owned()];
         assert_eq!(
-            decoded_segments("/dav/a/bild%20a.jpg").unwrap(),
-            vec!["dav", "a", "bild a.jpg"]
+            child_of("/dav/a/bild%20a.jpg", &req),
+            Some(("bild a.jpg".to_owned(), true))
         );
         assert_eq!(
-            decoded_segments("https://host/dav/ordner/").unwrap(),
-            vec!["dav", "ordner"]
+            child_of("https://host/dav/a/x/", &req),
+            Some(("x".to_owned(), true))
         );
         // An encoded slash stays within one segment.
-        assert_eq!(decoded_segments("/dav/a%2Fb").unwrap(), vec!["dav", "a/b"]);
-        // Invalid UTF-8 after decoding is rejected (not lossily substituted).
-        assert!(decoded_segments("/dav/%FF").is_none());
+        assert_eq!(
+            child_of("/dav/a/b%2Fc", &req),
+            Some(("b/c".to_owned(), true))
+        );
+        // Invalid UTF-8 is still a child, flagged as unclean (never silently dropped).
+        assert!(!child_of("/dav/a/%FF", &req).unwrap().1);
+        // Self, grandchildren and siblings are not children.
+        assert_eq!(child_of("/dav/a/", &req), None);
+        assert_eq!(child_of("/dav/a/x/y", &req), None);
+        assert_eq!(child_of("/dav/b/x", &req), None);
     }
 
     #[test]
