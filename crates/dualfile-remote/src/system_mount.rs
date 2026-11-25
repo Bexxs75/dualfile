@@ -24,14 +24,13 @@ pub fn run_gio(
     if place.url != url {
         return Err(MountError::Invalid);
     }
-    let mut command = Command::new(program);
-    command.arg("mount");
-    if unmount {
-        command.arg("-u");
-    }
+    let mut command = gio_command(
+        dualfile_core::packaging::packaging(),
+        program,
+        &place.url,
+        unmount,
+    );
     command
-        .arg("--")
-        .arg(&place.url)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
@@ -40,6 +39,22 @@ pub fn run_gio(
         dualfile_core::appenv::HelperError::Failed(message) => MountError::Failed(message),
         dualfile_core::appenv::HelperError::Timeout => MountError::Timeout(String::new()),
     })
+}
+/// `gio mount [-u] -- URL`. Inside Flatpak the sandbox has no `gio` with the user's GVfs daemon,
+/// so the command runs on the host (`flatpak-spawn --host`); elsewhere it is run directly.
+fn gio_command(
+    kind: dualfile_core::packaging::Packaging,
+    program: &Path,
+    url: &str,
+    unmount: bool,
+) -> Command {
+    let mut command = dualfile_core::packaging::host_command_with(kind, program);
+    command.arg("mount");
+    if unmount {
+        command.arg("-u");
+    }
+    command.arg("--").arg(url);
+    command
 }
 fn bounded_mounted_path(
     place: &dualfile_core::system_places::SystemPlace,
@@ -97,10 +112,42 @@ pub fn unmount(url: &str) -> Result<(), MountError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{connect, run_gio, MountError};
+    use super::{connect, gio_command, run_gio, MountError};
+    use dualfile_core::packaging::Packaging;
     use dualfile_core::system_places::DiscoveryPaths;
+    use std::path::Path;
     use std::{fs, os::unix::fs::PermissionsExt};
     use std::{process::Command, time::Duration};
+    #[test]
+    fn gio_runs_on_the_host_only_inside_flatpak() {
+        let args = |c: &Command| {
+            c.get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+        let flatpak = gio_command(Packaging::Flatpak, Path::new("gio"), "smb://h/s", false);
+        assert_eq!(flatpak.get_program(), "flatpak-spawn");
+        assert_eq!(
+            args(&flatpak),
+            [
+                "--host",
+                "--watch-bus",
+                "--env=LC_ALL=C",
+                "--env=LANGUAGE=",
+                "gio",
+                "mount",
+                "--",
+                "smb://h/s"
+            ]
+        );
+        let unmount = gio_command(Packaging::Flatpak, Path::new("gio"), "smb://h/s", true);
+        assert_eq!(&args(&unmount)[5..], ["mount", "-u", "--", "smb://h/s"]);
+        for kind in [Packaging::Plain, Packaging::AppImage] {
+            let plain = gio_command(kind, Path::new("gio"), "smb://h/s", true);
+            assert_eq!(plain.get_program(), "gio");
+            assert_eq!(args(&plain), ["mount", "-u", "--", "smb://h/s"]);
+        }
+    }
     #[test]
     fn connect_timeout_rechecks_mounts_even_when_sidebar_probes_are_stuck() {
         let tmp = tempfile::tempdir().unwrap();

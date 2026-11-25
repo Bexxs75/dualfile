@@ -135,8 +135,16 @@ impl SystemPlace {
             "ftp" => ConnectionProtocol::Ftp,
             "ftps" => ConnectionProtocol::Ftps,
             "smb" => ConnectionProtocol::Smb,
+            "nfs" => ConnectionProtocol::Nfs,
+            // Only https becomes an own connection: plain http needs an explicit user
+            // confirmation (`allow_plaintext`), which an import must not give silently.
+            "davs" | "webdavs" => ConnectionProtocol::Webdav,
             _ => ConnectionProtocol::System,
         };
+        let own_dav_or_nfs = matches!(
+            protocol,
+            ConnectionProtocol::Nfs | ConnectionProtocol::Webdav
+        );
         ConnectionProfile {
             name: self.name.clone(),
             protocol,
@@ -150,6 +158,8 @@ impl SystemPlace {
                 ConnectionProtocol::Sftp => 0,
                 ConnectionProtocol::System => 0,
                 ConnectionProtocol::Smb => 445,
+                ConnectionProtocol::Nfs => 2049,
+                ConnectionProtocol::Webdav => 443,
                 _ => 21,
             }),
             user: self.user.clone().unwrap_or_else(|| {
@@ -159,26 +169,55 @@ impl SystemPlace {
                     String::new()
                 }
             }),
-            share: if protocol == ConnectionProtocol::Smb {
-                self.path
+            share: match protocol {
+                ConnectionProtocol::Smb => self
+                    .path
                     .trim_start_matches('/')
                     .split('/')
                     .next()
                     .unwrap_or("")
-                    .into()
+                    .into(),
+                // WebDAV base path as the editor stores it for a discovered server.
+                ConnectionProtocol::Webdav => self.path.clone(),
+                _ => String::new(),
+            },
+            export: if protocol == ConnectionProtocol::Nfs {
+                self.path.clone()
             } else {
                 String::new()
             },
-            start_folder: Some(if protocol == ConnectionProtocol::Smb {
-                self.path
-                    .trim_start_matches('/')
-                    .split_once('/')
-                    .map(|(_, rest)| format!("/{rest}"))
-                    .unwrap_or_else(|| "/".into())
+            // NFS identity as the editor defaults it: the current user. No password is taken.
+            #[cfg(unix)]
+            uid: if protocol == ConnectionProtocol::Nfs {
+                // SAFETY: geteuid has no preconditions.
+                unsafe { libc::geteuid() }
             } else {
-                self.path.clone()
-            }),
-            tls: if protocol == ConnectionProtocol::Ftps {
+                ConnectionProfile::default().uid
+            },
+            #[cfg(unix)]
+            gid: if protocol == ConnectionProtocol::Nfs {
+                // SAFETY: getegid has no preconditions.
+                unsafe { libc::getegid() }
+            } else {
+                ConnectionProfile::default().gid
+            },
+            start_folder: if own_dav_or_nfs {
+                None
+            } else {
+                Some(if protocol == ConnectionProtocol::Smb {
+                    self.path
+                        .trim_start_matches('/')
+                        .split_once('/')
+                        .map(|(_, rest)| format!("/{rest}"))
+                        .unwrap_or_else(|| "/".into())
+                } else {
+                    self.path.clone()
+                })
+            },
+            tls: if matches!(
+                protocol,
+                ConnectionProtocol::Ftps | ConnectionProtocol::Webdav
+            ) {
                 ConnectionTls::Explicit
             } else {
                 ConnectionTls::None
@@ -201,6 +240,8 @@ impl SystemPlace {
             && port(&p) == port(profile)
             && p.user == profile.user
             && p.share == profile.share
+            && p.export == profile.export
+            && (p.protocol != ConnectionProtocol::Webdav || p.tls == profile.tls)
             && p.start_folder.as_deref().unwrap_or("/")
                 == profile.start_folder.as_deref().unwrap_or("/")
             && p.system_url == profile.system_url
@@ -839,8 +880,12 @@ mod tests {
             ("ftp", ConnectionProtocol::Ftp),
             ("ftps", ConnectionProtocol::Ftps),
             ("smb", ConnectionProtocol::Smb),
-            ("nfs", ConnectionProtocol::System),
-            ("davs", ConnectionProtocol::System),
+            ("nfs", ConnectionProtocol::Nfs),
+            ("davs", ConnectionProtocol::Webdav),
+            ("webdavs", ConnectionProtocol::Webdav),
+            ("dav", ConnectionProtocol::System),
+            ("webdav", ConnectionProtocol::System),
+            ("afp", ConnectionProtocol::System),
         ] {
             let place = parse_url(&format!("{scheme}://host/folder"), "", "Name").unwrap();
             let mut profile = place.profile();
@@ -872,6 +917,88 @@ mod tests {
             Some(gvfs.join("sub"))
         );
         assert!(mounted_path(&parse_url("sftp://other@host/sub", "", "").unwrap(), &p).is_none());
+    }
+    #[test]
+    fn webdav_and_nfs_places_become_own_connections() {
+        for (url, port, share) in [
+            (
+                "davs://cloud.example/remote.php/dav/files/me",
+                443,
+                "/remote.php/dav/files/me",
+            ),
+            ("webdavs://cloud.example:8443/", 8443, "/"),
+            ("davs://me@cloud.example/a%2Fb%20c", 443, "/a/b c"),
+        ] {
+            let place = parse_url(url, "", "Cloud").unwrap();
+            let mut p = place.profile();
+            p.id = "c1".into();
+            assert_eq!(p.protocol, ConnectionProtocol::Webdav, "{url}");
+            assert_eq!((p.port, p.share.as_str()), (port, share), "{url}");
+            assert_eq!(p.tls, ConnectionTls::Explicit);
+            assert!(!p.allow_plaintext && !p.save_secret && p.system_url.is_none());
+            assert_eq!(p.user, place.user.clone().unwrap_or_default());
+            assert_eq!(p.validate(), Ok(()), "{url}");
+            assert!(place.matches(&p));
+            p.tls = ConnectionTls::Implicit;
+            assert!(!place.matches(&p));
+        }
+        let place = parse_url("nfs://nas.local/srv/export/media", "", "NAS").unwrap();
+        let mut p = place.profile();
+        p.id = "n1".into();
+        assert_eq!(p.protocol, ConnectionProtocol::Nfs);
+        assert_eq!((p.port, p.export.as_str()), (2049, "/srv/export/media"));
+        assert!(p.user.is_empty() && p.system_url.is_none() && p.start_folder.is_none());
+        // SAFETY: geteuid/getegid have no preconditions.
+        assert_eq!((p.uid, p.gid), unsafe {
+            (libc::geteuid(), libc::getegid())
+        });
+        assert_eq!(p.validate(), Ok(()));
+        assert!(place.matches(&p));
+        p.export = "/other".into();
+        assert!(!place.matches(&p));
+        let place = parse_url("nfs://nas.local:2050/x", "", "NAS").unwrap();
+        assert_eq!(place.profile().port, 2050);
+    }
+    #[test]
+    fn plain_http_dav_and_afp_stay_system_places() {
+        for url in ["dav://h/x", "webdav://h:8080/x", "afp://h/vol"] {
+            let place = parse_url(url, "", "N").unwrap();
+            let mut p = place.profile();
+            p.id = "s1".into();
+            assert_eq!(p.protocol, ConnectionProtocol::System, "{url}");
+            assert_eq!(p.system_url.as_deref(), Some(place.url.as_str()));
+            assert_eq!(p.validate(), Ok(()), "{url}");
+        }
+    }
+    #[test]
+    fn import_converts_dav_nfs_but_keeps_existing_system_profiles() {
+        let dav = parse_url("davs://h/dav", "", "Same").unwrap();
+        let nfs = parse_url("nfs://h/exp", "", "Same").unwrap();
+        let places = [dav.clone(), nfs.clone()];
+        let urls = [dav.url.clone(), nfs.url.clone()];
+        let old = ConnectionProfile {
+            id: "old".into(),
+            name: "Same".into(),
+            protocol: ConnectionProtocol::System,
+            system_url: Some(dav.url.clone()),
+            host: "h".into(),
+            start_folder: Some("/dav".into()),
+            tls: ConnectionTls::None,
+            port: 0,
+            user: String::new(),
+            ..ConnectionProfile::default()
+        };
+        assert_eq!(old.validate(), Ok(()));
+        let out = import_places(std::slice::from_ref(&old), &places, &urls).unwrap();
+        // the old System profile is untouched; the new ones are added next to it
+        assert_eq!(out[0], old);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[1].protocol, ConnectionProtocol::Webdav);
+        assert_eq!(out[1].name, "Same (2)");
+        assert_eq!(out[2].protocol, ConnectionProtocol::Nfs);
+        assert_eq!(out[2].name, "Same (3)");
+        // importing again adds nothing
+        assert_eq!(import_places(&out, &places, &urls).unwrap(), out);
     }
     #[test]
     fn import_is_atomic_idempotent_and_disambiguates_names() {
