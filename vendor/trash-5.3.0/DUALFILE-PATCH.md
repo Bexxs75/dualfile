@@ -23,6 +23,12 @@ Changes / Änderungen:
   `files/` and `info/`); `purge_all()`/`restore_all()` reopen the item's trash through
   `open_item_trash()` and remove/rename/unlink only via those handles without
   following symlinks. The home trash stays trusted as it is.
+  Review follow-up: listing/restore/purge use `owned_trash_dir_fixed` (own parts that
+  are group/other-writable are set to 0700 via fchmod; on fixed-permission file systems
+  accepted only when the drive root is ours); delete uses `prepare_trash_dir` and
+  falls back to the home trash on any refusal, moving through `/proc/self/fd/N` of the
+  checked folder; `.Trash-$uid`, `files/`, `info/` are created with 0700; restore of a
+  per-drive item only below its topdir, placeholder and created parents removed on failure.
   Pro-Mount-Papierkörbe werden nur nach der gemeinsamen Eigentümer-/Modusprüfung
   gelistet; Löschen/Wiederherstellen laufen nur über geprüfte Verzeichnis-Handles.
 - `Cargo.toml`: local dependency on `dualfile-platform`.

@@ -8,6 +8,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 ### Security
 
 - Trash view: trash folders on other drives (`.Trash-<uid>`, `.Trash/<uid>`) are only listed, restored from or deleted from when they are real folders that belong to you and that nobody else can write to. A trash folder prepared by another account or on a foreign USB stick (for example with a link into your home folder) is now ignored, so "Delete permanently" and "Restore" can no longer delete or move files outside the trash. Your own trash in the home folder works as before (#56).
+- Moving to the trash: on another drive, Dualfile only uses a trash folder there that belongs to you; a prepared or foreign one is never written to, the file goes to the trash in your home folder instead. New trash folders are created readable only by you (mode 700), whatever your umask. Your own trash folders that others could write to (for example created with umask 002) are tightened to 700 and stay visible. On drives without Unix permissions (FAT, exFAT, NTFS mounted for you) the trash is used when the whole drive belongs to you. Restoring an item from a trash on another drive only puts it back onto that drive, and a failed restore no longer leaves empty placeholder files or folders behind (#56).
 
 ## [0.4.5] - 2026-11-25
 

@@ -56,7 +56,13 @@ impl TrashContext {
                 // trash the file into the user's home trash or refuse to
                 // trash it" when per-volume trash is unavailable.
                 match execute_on_mounted_trash_folders(uid, topdir, true, true, |trash_path| {
-                    move_to_trash(&path, trash_path, topdir)
+                    // dualfile patch (#56): never write into a per-drive trash that is not
+                    // ours (symlink, foreign owner, writable by others); such a refusal is
+                    // `PermissionDenied`, so the item goes to the home trash below instead.
+                    let euid = unsafe { libc::geteuid() };
+                    let trash = dualfile_platform::trash_dir::prepare_trash_dir(&trash_path, euid)
+                        .map_err(|e| (trash_path.clone(), e))?;
+                    move_to_trash(&path, pinned_trash_path(&trash, &trash_path), topdir)
                 }) {
                     Ok(()) => {}
                     Err((_, ref e)) if e.kind() == ErrorKind::PermissionDenied => {
@@ -299,7 +305,7 @@ fn eval_trash_folders() -> Result<EvaluatedTrashFolders, Error> {
         execute_on_mounted_trash_folders(uid, &mount.mnt_dir, false, false, |trash_path| {
             // dualfile patch (#56): only trusted per-mount trash folders (no symlink, owned by
             // us, not writable by others) are listed, so restore/purge never reach another one.
-            match dualfile_platform::trash_dir::owned_trash_dir(&trash_path, unsafe { libc::geteuid() }) {
+            match dualfile_platform::trash_dir::owned_trash_dir_fixed(&trash_path, unsafe { libc::geteuid() }) {
                 Ok(_) => {
                     trash_folders.insert(trash_path);
                 }
@@ -369,7 +375,7 @@ where
         let file = restorable_file_in_trash_from_info_file(info_file);
         // dualfile patch (#56): remove through the handles of a trusted trash folder only,
         // never following a symlink (formerly `remove_dir_all`/`remove_file` on paths).
-        let (trash, name, record) = open_item_trash(info_file)?;
+        let (trash, name, record, _) = open_item_trash(info_file)?;
         let root_device = dualfile_platform::trash_dir::device(&trash.files).map_err(|e| fs_error(&file, e))?;
         let device = dualfile_platform::trash_dir::device;
         match dualfile_platform::trash_dir::remove_tree_at(&trash.files, &name, root_device, device, || false, || {}) {
@@ -411,7 +417,7 @@ where
         let file = restorable_file_in_trash_from_info_file(info_file);
         // dualfile patch (#56): restore only from a trusted trash folder, through its handles;
         // the target from the .trashinfo is only used once the folder passed the check.
-        let (trash, name, record) = open_item_trash(info_file)?;
+        let (trash, name, record, topdir) = open_item_trash(info_file)?;
         let is_dir = match dualfile_platform::trash_dir::is_dir_at(&trash.files, &name) {
             Ok(is_dir) => is_dir,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -422,6 +428,23 @@ where
         // TODO add option to forcefully replace any target at the restore location
         // if it already exists.
         let original_path = item.original_path();
+        // dualfile patch (#56): an item of a per-drive trash is only restored onto that drive.
+        if let Some(topdir) = &topdir {
+            if !restore_target_on_drive(&item.original_parent, &original_path, topdir) {
+                let outside = std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "the restore target lies outside the drive of this trash",
+                );
+                return Err(fs_error(&original_path, outside));
+            }
+        }
+        // dualfile patch (#56): remember which parents this call creates, to undo on failure.
+        let created_parents = missing_ancestors(&item.original_parent);
+        let undo_parents = || {
+            for dir in &created_parents {
+                let _ = std::fs::remove_dir(dir);
+            }
+        };
         // Make sure the parent exists so that `create_dir` doesn't faile due to that.
         std::fs::create_dir_all(&item.original_parent).map_err(|e| fs_error(&item.original_parent, e))?;
         let mut collision = false;
@@ -432,6 +455,7 @@ where
                 if e.kind() == std::io::ErrorKind::AlreadyExists {
                     collision = true;
                 } else {
+                    undo_parents();
                     return Err(fs_error(&original_path, e));
                 }
             }
@@ -441,16 +465,23 @@ where
                 if e.kind() == std::io::ErrorKind::AlreadyExists {
                     collision = true;
                 } else {
+                    undo_parents();
                     return Err(fs_error(&original_path, e));
                 }
             }
         }
         if collision {
+            undo_parents();
             let remaining: Vec<_> = std::iter::once(item).chain(iter).collect();
             return Err(Error::RestoreCollision { path: original_path, remaining_items: remaining });
         }
-        // dualfile patch (#56): rename and unlink through the trusted handles.
-        dualfile_platform::trash_dir::rename_out(&trash.files, &name, &original_path).map_err(|e| fs_error(&file, e))?;
+        // dualfile patch (#56): rename and unlink through the trusted handles; on failure (for
+        // example EXDEV) remove the placeholder and the parents this call created.
+        if let Err(e) = dualfile_platform::trash_dir::rename_out(&trash.files, &name, &original_path) {
+            let _ = if is_dir { std::fs::remove_dir(&original_path) } else { std::fs::remove_file(&original_path) };
+            undo_parents();
+            return Err(fs_error(&file, e));
+        }
         dualfile_platform::trash_dir::unlink_at(&trash.info, &record).map_err(|e| fs_error(info_file, e))?;
     }
     Ok(())
@@ -459,10 +490,11 @@ where
 /// dualfile patch (#56): opens the trash folder of an item (`<trash>/info/<name>.trashinfo`).
 /// The home trash is trusted as it is; any other folder must pass the shared ownership and
 /// mode check, or the item is refused with `PermissionDenied`. Returns the handles, the
-/// in-trash name and the info file name.
+/// in-trash name, the info file name and, for a per-drive trash, its drive root (topdir).
+#[allow(clippy::type_complexity)]
 fn open_item_trash(
     info_file: &OsStr,
-) -> Result<(dualfile_platform::trash_dir::OwnedTrashDir, OsString, OsString), Error> {
+) -> Result<(dualfile_platform::trash_dir::OwnedTrashDir, OsString, OsString, Option<PathBuf>), Error> {
     let info_path = Path::new(info_file);
     let invalid = || Error::Unknown { description: format!("Invalid trash item id {info_path:?}") };
     let info_dir = info_path.parent().ok_or_else(invalid)?;
@@ -473,13 +505,62 @@ fn open_item_trash(
     if info_dir.file_name() != Some(OsStr::new("info")) {
         return Err(invalid());
     }
-    let trash = if home_trash().ok().as_deref() == Some(folder) {
-        dualfile_platform::trash_dir::home_trash_dir(folder)
-    } else {
-        dualfile_platform::trash_dir::owned_trash_dir(folder, unsafe { libc::geteuid() })
+    if home_trash().ok().as_deref() == Some(folder) {
+        let trash = dualfile_platform::trash_dir::home_trash_dir(folder).map_err(|e| fs_error(folder, e))?;
+        return Ok((trash, name.to_owned(), record.to_owned(), None));
     }
-    .map_err(|e| fs_error(folder, e))?;
-    Ok((trash, name.to_owned(), record.to_owned()))
+    // `$topdir/.Trash-$uid` or `$topdir/.Trash/$uid`.
+    let parent = folder.parent().ok_or_else(invalid)?;
+    let topdir = if folder.file_name().is_some_and(|n| n.as_bytes().starts_with(b".Trash-")) {
+        parent
+    } else if parent.file_name() == Some(OsStr::new(".Trash")) {
+        parent.parent().ok_or_else(invalid)?
+    } else {
+        return Err(invalid());
+    };
+    let trash = dualfile_platform::trash_dir::owned_trash_dir_fixed(folder, unsafe { libc::geteuid() })
+        .map_err(|e| fs_error(folder, e))?;
+    Ok((trash, name.to_owned(), record.to_owned(), Some(topdir.to_owned())))
+}
+
+/// dualfile patch (#56): the restore target of a per-drive trash item must lie below that
+/// drive's root, lexically and after resolving symlinks of the existing parents.
+fn restore_target_on_drive(parent: &Path, target: &Path, topdir: &Path) -> bool {
+    if target.components().any(|c| c == Component::ParentDir) || target == topdir || !target.starts_with(topdir) {
+        return false;
+    }
+    // The deepest part that exists (a dangling symlink counts and then fails to resolve).
+    let existing = parent.ancestors().find(|p| p.symlink_metadata().is_ok());
+    match (existing.map(Path::canonicalize), topdir.canonicalize()) {
+        (Some(Ok(parent)), Ok(topdir)) => parent.starts_with(topdir),
+        _ => false,
+    }
+}
+
+/// dualfile patch (#56): the ancestors of `dir` (itself included) that do not exist yet,
+/// deepest first.
+fn missing_ancestors(dir: &Path) -> Vec<PathBuf> {
+    dir.ancestors()
+        .take_while(|p| matches!(p.symlink_metadata(), Err(e) if e.kind() == ErrorKind::NotFound))
+        .map(Path::to_owned)
+        .collect()
+}
+
+/// dualfile patch (#56): the path of a checked trash folder that stays bound to the opened
+/// directory (Linux: `/proc/self/fd/N`), so a swap of the folder after the check is not
+/// followed. Elsewhere the checked path itself.
+fn pinned_trash_path(trash: &dualfile_platform::trash_dir::OwnedTrashDir, path: &Path) -> PathBuf {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::fd::AsRawFd;
+        let pinned = PathBuf::from(format!("/proc/self/fd/{}", trash.root.as_raw_fd()));
+        if pinned.is_dir() {
+            return pinned;
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = trash;
+    path.to_owned()
 }
 
 /// According to the specification (see at the top of the file) there are two kinds of
@@ -519,7 +600,14 @@ fn execute_on_mounted_trash_folders<F: FnMut(PathBuf) -> Result<(), FsError>>(
     let should_execute;
     if !trash_path.exists() || !trash_path.is_dir() {
         if create_folder {
-            std::fs::create_dir(&trash_path).map_err(|e| (trash_path.to_owned(), e))?;
+            // dualfile patch (#56): 0700 as the spec demands, whatever the umask; an entry
+            // that exists but is no directory (e.g. a dangling symlink) is a refusal, so the
+            // caller falls back to the home trash.
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new().mode(0o700).create(&trash_path).map_err(|e| {
+                let e = if e.kind() == ErrorKind::AlreadyExists { std::io::Error::new(ErrorKind::PermissionDenied, e) } else { e };
+                (trash_path.to_owned(), e)
+            })?;
             should_execute = true;
         } else {
             should_execute = false;
@@ -544,8 +632,12 @@ fn move_to_trash(
     let info_folder = trash_folder.join("info");
 
     // Ensure the `files` and `info` folders exist
-    std::fs::create_dir_all(&files_folder).map_err(|e| (files_folder.to_owned(), e))?;
-    std::fs::create_dir_all(&info_folder).map_err(|e| (info_folder.to_owned(), e))?;
+    // dualfile patch (#56): created with 0700 (spec), not with the umask's mode.
+    use std::os::unix::fs::DirBuilderExt;
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true).mode(0o700);
+    builder.create(&files_folder).map_err(|e| (files_folder.to_owned(), e))?;
+    builder.create(&info_folder).map_err(|e| (info_folder.to_owned(), e))?;
 
     // This kind of validity must only apply ot administrator style trash folders
     // See Trash directories, (1) at https://specifications.freedesktop.org/trash-spec/trashspec-1.0.html

@@ -312,36 +312,104 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn trash_writable_by_others_is_not_trusted() {
+    fn own_trash_writable_by_others_is_tightened_not_refused() {
         use std::os::unix::fs::PermissionsExt;
+        let uid = unsafe { libc::geteuid() };
         let temp = tempfile::tempdir().unwrap();
         let (root, item) = mount_trash(temp.path(), "doc");
         std::fs::write(root.join("files/doc"), b"doc").unwrap();
+        let mode_of = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
         for part in [root.clone(), root.join("files"), root.join("info")] {
             for mode in [0o777, 0o775] {
                 std::fs::set_permissions(&part, std::fs::Permissions::from_mode(mode)).unwrap();
-                let checked = dualfile_platform::trash_dir::owned_trash_dir(&root, unsafe {
-                    libc::geteuid()
-                });
-                let refused = checked.unwrap_err();
+                // The strict check (empty trash, #53) refuses and reports it ...
+                let refused =
+                    dualfile_platform::trash_dir::owned_trash_dir(&root, uid).unwrap_err();
                 assert!(refused
                     .get_ref()
                     .and_then(|e| e.downcast_ref::<dualfile_platform::trash_dir::OtherWritable>())
                     .is_some_and(|loose| loose.0 == mode));
-                assert!(trash::os_limited::purge_all([item.clone()]).is_err());
-                assert!(trash::os_limited::restore_all([item.clone()]).is_err());
-                assert!(root.join("files/doc").exists());
-                assert!(!temp.path().join("dest/doc").exists());
+                // ... the view and delete set our own folder to 0700 and go on.
+                assert!(dualfile_platform::trash_dir::owned_trash_dir_fixed(&root, uid).is_ok());
+                assert_eq!(mode_of(&part), 0o700);
             }
-            std::fs::set_permissions(&part, std::fs::Permissions::from_mode(0o700)).unwrap();
         }
-        // A foreign owner is refused too (checked without changing UIDs).
-        assert!(dualfile_platform::trash_dir::owned_trash_dir(
-            &root,
-            unsafe { libc::geteuid() }.wrapping_add(1)
-        )
-        .is_err());
-        trash::os_limited::purge_all([item]).unwrap();
-        assert!(!root.join("files/doc").exists());
+        // A foreign owner is refused by both (checked without changing UIDs).
+        let other = uid.wrapping_add(1);
+        assert!(dualfile_platform::trash_dir::owned_trash_dir(&root, other).is_err());
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o775)).unwrap();
+        assert!(dualfile_platform::trash_dir::owned_trash_dir_fixed(&root, other).is_err());
+        assert_eq!(
+            mode_of(&root),
+            0o775,
+            "nothing is changed in a folder that is not ours"
+        );
+        trash::os_limited::restore_all([item]).unwrap();
+        assert_eq!(std::fs::read(temp.path().join("dest/doc")).unwrap(), b"doc");
+        assert_eq!(mode_of(&root), 0o700);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn restore_target_outside_the_drive_is_refused() {
+        let temp = tempfile::tempdir().unwrap();
+        let drive = temp.path().join("drive");
+        std::fs::create_dir(&drive).unwrap();
+        let (root, item) = mount_trash(&drive, "doc");
+        std::fs::write(root.join("files/doc"), b"doc").unwrap();
+        std::fs::create_dir(temp.path().join("home")).unwrap();
+        let outside = temp.path().join("home/autostart");
+        // Lexically outside, and through a symlink on the drive that points outside.
+        std::os::unix::fs::symlink(temp.path().join("home"), drive.join("link")).unwrap();
+        for parent in [outside.clone(), drive.join("link/autostart")] {
+            let item = trash::TrashItem {
+                original_parent: parent,
+                ..item.clone()
+            };
+            assert!(trash::os_limited::restore_all([item]).is_err());
+            assert!(!outside.exists());
+            assert!(root.join("files/doc").exists());
+            assert!(root.join("info/doc.trashinfo").exists());
+        }
+        trash::os_limited::restore_all([item]).unwrap();
+        assert!(drive.join("dest/doc").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn failed_restore_removes_its_placeholder_and_new_parents() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let (root, item) = mount_trash(temp.path(), "doc");
+        std::fs::write(root.join("files/doc"), b"doc").unwrap();
+        let item = trash::TrashItem {
+            original_parent: temp.path().join("dest/new/sub"),
+            ..item
+        };
+        // files/ without write permission: the final rename fails (EACCES, like EXDEV).
+        std::fs::set_permissions(root.join("files"), std::fs::Permissions::from_mode(0o500))
+            .unwrap();
+        let result = trash::os_limited::restore_all([item]);
+        std::fs::set_permissions(root.join("files"), std::fs::Permissions::from_mode(0o700))
+            .unwrap();
+        assert!(result.is_err());
+        assert!(!temp.path().join("dest/new").exists());
+        assert!(temp.path().join("dest").exists(), "existing parents stay");
+        assert!(root.join("files/doc").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn trash_below_a_search_only_directory_is_opened() {
+        use std::os::unix::fs::PermissionsExt;
+        let temp = tempfile::tempdir().unwrap();
+        let gate = temp.path().join("gate");
+        std::fs::create_dir(&gate).unwrap();
+        let (root, _) = mount_trash(&gate, "doc");
+        std::fs::set_permissions(&gate, std::fs::Permissions::from_mode(0o100)).unwrap();
+        let opened =
+            dualfile_platform::trash_dir::owned_trash_dir(&root, unsafe { libc::geteuid() });
+        std::fs::set_permissions(&gate, std::fs::Permissions::from_mode(0o700)).unwrap();
+        opened.unwrap();
     }
 }

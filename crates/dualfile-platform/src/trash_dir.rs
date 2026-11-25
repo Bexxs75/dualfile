@@ -15,21 +15,45 @@ const DIR_FLAGS: OFlags = OFlags::RDONLY
     .union(OFlags::DIRECTORY)
     .union(OFlags::NOFOLLOW)
     .union(OFlags::CLOEXEC);
+/// Flags for path components that are only walked through: `O_PATH` needs search, not read
+/// permission, so a parent with mode 0711 does not hide the trash below it.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const WALK_FLAGS: OFlags = OFlags::PATH
+    .union(OFlags::DIRECTORY)
+    .union(OFlags::NOFOLLOW)
+    .union(OFlags::CLOEXEC);
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const WALK_FLAGS: OFlags = DIR_FLAGS;
 
-/// Opens an absolute directory path component by component without following any symlink.
-pub fn open_dir_nofollow(path: &Path) -> std::io::Result<File> {
+/// Walks an absolute path without following any symlink. Returns the handle of the parent
+/// (walk-only, `None` for `/`) and the readable handle of the last directory.
+fn walk(path: &Path) -> std::io::Result<(Option<File>, File)> {
     if !path.is_absolute() {
         return Err(std::io::ErrorKind::InvalidInput.into());
     }
-    let mut fd = openat(CWD, "/", DIR_FLAGS, Mode::empty())?;
+    let mut names = Vec::new();
     for part in path.components() {
         match part {
             Component::RootDir => {}
-            Component::Normal(name) => fd = openat(&fd, name, DIR_FLAGS, Mode::empty())?,
+            Component::Normal(name) => names.push(name),
             _ => return Err(std::io::ErrorKind::InvalidInput.into()),
         }
     }
-    Ok(fd.into())
+    let Some((last, walked)) = names.split_last() else {
+        return Ok((None, openat(CWD, "/", DIR_FLAGS, Mode::empty())?.into()));
+    };
+    let mut fd = openat(CWD, "/", WALK_FLAGS, Mode::empty())?;
+    for name in walked {
+        fd = openat(&fd, *name, WALK_FLAGS, Mode::empty())?;
+    }
+    let target = openat(&fd, *last, DIR_FLAGS, Mode::empty())?;
+    Ok((Some(fd.into()), target.into()))
+}
+
+/// Opens an absolute directory path component by component without following any symlink.
+/// Intermediate directories only need search permission.
+pub fn open_dir_nofollow(path: &Path) -> std::io::Result<File> {
+    walk(path).map(|(_, dir)| dir)
 }
 
 /// Opens `name` inside `parent` as a directory, never following a symlink.
@@ -67,6 +91,22 @@ pub fn trust(parts: &[(u32, u32)], uid: u32) -> Result<(), Untrusted> {
     }
 }
 
+/// Pure decision after our own parts were set to 0700 (see [`owned_trash_dir_fixed`]).
+/// `parts` are the modes *after* that attempt. If they are still writable by others, the
+/// file system has fixed permissions (vfat, exfat, NTFS with `uid=`/`umask=`): the trash is
+/// accepted only when the directory holding it (the drive root) belongs to us as well, i.e.
+/// the whole drive is mounted for us. Foreign owners are always refused.
+pub fn trust_fixed(
+    parts: &[(u32, u32)],
+    parent_owner: Option<u32>,
+    uid: u32,
+) -> Result<(), Untrusted> {
+    match trust(parts, uid) {
+        Err(Untrusted::OtherWritable(_)) if parent_owner == Some(uid) => Ok(()),
+        other => other,
+    }
+}
+
 /// Handles of a trusted trash directory.
 #[derive(Debug)]
 pub struct OwnedTrashDir {
@@ -75,28 +115,95 @@ pub struct OwnedTrashDir {
     pub info: File,
 }
 
-/// Opens `path` as a trash directory and checks that it can be trusted (see module docs).
-/// Not owned gives `PermissionDenied` without OS error; writable by others gives
-/// `PermissionDenied` carrying [`OtherWritable`]; real open errors (`ELOOP`, `ENOTDIR`,
-/// `EACCES`, ...) are passed through.
-pub fn owned_trash_dir(path: &Path, uid: u32) -> std::io::Result<OwnedTrashDir> {
+fn owner_and_mode(dirs: [&File; 3]) -> std::io::Result<[(u32, u32); 3]> {
     use std::os::unix::fs::MetadataExt;
-    let root = open_dir_nofollow(path)?;
-    let files = open_subdir_nofollow(&root, "files")?;
-    let info = open_subdir_nofollow(&root, "info")?;
     let mut parts = [(0, 0); 3];
-    for (slot, dir) in parts.iter_mut().zip([&root, &files, &info]) {
+    for (slot, dir) in parts.iter_mut().zip(dirs) {
         let meta = dir.metadata()?;
         *slot = (meta.uid(), meta.mode());
     }
-    match trust(&parts, uid) {
-        Ok(()) => Ok(OwnedTrashDir { root, files, info }),
-        Err(Untrusted::NotOwned) => Err(std::io::ErrorKind::PermissionDenied.into()),
-        Err(Untrusted::OtherWritable(mode)) => Err(std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            OtherWritable(mode),
-        )),
+    Ok(parts)
+}
+
+fn refusal(reason: Untrusted) -> std::io::Error {
+    match reason {
+        Untrusted::NotOwned => std::io::ErrorKind::PermissionDenied.into(),
+        Untrusted::OtherWritable(mode) => {
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, OtherWritable(mode))
+        }
     }
+}
+
+/// Opens `path` as a trash directory and checks that it can be trusted (see module docs).
+/// Strict: nothing is changed. Not owned gives `PermissionDenied` without OS error; writable
+/// by others gives `PermissionDenied` carrying [`OtherWritable`]; real open errors (`ELOOP`,
+/// `ENOTDIR`, `EACCES`, ...) are passed through.
+pub fn owned_trash_dir(path: &Path, uid: u32) -> std::io::Result<OwnedTrashDir> {
+    let root = open_dir_nofollow(path)?;
+    let files = open_subdir_nofollow(&root, "files")?;
+    let info = open_subdir_nofollow(&root, "info")?;
+    trust(&owner_and_mode([&root, &files, &info])?, uid).map_err(refusal)?;
+    Ok(OwnedTrashDir { root, files, info })
+}
+
+/// Like [`owned_trash_dir`], but our own parts that are writable by group or others (e.g.
+/// created under umask 002) are set to 0700 through their opened handles first. Where that
+/// has no effect (fixed-permission file systems), [`trust_fixed`] decides. Foreign owners and
+/// symlinks stay refused; nothing is changed in a directory that is not ours.
+pub fn owned_trash_dir_fixed(path: &Path, uid: u32) -> std::io::Result<OwnedTrashDir> {
+    use std::os::unix::fs::MetadataExt;
+    let (parent, root) = walk(path)?;
+    let files = open_subdir_nofollow(&root, "files")?;
+    let info = open_subdir_nofollow(&root, "info")?;
+    let dirs = [&root, &files, &info];
+    let before = owner_and_mode(dirs)?;
+    match trust(&before, uid) {
+        Ok(()) => return Ok(OwnedTrashDir { root, files, info }),
+        Err(Untrusted::NotOwned) => return Err(refusal(Untrusted::NotOwned)),
+        Err(Untrusted::OtherWritable(_)) => {}
+    }
+    for (dir, (_, mode)) in dirs.iter().zip(before) {
+        if mode & 0o022 != 0 {
+            // Fails or is ignored on fixed-permission file systems; checked again below.
+            let _ = rustix::fs::fchmod(*dir, Mode::from_raw_mode(0o700));
+        }
+    }
+    let parent_owner = match &parent {
+        Some(parent) => Some(parent.metadata()?.uid()),
+        None => None,
+    };
+    trust_fixed(&owner_and_mode(dirs)?, parent_owner, uid).map_err(refusal)?;
+    Ok(OwnedTrashDir { root, files, info })
+}
+
+/// Prepares a per-drive trash for moving a file into it: the root must be a real directory
+/// of ours; missing `files`/`info` are created with 0700 inside it, then
+/// [`owned_trash_dir_fixed`] decides. Every refusal is `PermissionDenied`, so the caller can
+/// fall back to the home trash.
+pub fn prepare_trash_dir(path: &Path, uid: u32) -> std::io::Result<OwnedTrashDir> {
+    use std::os::unix::fs::MetadataExt;
+    // A symlink on the way (ELOOP, ENOTDIR) is a refusal as well.
+    let denied = |e: std::io::Error| {
+        let symlink = [rustix::io::Errno::LOOP, rustix::io::Errno::NOTDIR]
+            .iter()
+            .any(|errno| e.raw_os_error() == Some(errno.raw_os_error()));
+        if symlink {
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, e)
+        } else {
+            e
+        }
+    };
+    let root = open_dir_nofollow(path).map_err(denied)?;
+    if root.metadata()?.uid() != uid {
+        return Err(refusal(Untrusted::NotOwned));
+    }
+    for name in ["files", "info"] {
+        match rustix::fs::mkdirat(&root, name, Mode::from_raw_mode(0o700)) {
+            Ok(()) | Err(rustix::io::Errno::EXIST) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    owned_trash_dir_fixed(path, uid).map_err(denied)
 }
 
 /// The user's own home trash: a trusted root (it may sit behind a symlinked home), opened
@@ -230,5 +337,36 @@ mod tests {
         // Not owned wins over writable by others.
         let parts = [(1000, dir | 0o777), (0, dir | 0o700), (1000, dir | 0o700)];
         assert_eq!(trust(&parts, 1000), Err(Untrusted::NotOwned));
+    }
+
+    #[test]
+    fn fixed_permissions_are_accepted_only_on_a_drive_of_our_own() {
+        let dir = 0o040_000;
+        // vfat/exfat/NTFS with uid=1000,umask=000: chmod has no effect, all parts stay 0777.
+        let fixed = [(1000, dir | 0o777); 3];
+        assert_eq!(trust_fixed(&fixed, Some(1000), 1000), Ok(()));
+        // The same modes below a drive root of somebody else (e.g. /dev/shm, owned by root).
+        assert_eq!(
+            trust_fixed(&fixed, Some(0), 1000),
+            Err(Untrusted::OtherWritable(0o777))
+        );
+        assert_eq!(
+            trust_fixed(&fixed, None, 1000),
+            Err(Untrusted::OtherWritable(0o777))
+        );
+        // A foreign owner is never accepted, not even on a drive of our own.
+        let foreign = [
+            (1000, dir | 0o700),
+            (1001, dir | 0o700),
+            (1000, dir | 0o700),
+        ];
+        assert_eq!(
+            trust_fixed(&foreign, Some(1000), 1000),
+            Err(Untrusted::NotOwned)
+        );
+        assert_eq!(
+            trust_fixed(&[(1000, dir | 0o700); 3], Some(0), 1000),
+            Ok(())
+        );
     }
 }
