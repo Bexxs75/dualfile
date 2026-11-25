@@ -4,7 +4,7 @@
 # Läuft AUF ObiWan (Linux-Test-VMs, siehe docs/release-process.md):
 #   scripts/vmtest-dualfile.sh <kubuntu-kde|ubuntu-gnome> /pfad/Dualfile-X.Y.Z-x86_64.AppImage [Ergebnisordner]
 # Prüft: AppImage startet und zeigt ein Fenster (Screenshot), zweiter Start übergibt an die laufende
-# Instanz (Single-Instance, genau ein Prozess), Fenster schließen (Alt+F4; Prozessende sonst Warnung).
+# Instanz (Single-Instance, genau ein Prozess), Fenster schließen (Alt+F4 beendet den Prozess).
 # Die App läuft mit leerem XDG-Ordner (nie gegen echte Daten). Danach wird die VM heruntergefahren
 # und das belegt. Nicht geprüft: Update von der Vorversion, Remote-Protokolle, Terminal, Autostart.
 set -u
@@ -57,12 +57,14 @@ vm vnc "key:alt+F4" "wait:10" "shot:$OUT/$VM-2-nach-schliessen.png" >/dev/null 2
   && ok "Alt+F4 per VNC gesendet, Screenshot $OUT/$VM-2-nach-schliessen.png (Fenster muss weg sein, von Hand ansehen!)" \
   || bad "VNC-Aufruf (Alt+F4, zweiter Screenshot) fehlgeschlagen: Schließen nicht belegt"
 r=$(val state)
-# Das Fenster muss im Screenshot weg sein (von Hand ansehen). Bleibt der Prozess ohne Fenster bestehen,
-# ist das ein Befund (WARN), kein Testabbruch: beobachtet unter GNOME mit 0.4.3 (KDE beendet den Prozess).
+# Das Fenster muss im Screenshot weg sein (von Hand ansehen). Die Sandbox hat Standardeinstellungen, also
+# kein Tray-Symbol: Alt+F4 muss den Prozess beenden (gemessen 25.11.2026 mit 0.4.3 und 0.4.6 auf GNOME und
+# KDE: unter 1 s). Nur mit eingeschaltetem Tray-Symbol und vorhandenem StatusNotifier-Host (z. B. Ubuntu-GNOME
+# mit AppIndicator-Erweiterung) läuft Dualfile gewollt im Tray weiter (#40) – das prüft dieser Test nicht.
 c=$(cnt "$r")
 if [ "$c" = "?" ]; then bad "Prozessstand nach Alt+F4 unbekannt (kein gültiger pids-Datensatz, SSH-Abfrage fehlgeschlagen?): $r"
 elif [ "$c" = 0 ]; then ok "Fenster schließen (Alt+F4): Prozess beendet"
-else echo "WARN  [$VM] Prozess läuft nach Alt+F4 weiter: $r (Fenster laut Screenshot weg? Tray/Hintergrundbetrieb als Befund melden)"; fi
+else bad "Prozess läuft nach Alt+F4 weiter, obwohl das Tray-Symbol in der Sandbox aus ist: $r"; fi
 
 # Aufräumen und belegen: App beenden, VM herunterfahren, Status zeigen.
 val clean >/dev/null
