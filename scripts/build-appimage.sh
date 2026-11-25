@@ -57,6 +57,8 @@ tar -czf "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.tar.gz" -C "$WORK_DIR" \
     --transform "s,^AppDir,Dualfile-$VERSION-$ARCH," AppDir
 
 if [[ "${SKIP_7ZZ:-0}" != 1 ]]; then
-    tar -tzf "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.tar.gz" | grep -q "^Dualfile-$VERSION-$ARCH/usr/bin/7zz$" \
+    # No `grep -q` on the pipe: it exits early, tar gets SIGPIPE and pipefail fails the check.
+    tarball_list=$(tar -tzf "$OUTPUT_DIR/Dualfile-$VERSION-$ARCH.tar.gz")
+    grep -qx "Dualfile-$VERSION-$ARCH/usr/bin/7zz" <<<"$tarball_list" \
         || { echo '7zz fehlt im Tarball' >&2; exit 1; }
 fi
