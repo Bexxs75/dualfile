@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.5": {
+    date: "2026-11-25",
+    de: {
+      new: [],
+      improved: [],
+      fixed: ["Verbindungen: Schlägt die Anmeldung nach dem Bestätigen des Server-Schlüssels fehl, weil das gespeicherte Passwort veraltet ist, öffnet sich jetzt der Passwort-Dialog.", "Papierkorb leeren meldet auch eigene Papierkorb-Ordner, die sich nicht öffnen lassen (etwa wegen fehlender Rechte); ihr Inhalt bleibt unberührt.", "WebDAV: Ein falsches Passwort wird als Anmeldefehler gemeldet und ein nicht erreichbarer Server als Verbindungsfehler, statt „Ungültige Eingabe“. Ein leerer Basispfad bedeutet jetzt das Wurzelverzeichnis des Servers."],
+    },
+    en: {
+      new: [],
+      improved: [],
+      fixed: ["Connections: if the login fails after you confirm the server key because the saved password is outdated, the password dialog now opens.", "Emptying the trash also reports your own trash folders that cannot be opened (for example due to missing permissions); their contents are left alone.", "WebDAV: a wrong password is reported as a login failure and an unreachable server as a connection error, instead of \u201cInvalid input\u201d. An empty base path now means the server root."],
+    },
+  },
   "0.4.4": {
     date: "2026-11-24",
     de: {
