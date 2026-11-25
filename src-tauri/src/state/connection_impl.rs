@@ -1323,7 +1323,7 @@ mod tests {
         use crate::connections::ConnectionProfileDto;
         use dualfile_core::system_places::parse_url;
         let f = fixture();
-        let profile = parse_url("nfs://nas/team", "dolphin", "Team")
+        let profile = parse_url("dav://nas/team", "dolphin", "Team")
             .unwrap()
             .profile();
         let dto = ConnectionProfileDto::from(profile.clone());
@@ -1335,7 +1335,7 @@ mod tests {
             .into_iter()
             .find(|e| e.profile.id == id)
             .unwrap();
-        assert_eq!(entry.profile.system_url.as_deref(), Some("nfs://nas/team"));
+        assert_eq!(entry.profile.system_url.as_deref(), Some("dav://nas/team"));
         assert!(!entry.secret_set);
         assert!(f.state.secret_set(&id, "secret".into()).is_err());
         f.state.connection_disconnect(&id).unwrap();
