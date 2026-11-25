@@ -9,12 +9,12 @@ export const releaseNotes: Record<string, ReleaseNote> = {
     de: {
       new: [],
       improved: [],
-      fixed: ["Sicherheit: Ein Papierkorb auf einem anderen Laufwerk wird nur noch genutzt, wenn er dir gehört und sonst niemand darin schreiben kann. Verschieben in den Papierkorb weicht sonst auf deinen Papierkorb im Heimordner aus.", "WebDAV: Dateien mit nicht darstellbaren Namen werden als Fehler aufgelistet, und ein Verschieben löscht sie nicht mehr mit.", "7z-Archive: Sehr große Wörterbuch- oder Eintragsangaben werden abgelehnt, statt den Arbeitsspeicher zu füllen."],
+      fixed: ["Sicherheit: Ein Papierkorb auf einem anderen Laufwerk wird nur noch genutzt, wenn er dir gehört; zu offene eigene Ordner werden auf nur für dich zugänglich gesetzt, fremde nie benutzt. Verschieben in den Papierkorb weicht sonst auf deinen Papierkorb im Heimordner aus.", "WebDAV: Dateien mit nicht darstellbaren Namen werden als Fehler aufgelistet, und ein Verschieben löscht sie nicht mehr mit.", "7z-Archive: Sehr große Wörterbuch- oder Eintragsangaben werden abgelehnt, statt den Arbeitsspeicher zu füllen."],
     },
     en: {
       new: [],
       improved: [],
-      fixed: ["Security: a trash folder on another drive is only used when it belongs to you and nobody else can write to it. Otherwise moving to the trash falls back to your trash in the home folder.", "WebDAV: files with names that cannot be shown are listed as errors, and moving them no longer deletes them along the way.", "7z archives: very large dictionary or entry counts are rejected instead of filling up memory."],
+      fixed: ["Security: a trash folder on another drive is only used when it belongs to you; your own folders that are too open are tightened to owner-only access, and other people's are never used. Otherwise moving to the trash falls back to your trash in the home folder.", "WebDAV: files with names that cannot be shown are listed as errors, and moving them no longer deletes them along the way.", "7z archives: very large dictionary or entry counts are rejected instead of filling up memory."],
     },
   },
   "0.4.5": {
