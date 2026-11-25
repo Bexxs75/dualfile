@@ -241,6 +241,8 @@ pub fn run() {
             settings_window::settings_window_attach,
             settings_window::settings_window_push,
             settings_window::settings_window_send,
+            settings_window::settings_window_zoomed,
+            settings_window::settings_window_hold,
             terminal::terminal_open,
             terminal::terminal_write,
             terminal::terminal_resize,

@@ -1,5 +1,5 @@
 import type { DualfileApi } from "../ipc/api";
-import type { Settings, SettingsBase, SettingsWindowBaseDelta, SettingsWindowMessage, SettingsWindowPatch, SettingsWindowSnapshot } from "../ipc/types";
+import type { Settings, SettingsBase, SettingsWindowBaseDelta, SettingsWindowMessage, SettingsWindowPatch, SettingsWindowSnapshot, WindowSize } from "../ipc/types";
 import type { AppRuntime } from "./runtime";
 import type { AppStore, Controller } from "./controller";
 import type { SystemController } from "./system";
@@ -7,8 +7,9 @@ import type { AutostartMode } from "../ipc/system";
 import { activeTabOf, defaultSettings, type AppState } from "./state";
 import { isArchivePath, parseRemotePath } from "../state/paths";
 import { createTranslator } from "../i18n";
+import { answerPatch, decideSize, sizeDiffers, type SizeAnswer } from "./settingsWindowSize";
 
-export const PROJECTED_KEYS = ["sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarHidden", "sidebarDiscovery", "theme", "accent", "accentAutomatic", "density", "fontSize", "language", "showParentEntry", "paneTintStrength", "showPermissionsColumn", "showUidColumn", "showGidColumn", "extensionColumn", "paneColorLeft", "paneColorRight", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy", "terminalShell", "trayEnabled", "checkUpdatesOnStart", "lastUpdateCheck", "keybindings"] as const;
+export const PROJECTED_KEYS = ["sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarHidden", "sidebarDiscovery", "settingsWindowSizeMode", "settingsWindowSize", "theme", "accent", "accentAutomatic", "density", "fontSize", "language", "showParentEntry", "paneTintStrength", "showPermissionsColumn", "showUidColumn", "showGidColumn", "extensionColumn", "paneColorLeft", "paneColorRight", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy", "terminalShell", "trayEnabled", "checkUpdatesOnStart", "lastUpdateCheck", "keybindings"] as const;
 export const PATCH_KEYS = PROJECTED_KEYS.filter(key => key !== "lastUpdateCheck");
 export function project(settings: Settings): SettingsWindowSnapshot["settings"] {
   return Object.fromEntries(PROJECTED_KEYS.filter(key => settings[key] !== undefined).map(key => [key, settings[key]])) as SettingsWindowSnapshot["settings"];
@@ -146,10 +147,12 @@ export function createSettingsWindowBridge(api: DualfileApi, store: AppStore, co
 }
 
 type Action = { kind: "patch"; patch: SettingsWindowPatch } | { kind: "setTray" | "setStartMenu"; enabled: boolean } | { kind: "setAutostart"; mode: AutostartMode } | { kind: "checkUpdates" | "flush" | "refreshStatus" };
+/** The question "keep this window size?" while closing; `answer` settles the close. */
+export interface SizePrompt { width: number; height: number; direction: "larger" | "smaller"; answer(answer: SizeAnswer): void }
 export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime) {
   let session = "", seq = 0, queue = Promise.resolve();
   let snapshot: SettingsWindowSnapshot | null = null;
-  let state: { snapshot: SettingsWindowSnapshot | null; error: string; closing: boolean; canForce: boolean } = { snapshot, error: "", closing: false, canForce: false };
+  let state: { snapshot: SettingsWindowSnapshot | null; error: string; closing: boolean; canForce: boolean; sizePrompt: SizePrompt | null } = { snapshot, error: "", closing: false, canForce: false, sizePrompt: null };
   let systemState = runtime.system.getSnapshot();
   const listeners = new Set<() => void>();
   const pending = new Map<number, { message: SettingsWindowMessage; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
@@ -191,15 +194,64 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
     closeAttempt++; state.closing = false; failed(error);
     void api.settingsWindowClose(session, seq, false, true).catch(() => {});
   }
-  function close(): Promise<void> {
+  // The size the user last answered for; a retried close does not ask again for the same size.
+  let handledSize: WindowSize | undefined;
+  // The size of the window as it opened: the reference for "was it resized". It is measured in the
+  // web view (`innerWidth`/`innerHeight`: the client area in logical pixels on every platform) and
+  // not taken from the native side, whose size is not the size the window was given: GTK3 on
+  // GNOME/Wayland reports the window with its client-side decoration and shadow (a window created
+  // as 720 x 640 reports 772 x 729), and `Resized` and `inner_size()` of the toolkit both carry
+  // that value. The web view's own size is the same quantity that is passed to the next opening.
+  // Layout changes while the window settles (first configure) move the reference, later ones are the user's.
+  const viewport = (): WindowSize => ({ width: Math.round(window.innerWidth), height: Math.round(window.innerHeight) });
+  const settleUntil = Date.now() + 1500;
+  let baseline = viewport();
+  window.addEventListener("resize", () => { if (Date.now() < settleUntil) baseline = viewport(); });
+  /**
+   * Closing decides what happens to the window size first (see `decideSize`). The question waits
+   * for the user without the close deadline; the native close timeout is held meanwhile. A
+   * maximized window or an unmeasurable size is left alone.
+   */
+  async function sizeStep(interactive: boolean): Promise<SettingsWindowPatch | null> {
+    const mode = snapshot?.settings.settingsWindowSizeMode ?? "ask";
+    if (!snapshot || mode === "never") return null;
+    try { if (await api.settingsWindowZoomed()) return null; } catch { return null; }
+    const current = viewport();
+    if (current.width <= 0 || current.height <= 0) return null;
+    if (handledSize && !sizeDiffers(current, handledSize)) return null;
+    const decision = decideSize(mode, current, baseline);
+    if (decision.kind === "none") return null;
+    if (decision.kind === "save") { handledSize = current; return { settingsWindowSize: decision.size }; }
+    // The main window closing or restarting waits only a few seconds: no question then, nothing changes.
+    if (!interactive) return null;
+    const heldSession = session;
+    void api.settingsWindowHold(heldSession, true).catch(() => {});
+    const answer = await new Promise<SizeAnswer>(resolve => {
+      state.sizePrompt = { width: decision.size.width, height: decision.size.height, direction: decision.direction, answer: resolve };
+      notify();
+    });
+    state.sizePrompt = null; notify();
+    handledSize = current;
+    void api.settingsWindowHold(heldSession, false).catch(() => {});
+    return answerPatch(answer, decision.size);
+  }
+  function close(interactive = true): Promise<void> {
     if (closePromise) return closePromise;
     const attempt = ++closeAttempt;
-    state.closing = true; notify();
+    // With a size to look at, "closing" starts after the question, so the window stays usable under it.
+    const wantsSize = !!snapshot && (snapshot.settings.settingsWindowSizeMode ?? "ask") !== "never";
+    if (!wantsSize) { state.closing = true; notify(); }
     closePromise = (async () => {
       try {
+        const sizePatch = wantsSize ? await sizeStep(interactive) : null;
+        if (attempt !== closeAttempt) return;
+        if (wantsSize) { state.closing = true; notify(); }
         await deadline((async () => {
           if (!snapshot) await new Promise<void>(resolve => { readyForClose = resolve; });
           if (attempt !== closeAttempt) return;
+          // Queued ahead of the flush: the main window applies messages in order, so the flush also
+          // persists the size; a refusal comes back as an error of this message.
+          if (sizePatch) void send({ kind: "patch", patch: sizePatch }).catch(() => {});
           await send({ kind: "flush" });
           // The native close invocation can also stall after the flush was acknowledged.
           // Keep the emergency exit available for the entire close handshake.
@@ -240,7 +292,7 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
           if (session && session !== delivery.session) return;
           session = delivery.session; return;
         }
-        if (delivery.kind === "close") { if (delivery.session === session) void close(); return; }
+        if (delivery.kind === "close") { if (delivery.session === session) void close(delivery.interactive !== false); return; }
         if (delivery.kind === "timeout" || delivery.kind === "error") {
           if (delivery.session === session) abandon(delivery.kind === "timeout" ? timeoutText() : delivery.message);
           return;
@@ -267,7 +319,7 @@ export function createSettingsWindowClient(api: DualfileApi, runtime: AppRuntime
       if (!snapshot) initialSnapshotTimer = setTimeout(() => failed(timeoutText()), CLOSE_TIMEOUT);
     } catch (error) { failed(error); }
   }
-  return { runtime: { ...runtime, controller, system }, subscribe, getSnapshot: () => state, close, forceClose,
+  return { runtime: { ...runtime, controller, system }, subscribe, getSnapshot: () => state, close: () => close(), forceClose,
     attach: () => attachment ??= attach(),
   };
 }

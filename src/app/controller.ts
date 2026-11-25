@@ -1488,9 +1488,11 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
 
   /** Opens the profile editor in its own window; `profile` undefined = new connection. */
   async function openSettings(tab?: import("../ipc/types").SettingsTab): Promise<void> {
-    const { theme, accent, accentAutomatic, density, fontSize } = get().settings;
+    const { theme, accent, accentAutomatic, density, fontSize, settingsWindowSizeMode, settingsWindowSize } = get().settings;
+    // "never" always opens at the standard size; a size of 0 x 0 means nothing is remembered.
+    const size = settingsWindowSizeMode !== "never" && settingsWindowSize && settingsWindowSize.width > 0 && settingsWindowSize.height > 0 ? settingsWindowSize : null;
     try {
-      const result = await api.settingsWindowOpen(tab ?? null, tr("settings.title"), { theme, accent, accentAutomatic: accentAutomatic ?? false, density, fontSize, lang: language() });
+      const result = await api.settingsWindowOpen(tab ?? null, tr("settings.title"), { theme, accent, accentAutomatic: accentAutomatic ?? false, density, fontSize, lang: language() }, size);
       if (result === "inline") dispatch({ type: "dialog", dialog: { kind: "settings", ...(tab === "info" ? { tab } : {}) } });
     } catch (error) { fail(error); }
   }

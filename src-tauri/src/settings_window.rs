@@ -3,6 +3,7 @@ use crate::connection_editor::{
     append_appearance, only_label, open_child, sanitize_title, Appearance,
 };
 use crate::convert::{SettingsDto, UiError};
+use dualfile_core::settings::WindowSize;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::hash::BuildHasher;
@@ -18,7 +19,15 @@ pub(crate) enum AfterClose {
     Main,
     Hide,
     Restart,
+    /// Closed by the main window's own flush: nothing follows, but the user is not to be asked
+    /// anything (the main window only waits a few seconds).
+    Quiet,
 }
+/// Standard size and minimum size of the settings window (logical px).
+const STANDARD_SIZE: (f64, f64) = (720.0, 640.0);
+const MIN_SIZE: (f64, f64) = (520.0, 420.0);
+/// Space kept free around a remembered size on the screen: title bar, panels, borders.
+const SCREEN_MARGIN: (f64, f64) = (16.0, 96.0);
 #[derive(Default)]
 struct RelayState {
     latest: Option<Value>,
@@ -30,6 +39,8 @@ struct RelayState {
     close_generation: u64,
     unresponsive: bool,
     destroying: bool,
+    /// The client shows a question before closing; the close timeout waits (see `hold`).
+    holding: bool,
 }
 #[derive(Default)]
 pub(crate) struct SettingsRelay {
@@ -49,6 +60,7 @@ impl RelayState {
             return;
         }
         self.closing = false;
+        self.holding = false;
         self.after = AfterClose::None;
         self.close_generation += 1;
     }
@@ -65,7 +77,8 @@ impl RelayState {
         self.closing = true;
         let session = self.session.clone();
         if !session.is_empty() && self.sink.is_some() && !self.unresponsive {
-            self.deliver(json!({"kind":"close", "session":session}));
+            let interactive = self.after == AfterClose::None;
+            self.deliver(json!({"kind":"close", "session":session, "interactive":interactive}));
             if self.sink.is_some() {
                 return true;
             }
@@ -74,7 +87,8 @@ impl RelayState {
         false
     }
     fn expire_close(&mut self, generation: u64) -> bool {
-        if !self.closing || self.destroying || self.close_generation != generation {
+        // While the client asks the user something, an answer may take as long as it takes.
+        if !self.closing || self.destroying || self.holding || self.close_generation != generation {
             return false;
         }
         self.abandon_close();
@@ -113,6 +127,7 @@ impl RelayState {
         self.sink = None;
         self.ack = 0;
         self.closing = false;
+        self.holding = false;
         self.after = AfterClose::None;
         self.unresponsive = false;
         self.destroying = false;
@@ -132,6 +147,7 @@ impl SettingsRelay {
         );
         state.ack = 0;
         state.unresponsive = false;
+        state.holding = false;
         state.sink = Some(sink);
         let session = state.session.clone();
         state.deliver(json!({"kind":"session", "session":session}));
@@ -144,7 +160,8 @@ impl SettingsRelay {
             state.deliver(json!({"kind":"snapshot", "snapshot":snapshot}));
         }
         if state.closing {
-            state.deliver(json!({"kind":"close", "session":session}));
+            let interactive = state.after == AfterClose::None;
+            state.deliver(json!({"kind":"close", "session":session, "interactive":interactive}));
         }
         session
     }
@@ -268,6 +285,10 @@ struct SettingsProjection {
     sidebar_hidden: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sidebar_discovery: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    settings_window_size_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    settings_window_size: Option<WindowSize>,
 
     last_update_check: Option<String>,
 }
@@ -328,6 +349,10 @@ pub struct SettingsPatch {
     sidebar_hidden: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sidebar_discovery: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    settings_window_size_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    settings_window_size: Option<WindowSize>,
 }
 impl SettingsPatch {
     fn validate(&self) -> Result<(), UiError> {
@@ -411,6 +436,12 @@ impl SettingsPatch {
         if let Some(value) = &self.sidebar_hidden {
             settings.sidebar_hidden = value.clone();
         }
+        if let Some(value) = &self.settings_window_size_mode {
+            settings.settings_window_size_mode = value.clone();
+        }
+        if let Some(value) = self.settings_window_size {
+            settings.settings_window_size = value;
+        }
         if let Some(value) = &self.keybindings {
             settings.keybindings = value.clone();
         }
@@ -473,6 +504,7 @@ pub async fn settings_window_open(
     tab: Option<String>,
     title: String,
     appearance: Appearance,
+    size: Option<WindowSize>,
 ) -> Result<bool, UiError> {
     only_label(window.label(), "main")?;
     if app
@@ -490,15 +522,89 @@ pub async fn settings_window_open(
         ));
     }
     let page = settings_query(tab.as_deref(), &appearance)?;
+    // A remembered size (never a position) is limited to the screen the main window is on.
+    let wanted = size.filter(|size| *size != WindowSize::default() && size.is_valid());
+    let initial = wanted.map_or(STANDARD_SIZE, |size| {
+        fit_size((size.width, size.height), MIN_SIZE, screen_area(&window))
+    });
     open_child(
         &app,
         &window,
         SETTINGS_LABEL,
         page,
         title,
-        (720.0, 640.0),
-        (520.0, 420.0),
+        initial,
+        MIN_SIZE,
     )
+}
+/// Usable area (logical px) of the monitor the window is on; `None` if no monitor is known.
+fn screen_area(window: &tauri::WebviewWindow) -> Option<(f64, f64)> {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())?;
+    let area = monitor.work_area().size;
+    let scale = monitor.scale_factor();
+    (scale > 0.0 && area.width > 0 && area.height > 0).then(|| {
+        (
+            f64::from(area.width) / scale,
+            f64::from(area.height) / scale,
+        )
+    })
+}
+/// Limits a remembered size to the visible screen area (smaller screen, monitor gone) and never
+/// below the window's minimum size; the minimum wins if the screen is even smaller.
+pub(crate) fn fit_size(
+    wanted: (u32, u32),
+    min: (f64, f64),
+    area: Option<(f64, f64)>,
+) -> (f64, f64) {
+    let (mut width, mut height) = (f64::from(wanted.0), f64::from(wanted.1));
+    if let Some((area_width, area_height)) = area {
+        width = width.min(area_width - SCREEN_MARGIN.0);
+        height = height.min(area_height - SCREEN_MARGIN.1);
+    }
+    (width.max(min.0).round(), height.max(min.1).round())
+}
+/// True while the settings window is maximized, fullscreen or minimized. Its size is then the
+/// screen's or meaningless, not a size the user chose, so nothing is asked or remembered.
+/// Only this flag comes from the native side; the size itself is measured in the web view
+/// (see `src/app/settingsWindow.ts`), because the size the toolkit reports is not the size the
+/// window was given: on GNOME/Wayland (GTK3 with client-side decorations) a window created with
+/// 720 x 640 reports 772 x 729 in its configure event, and `tao` feeds both `Resized` and
+/// `inner_size()` from exactly that event.
+#[tauri::command]
+pub fn settings_window_zoomed(window: tauri::WebviewWindow) -> Result<bool, UiError> {
+    only_label(window.label(), SETTINGS_LABEL)?;
+    Ok(window.is_maximized().unwrap_or(false)
+        || window.is_fullscreen().unwrap_or(false)
+        || window.is_minimized().unwrap_or(false))
+}
+/// The client is about to ask the user something before it closes (`on`), or is done asking.
+/// Without this the five-second close timeout would expire during the question.
+#[tauri::command]
+pub fn settings_window_hold(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    relay: tauri::State<'_, Arc<SettingsRelay>>,
+    session: String,
+    on: bool,
+) -> Result<(), UiError> {
+    only_label(window.label(), SETTINGS_LABEL)?;
+    let rearm = {
+        let mut state = relay.state.lock().unwrap_or_else(|e| e.into_inner());
+        if session.is_empty() || session != state.session {
+            return Err(invalid());
+        }
+        state.holding = on;
+        (!on && state.closing && !state.destroying).then_some(state.close_generation)
+    };
+    // A timer that ran out during the question did nothing; start a new one for the rest.
+    if let Some(generation) = rearm {
+        arm_close_timer(&app, Arc::clone(relay.inner()), generation);
+    }
+    Ok(())
 }
 #[tauri::command]
 pub fn settings_window_attach(
@@ -560,7 +666,7 @@ pub fn settings_window_push(
         let _ = child.set_title(&sanitize_title(&title));
     }
     if close {
-        request_close(&app, AfterClose::None);
+        request_close(&app, AfterClose::Quiet);
     }
     Ok(app.get_webview_window(SETTINGS_LABEL).is_some())
 }
@@ -595,9 +701,28 @@ fn run_after(app: &tauri::AppHandle, after: AfterClose) {
             AfterClose::Restart => {
                 let _ = crate::system::restart_now(app.clone());
             }
-            AfterClose::None => {}
+            AfterClose::None | AfterClose::Quiet => {}
         }
     }
+}
+/// Gives the client five seconds to answer a close request (longer while it holds, see
+/// `settings_window_hold`), then abandons the request.
+fn arm_close_timer(app: &tauri::AppHandle, relay: Arc<SettingsRelay>, generation: u64) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        let (expired, session) = {
+            let mut state = relay.state.lock().unwrap_or_else(|e| e.into_inner());
+            (state.expire_close(generation), state.session.clone())
+        };
+        if expired {
+            let _ = app.emit_to(
+                "main",
+                "settings-window",
+                json!({"kind":"closeFailed", "session":session, "seq":0}),
+            );
+        }
+    });
 }
 /// True means a live client is draining. With no live client, destroy directly;
 /// callers still defer their parent action to `destroyed` while the child exists.
@@ -614,22 +739,7 @@ pub(crate) fn request_close(app: &tauri::AppHandle, after: AfterClose) -> bool {
         let _ = window.destroy();
         return false;
     }
-    let relay = Arc::clone(relay.inner());
-    let app = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        let (expired, session) = {
-            let mut state = relay.state.lock().unwrap_or_else(|e| e.into_inner());
-            (state.expire_close(generation), state.session.clone())
-        };
-        if expired {
-            let _ = app.emit_to(
-                "main",
-                "settings-window",
-                json!({"kind":"closeFailed", "session":session, "seq":0}),
-            );
-        }
-    });
+    arm_close_timer(app, Arc::clone(relay.inner()), generation);
     true
 }
 #[tauri::command]
@@ -811,6 +921,8 @@ mod tests {
                 "allow-settings-window-attach",
                 "allow-settings-window-send",
                 "allow-settings-window-close",
+                "allow-settings-window-zoomed",
+                "allow-settings-window-hold",
                 "allow-open-url",
                 "allow-log-info",
                 "allow-log-read",
@@ -827,6 +939,8 @@ mod tests {
             ("attach", "settings"),
             ("send", "settings"),
             ("close", "settings"),
+            ("zoomed", "settings"),
+            ("hold", "settings"),
         ] {
             let source = include_str!("settings_window.rs");
             let body = source
@@ -1010,6 +1124,8 @@ mod tests {
             "sidebarCollapsed",
             "sidebarHidden",
             "sidebarDiscovery",
+            "settingsWindowSizeMode",
+            "settingsWindowSize",
             "keybindings",
         ];
         let mut projection = json!({});
@@ -1025,5 +1141,105 @@ mod tests {
         projection["trayEnabled"] = json!("true");
         assert!(validate_projection(&projection).is_err());
         assert!(std::mem::size_of::<SettingsWindowMessage>() < 100);
+    }
+    #[test]
+    fn remembered_size_is_limited_to_the_screen_and_never_below_the_minimum() {
+        let min = MIN_SIZE;
+        // Fits: unchanged.
+        assert_eq!(
+            fit_size((900, 700), min, Some((1920.0, 1080.0))),
+            (900.0, 700.0)
+        );
+        // No monitor known: only the minimum applies.
+        assert_eq!(fit_size((900, 700), min, None), (900.0, 700.0));
+        // Larger than the screen (smaller monitor now): limited, with room for title bar and panels.
+        assert_eq!(
+            fit_size((1800, 1000), min, Some((1366.0, 768.0))),
+            (1366.0 - SCREEN_MARGIN.0, 768.0 - SCREEN_MARGIN.1)
+        );
+        // Only one side too large.
+        assert_eq!(
+            fit_size((1000, 1000), min, Some((1920.0, 800.0))),
+            (1000.0, 800.0 - SCREEN_MARGIN.1)
+        );
+        // A screen smaller than the minimum: the minimum wins.
+        assert_eq!(fit_size((900, 700), min, Some((400.0, 300.0))), min);
+        // Below the minimum (hand-edited file that got through): raised.
+        assert_eq!(fit_size((100, 100), min, Some((1920.0, 1080.0))), min);
+        // HiDPI: the area is logical already; fractional results are rounded.
+        assert_eq!(fit_size((900, 700), min, Some((1280.5, 720.4))).0, 900.0);
+        let (w, h) = fit_size((2000, 2000), min, Some((1280.5, 720.4)));
+        assert_eq!((w.fract(), h.fract()), (0.0, 0.0));
+    }
+    #[test]
+    fn holding_keeps_the_close_request_alive_until_released() {
+        let mut state = live_state();
+        assert!(state.request_close(AfterClose::None));
+        let generation = state.close_generation;
+        state.holding = true;
+        assert!(!state.expire_close(generation));
+        assert!(state.closing && !state.destroying && !state.unresponsive);
+        state.holding = false;
+        assert!(state.expire_close(generation));
+        // An abandoned or finished close never keeps a hold.
+        state.holding = true;
+        state.abandon_close();
+        assert!(!state.holding);
+        state.holding = true;
+        state.take_destroyed();
+        assert!(!state.holding);
+    }
+    #[test]
+    fn only_a_close_from_the_window_itself_may_ask_the_user() {
+        let delivered = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let sink = {
+            let delivered = Arc::clone(&delivered);
+            Box::new(move |value: &Value| {
+                delivered.lock().unwrap().push(value.clone());
+                true
+            }) as Sink
+        };
+        let mut state = RelayState {
+            session: "s".into(),
+            sink: Some(sink),
+            ..Default::default()
+        };
+        assert!(state.request_close(AfterClose::None));
+        assert_eq!(
+            delivered.lock().unwrap().last().unwrap()["interactive"],
+            true
+        );
+        state.abandon_close();
+        assert!(state.request_close(AfterClose::Quiet));
+        assert_eq!(
+            delivered.lock().unwrap().last().unwrap()["interactive"],
+            false
+        );
+        state.abandon_close();
+        for after in [AfterClose::Main, AfterClose::Hide, AfterClose::Restart] {
+            assert!(state.request_close(after));
+            assert_eq!(
+                delivered.lock().unwrap().last().unwrap()["interactive"],
+                false
+            );
+            state.abandon_close();
+        }
+    }
+    #[test]
+    fn size_fields_are_part_of_the_patch_validation() {
+        let patch = |value: Value| -> Result<(), UiError> {
+            serde_json::from_value::<SettingsPatch>(value)
+                .map_err(|_| invalid())?
+                .validate()
+        };
+        assert!(patch(json!({"settingsWindowSizeMode": "always"})).is_ok());
+        assert!(patch(json!({"settingsWindowSizeMode": "sometimes"})).is_err());
+        assert!(patch(json!({"settingsWindowSize": {"width": 900, "height": 700}})).is_ok());
+        assert!(patch(json!({"settingsWindowSize": {"width": 0, "height": 0}})).is_ok());
+        assert!(patch(json!({"settingsWindowSize": {"width": 100, "height": 100}})).is_err());
+        assert!(patch(json!({"settingsWindowSize": {"width": 900}})).is_err());
+        assert!(
+            patch(json!({"settingsWindowSize": {"width": 900, "height": 700, "x": 5}})).is_err()
+        );
     }
 }

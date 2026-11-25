@@ -19,6 +19,27 @@ static TEMP: AtomicU64 = AtomicU64::new(0);
 /// Older files load unchanged with empty lists and are rewritten as the current version on
 /// the next save.
 pub const SETTINGS_VERSION: u32 = 6;
+/// Choices for `settings_window_size_mode`.
+pub const SETTINGS_WINDOW_SIZE_MODES: [&str; 3] = ["ask", "always", "never"];
+/// Smallest and largest remembered settings-window size (logical px); the minimum equals the
+/// window's own minimum size.
+pub const SETTINGS_WINDOW_MIN: (u32, u32) = (520, 420);
+pub const SETTINGS_WINDOW_MAX: (u32, u32) = (16384, 16384);
+/// Window size in logical pixels; 0 x 0 stands for "none".
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct WindowSize {
+    pub width: u32,
+    pub height: u32,
+}
+impl WindowSize {
+    /// 0 x 0 (nothing remembered) or both values within the allowed range.
+    pub fn is_valid(&self) -> bool {
+        (self.width == 0 && self.height == 0)
+            || ((SETTINGS_WINDOW_MIN.0..=SETTINGS_WINDOW_MAX.0).contains(&self.width)
+                && (SETTINGS_WINDOW_MIN.1..=SETTINGS_WINDOW_MAX.1).contains(&self.height))
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Settings {
@@ -56,6 +77,13 @@ pub struct Settings {
     pub sidebar_collapsed: Vec<String>,
     pub sidebar_hidden: Vec<String>,
     pub sidebar_discovery: bool,
+    /// Whether the settings window remembers its size: "ask" (question on closing, default),
+    /// "always" or "never".
+    pub settings_window_size_mode: String,
+    /// Remembered inner size (logical px) of the settings window; 0 x 0 means nothing remembered
+    /// (standard size). One value, so it always changes and is patched as a whole. The position
+    /// is deliberately never stored.
+    pub settings_window_size: WindowSize,
     pub density: String,
     pub font_size: u8,
     pub language: String,
@@ -122,6 +150,8 @@ impl Default for Settings {
             sidebar_collapsed: Vec::new(),
             sidebar_hidden: Vec::new(),
             sidebar_discovery: false,
+            settings_window_size_mode: "ask".into(),
+            settings_window_size: WindowSize::default(),
             density: "normal".into(),
             font_size: 14,
             language: "auto".into(),
@@ -429,6 +459,18 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         sidebar_collapsed: field(&mut obj, "sidebar_collapsed", Vec::new(), &mut fixes),
         sidebar_hidden: field(&mut obj, "sidebar_hidden", Vec::new(), &mut fixes),
         sidebar_discovery: field(&mut obj, "sidebar_discovery", false, &mut fixes),
+        settings_window_size_mode: field(
+            &mut obj,
+            "settings_window_size_mode",
+            d.settings_window_size_mode.clone(),
+            &mut fixes,
+        ),
+        settings_window_size: field(
+            &mut obj,
+            "settings_window_size",
+            WindowSize::default(),
+            &mut fixes,
+        ),
         density: field(&mut obj, "density", d.density.clone(), &mut fixes),
         font_size: field(&mut obj, "font_size", d.font_size, &mut fixes),
         language: field(&mut obj, "language", d.language.clone(), &mut fixes),
@@ -487,6 +529,14 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
     if !(160..=400).contains(&s.sidebar_width) {
         s.sidebar_width = s.sidebar_width.clamp(160, 400);
         fixes.push("sidebar_width".into());
+    }
+    if !SETTINGS_WINDOW_SIZE_MODES.contains(&s.settings_window_size_mode.as_str()) {
+        s.settings_window_size_mode = d.settings_window_size_mode.clone();
+        fixes.push("settings_window_size_mode".into());
+    }
+    if !s.settings_window_size.is_valid() {
+        s.settings_window_size = WindowSize::default();
+        fixes.push("settings_window_size".into());
     }
     let before = s.sidebar_collapsed.len();
     s.sidebar_collapsed
@@ -1648,5 +1698,83 @@ mod sidebar_tests {
         )
         .unwrap();
         assert_eq!(load(dir.path()).0.sidebar_hidden.len(), 500);
+    }
+    #[test]
+    fn settings_window_size_defaults_and_repairs() {
+        let dir = tempfile::tempdir().unwrap();
+        // An older file without the fields loads silently with the defaults.
+        fs::write(dir.path().join("settings.json"), r#"{"version":6}"#).unwrap();
+        let (s, outcome) = load(dir.path());
+        assert_eq!(outcome, LoadOutcome::Loaded);
+        assert_eq!(s.settings_window_size_mode, "ask");
+        assert_eq!(s.settings_window_size, WindowSize::default());
+        // A valid remembered size and mode round-trip.
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"version":6,"settings_window_size_mode":"always","settings_window_size":{"width":900,"height":700}}"#,
+        )
+        .unwrap();
+        let (s, outcome) = load(dir.path());
+        assert_eq!(outcome, LoadOutcome::Loaded);
+        assert_eq!(s.settings_window_size_mode, "always");
+        assert_eq!(
+            s.settings_window_size,
+            WindowSize {
+                width: 900,
+                height: 700
+            }
+        );
+        // Unknown mode, a size below the minimum or only one dimension are repaired.
+        for (text, key) in [
+            (
+                r#"{"version":6,"settings_window_size_mode":"sometimes"}"#,
+                "settings_window_size_mode",
+            ),
+            (
+                r#"{"version":6,"settings_window_size_mode":3}"#,
+                "settings_window_size_mode",
+            ),
+            (
+                r#"{"version":6,"settings_window_size":{"width":100,"height":100}}"#,
+                "settings_window_size",
+            ),
+            (
+                r#"{"version":6,"settings_window_size":{"width":900}}"#,
+                "settings_window_size",
+            ),
+            (
+                r#"{"version":6,"settings_window_size":"900x700"}"#,
+                "settings_window_size",
+            ),
+            (
+                r#"{"version":6,"settings_window_size":{"width":900,"height":700,"x":1}}"#,
+                "settings_window_size",
+            ),
+            (
+                r#"{"version":6,"settings_window_size":{"width":99999,"height":700}}"#,
+                "settings_window_size",
+            ),
+        ] {
+            fs::write(dir.path().join("settings.json"), text).unwrap();
+            let (s, outcome) = load(dir.path());
+            assert_eq!(s.settings_window_size_mode, "ask", "{text}");
+            assert_eq!(s.settings_window_size, WindowSize::default(), "{text}");
+            let LoadOutcome::Repaired(fixes) = outcome else {
+                panic!("{text}")
+            };
+            assert!(fixes.contains(&key.to_owned()), "{text}");
+        }
+    }
+    #[test]
+    fn settings_window_size_validator() {
+        let size = |width, height| WindowSize { width, height };
+        assert!(size(0, 0).is_valid());
+        assert!(size(520, 420).is_valid());
+        assert!(size(16384, 16384).is_valid());
+        assert!(!size(519, 420).is_valid());
+        assert!(!size(520, 419).is_valid());
+        assert!(!size(0, 500).is_valid());
+        assert!(!size(600, 0).is_valid());
+        assert!(!size(16385, 600).is_valid());
     }
 }

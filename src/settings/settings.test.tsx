@@ -317,3 +317,51 @@ test("automatic accent and hidden terminal colours leave counters and tabs at de
   await app.user.click(app.dlg.getByRole("button", { name: "Geändert (3)" }));
   expect(app.dialog().querySelectorAll("[data-setting]")).toHaveLength(3);
 });
+
+test("Allgemein: remembering the settings window size offers Fragen / Immer merken / Nie merken with hint, remembered size and a reset that keeps the mode", async () => {
+  const app = await setup({ settingsWindowSize: { width: 900, height: 700 } });
+  await app.user.click(app.dlg.getByRole("tab", { name: "Allgemein" }));
+  const row = within(app.dialog().querySelector<HTMLElement>('[data-setting="settingsWindowSizeMode"]')!);
+  expect(app.dlg.getByText("Einstellungsfenster", { selector: "h3" })).toBeInTheDocument();
+  expect(row.getByText("Größe des Einstellungsfensters merken")).toBeInTheDocument();
+  const options = row.getAllByRole("radio");
+  expect(options.map(option => option.textContent)).toEqual(["Fragen", "Immer merken", "Nie merken"]);
+  expect(row.getByRole("radio", { name: "Fragen" })).toHaveAttribute("aria-checked", "true");
+  expect(row.getByText(/Beim Schließen fragt Dualfile/)).toBeInTheDocument();
+  expect(row.getByText("Gemerkt: 900 × 700")).toBeInTheDocument();
+  await app.user.click(row.getByRole("radio", { name: "Immer merken" }));
+  expect(app.state().settingsWindowSizeMode).toBe("always");
+  expect(row.getByText(/ohne Rückfrage gespeichert/)).toBeInTheDocument();
+  await app.user.click(row.getByRole("radio", { name: "Nie merken" }));
+  expect(app.state().settingsWindowSizeMode).toBe("never");
+  expect(row.getByText(/immer in der Standardgröße/)).toBeInTheDocument();
+  // "Zurücksetzen" forgets only the size.
+  await app.user.click(row.getByRole("button", { name: "Gemerkte Fenstergröße zurücksetzen" }));
+  expect(app.state().settingsWindowSize).toEqual({ width: 0, height: 0 });
+  expect(app.state().settingsWindowSizeMode).toBe("never");
+  expect(row.getByText("Gemerkt: nichts (Standardgröße)")).toBeInTheDocument();
+  expect(row.getByRole("button", { name: "Gemerkte Fenstergröße zurücksetzen" })).toBeDisabled();
+});
+
+test("Allgemein: the window-size row takes part in search, the Geändert filter and per-row reset", async () => {
+  const app = await setup();
+  await app.user.type(app.dlg.getByRole("searchbox"), "Fenstergröße");
+  expect(app.dialog().querySelector('[data-setting="settingsWindowSizeMode"]')).not.toBeNull();
+  await app.user.clear(app.dlg.getByRole("searchbox"));
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+  edit(app, { settingsWindowSizeMode: "always", settingsWindowSize: { width: 800, height: 600 } });
+  await app.user.click(app.dlg.getByRole("button", { name: "Geändert (1)" }));
+  expect(app.dialog().querySelectorAll("[data-setting]")).toHaveLength(1);
+  await app.user.click(app.dlg.getByRole("button", { name: "Zurücksetzen: Größe des Einstellungsfensters merken" }));
+  expect(app.state().settingsWindowSizeMode).toBe("ask");
+  expect(app.state().settingsWindowSize).toEqual({ width: 0, height: 0 });
+  expect(app.dlg.getByRole("button", { name: "Geändert (0)" })).toBeInTheDocument();
+});
+
+test("Alles zurücksetzen also forgets the remembered window size and returns to Fragen", async () => {
+  const app = await setup({ settingsWindowSizeMode: "never", settingsWindowSize: { width: 800, height: 600 } });
+  await app.user.click(app.dlg.getByRole("button", { name: /Alles auf Standard/ }));
+  await app.user.click(app.dlg.getByRole("button", { name: /Wirklich alles zurücksetzen/ }));
+  expect(app.state().settingsWindowSizeMode).toBe("ask");
+  expect(app.state().settingsWindowSize).toEqual({ width: 0, height: 0 });
+});

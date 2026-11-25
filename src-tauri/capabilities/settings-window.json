@@ -8,6 +8,8 @@
     "allow-settings-window-attach",
     "allow-settings-window-send",
     "allow-settings-window-close",
+    "allow-settings-window-zoomed",
+    "allow-settings-window-hold",
     "allow-open-url",
     "allow-log-info",
     "allow-log-read",

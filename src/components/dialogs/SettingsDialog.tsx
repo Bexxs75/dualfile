@@ -153,6 +153,18 @@ function SettingControl({ entry, query }: { entry: SettingEntry; query: string }
     const disabled = id === "paneTintStrength" && !settings.paneColorLeft && !settings.paneColorRight;
     return <><div className="range"><input id={`setting-${id}`} type="range" min={entry.min} max={entry.max} step={entry.step} value={Number(value)} disabled={disabled} aria-valuetext={`${value}${id === "paneTintStrength" ? "%" : " px"}`} onChange={e => change(Number(e.target.value))} /><output htmlFor={`setting-${id}`}>{String(value)}{id === "paneTintStrength" ? "%" : " px"}</output></div>{disabled && <p className="field-help">{tr("settings.choosePaneColor")}</p>}</>;
   }
+  if (id === "settingsWindowSizeMode") {
+    const mode = (value === "always" || value === "never" ? value : "ask") as "ask" | "always" | "never", size = settings.settingsWindowSize;
+    const remembered = !!size && size.width > 0 && size.height > 0;
+    return <>
+      <Segmented query={query} labelledBy={`label-${id}`} value={mode} options={entry.options!.map(option => ({ value: option as typeof mode, text: optionText(option) }))} onChange={change} />
+      <p className="field-help" id={`help-${id}`}>{tr(`settings.windowSize.hint.${mode}` as TranslationKey)}</p>
+      <div className="window-size-state">
+        <p className="field-help" aria-live="polite">{remembered ? tr("settings.windowSize.remembered", { width: size.width, height: size.height }) : tr("settings.windowSize.rememberedNone")}</p>
+        <button type="button" className="tb" disabled={!remembered} aria-label={tr("settings.windowSize.resetLabel")} onClick={() => set({ settingsWindowSize: { width: 0, height: 0 } })}>{tr("settings.reset")}</button>
+      </div>
+    </>;
+  }
   if (entry.kind === "segment") return id === "verifyPolicy" ? <div className="settings-radios" role="radiogroup" aria-labelledby={`label-${id}`} aria-describedby="verify-help">{entry.options!.map(option => <label key={option}><input type="radio" name={id} checked={value === option} onChange={() => change(option)} /><Highlight text={optionText(option)} query={query} /></label>)}</div> : <Segmented query={query} labelledBy={`label-${id}`} value={String(value)} options={entry.options!.map(option => ({ value: option, text: optionText(option) }))} onChange={change} />;
   if (entry.kind === "select") return <select id={`setting-${id}`} aria-describedby={entry.help ? `help-${id}` : undefined} value={String(value)} onChange={e => change(e.target.value)}>{entry.options!.map(option => <option key={option} value={option}>{optionText(option)}</option>)}</select>;
   switch (id) {

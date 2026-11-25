@@ -26,8 +26,16 @@ test("settings commands carry session, ack and a channel without event permissio
   vi.mocked(invoke).mockResolvedValueOnce(true);
   expect(await api.settingsWindowOpen("info", "Settings", appearance)).toBe("opened");
   expect(invoke).toHaveBeenLastCalledWith("settings_window_open", { tab: "info", title: "Settings", appearance });
+  vi.mocked(invoke).mockResolvedValueOnce(true);
+  expect(await api.settingsWindowOpen("info", "Settings", appearance, { width: 900, height: 700 })).toBe("opened");
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_open", { tab: "info", title: "Settings", appearance, size: { width: 900, height: 700 } });
   vi.mocked(invoke).mockResolvedValueOnce(false);
   expect(await api.settingsWindowOpen(null, "Settings", appearance)).toBe("focused");
+  vi.mocked(invoke).mockResolvedValueOnce(true);
+  expect(await api.settingsWindowZoomed()).toBe(true);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_zoomed", undefined);
+  await api.settingsWindowHold("s1", true);
+  expect(invoke).toHaveBeenLastCalledWith("settings_window_hold", { session: "s1", on: true });
   const receive = vi.fn(); await api.settingsWindowAttach(receive);
   expect(invoke).toHaveBeenLastCalledWith("settings_window_attach", { channel: expect.any(Channel) });
   const args = vi.mocked(invoke).mock.lastCall![1] as { channel: Channel<unknown> };

@@ -433,6 +433,8 @@ export interface WindowSession {
 }
 
 export type VerifyPolicy = "never" | "auto" | "always";
+export type SettingsWindowSizeMode = "ask" | "always" | "never";
+export interface WindowSize { width: number; height: number }
 
 export interface Settings {
   sidebarMode?: "hidden" | "icons" | "full";
@@ -440,6 +442,10 @@ export interface Settings {
   sidebarCollapsed?: string[];
   sidebarHidden?: string[];
   sidebarDiscovery?: boolean;
+  /** Remember the settings window's size: "ask" (question when closing, default), "always" or "never". */
+  settingsWindowSizeMode?: SettingsWindowSizeMode;
+  /** Remembered inner size (logical px) of the settings window; 0 x 0 = nothing remembered. Never a position. */
+  settingsWindowSize?: WindowSize;
   verifyPolicy: VerifyPolicy;
   version: number;
   theme: "schiefer" | "papier" | "werkstatt" | "weiss";
@@ -748,7 +754,7 @@ export interface SystemPlace {
 }
 
 export type SettingsTab = "allgemein" | "darstellung" | "dateiliste" | "seitenleiste" | "terminal" | "kopieren" | "tastatur" | "info" | "appearance" | "system" | "keyboard";
-export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "settingsWindowSizeMode" | "settingsWindowSize" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 /** State at program start; memory only, never saved. `autostart` stays null until the system status is first known. */
 export interface SettingsBase { settings: Settings; autostart: import("./system").AutostartMode | null }
 /** Baseline relative to the current settings: only the fields that differ (never `sidebarHidden`). */
@@ -771,7 +777,7 @@ export interface SettingsWindowSnapshot {
   persistence: { outcome: LoadOutcome; error: string };
 }
 export type SettingsWindowDelivery = { kind: "session"; session: string } |
-  { kind: "close"; session: string } | { kind: "timeout"; session: string } | { kind: "error"; session: string; message: string } | { kind: "snapshot"; snapshot: SettingsWindowSnapshot };
+  { kind: "close"; session: string; /** false: closed on behalf of the main window (no question to the user). */ interactive?: boolean } | { kind: "timeout"; session: string } | { kind: "error"; session: string; message: string } | { kind: "snapshot"; snapshot: SettingsWindowSnapshot };
 
 /** One item in the trash view (`trashList`); `id` is the stable identifier used for restore and purge. */
 export interface TrashEntry {

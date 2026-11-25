@@ -16,7 +16,7 @@ describe("settings catalog", () => {
     expect(resetSetting({ ...defaultSettings, sidebarCollapsed: ["network", "devices"] }, "sidebarCollapsed").sidebarCollapsed).toEqual(["network"]);
   });
   test("contains every editable Settings field exactly once", () => {
-    const expected = ["language", "trayEnabled", "checkUpdatesOnStart", "theme", "accentAutomatic", "accent", "fontSize", "density", "showParentEntry", "extensionColumn", "showPermissionsColumn", "showUidColumn", "showGidColumn", "paneColorLeft", "paneColorRight", "paneTintStrength", "sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarDiscovery", "sidebarHidden", "terminalShell", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy"];
+    const expected = ["language", "trayEnabled", "checkUpdatesOnStart", "settingsWindowSizeMode", "theme", "accentAutomatic", "accent", "fontSize", "density", "showParentEntry", "extensionColumn", "showPermissionsColumn", "showUidColumn", "showGidColumn", "paneColorLeft", "paneColorRight", "paneTintStrength", "sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarDiscovery", "sidebarHidden", "terminalShell", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy"];
     expect(catalog.map(e => e.id).sort()).toEqual(expected.sort());
     expect(catalog.every(e => !settingChanged(defaultSettings, e.id))).toBe(true);
   });
@@ -99,4 +99,26 @@ describe("changes are measured against the start state, not the factory state", 
     expect(settingChanged({ ...start, sidebarCollapsed: ["devices"] }, "sidebarCollapsed", baseOf(start))).toBe(true);
     expect(revertSetting({ ...start, sidebarCollapsed: ["network", "remote"] }, baseOf(start), "sidebarCollapsed").sidebarCollapsed).toEqual(["places", "devices", "network"]);
   });
+});
+
+test("the remembered window size belongs to its mode row: either changing counts, reset and revert restore both", () => {
+  const remembered = { ...defaultSettings, settingsWindowSize: { width: 900, height: 700 } };
+  expect(settingChanged(remembered, "settingsWindowSizeMode")).toBe(true);
+  expect(settingChanged({ ...defaultSettings, settingsWindowSizeMode: "never" }, "settingsWindowSizeMode")).toBe(true);
+  expect(settingChanged(defaultSettings, "settingsWindowSizeMode")).toBe(false);
+  // Against a start state that already had the size, an unchanged size is not a change.
+  expect(settingChanged(remembered, "settingsWindowSizeMode", baseOf(remembered))).toBe(false);
+  const both = { ...remembered, settingsWindowSizeMode: "always" as const };
+  expect(resetSetting(both, "settingsWindowSizeMode")).toEqual(defaultSettings);
+  expect(revertSetting(both, baseOf(), "settingsWindowSizeMode")).toEqual(defaultSettings);
+  expect(revertSetting(defaultSettings, baseOf(both), "settingsWindowSizeMode")).toEqual(both);
+});
+
+test("the window-size row is found by its label and by its hints, in both languages", () => {
+  const entry = catalog.find(e => e.id === "settingsWindowSizeMode")!;
+  for (const lang of ["de", "en"] as const) {
+    const tr = createTranslator(lang);
+    const text = settingSearch(entry, tr);
+    for (const key of ["settings.windowSize", "settings.windowSize.hint.ask", "settings.windowSize.hint.always", "settings.windowSize.hint.never", "settings.windowSize.always"] as const) expect(text).toContain(tr(key));
+  }
 });
