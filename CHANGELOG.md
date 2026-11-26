@@ -5,6 +5,17 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-11-26
+
+### Added
+
+- New design "Spaceship": a console look with a black ground, orange, lilac and light-blue pills, narrow capital lettering (Antonio) and a decorative frame of arcs and stripes at the top and bottom. Choose it in Settings > Appearance. The frame is not drawn in secondary windows or when the window is lower than 700 px.
+- New setting "Font weight: Normal / Bold" in Settings > Appearance > Text and rows. It applies to all designs; the terminal stays unchanged.
+
+### Changed
+
+- The connection editor and the settings window now take over the chosen design and font weight.
+
 ## [0.4.7] - 2026-11-25
 
 ### Added

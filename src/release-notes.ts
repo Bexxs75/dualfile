@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.8": {
+    date: "2026-11-26",
+    de: {
+      new: ["Neues Design „Spaceship“: Konsolen-Look mit schwarzem Grund, orangen, fliederfarbenen und hellblauen Pillen, schmaler Großschrift und einem Rahmen aus Bögen und Streifen oben und unten. Wählbar unter Einstellungen > Darstellung. In Nebenfenstern und bei Fensterhöhe unter 700 Pixeln gibt es keinen Rahmen.", "Neue Einstellung „Schriftstärke“ (Normal oder Fett) unter Einstellungen > Darstellung > Text und Zeilen. Sie gilt für alle Designs; das Terminal bleibt unverändert."],
+      improved: ["Verbindungs-Editor und Einstellungsfenster übernehmen jetzt Design und Schriftstärke."],
+      fixed: [],
+    },
+    en: {
+      new: ["New design \"Spaceship\": a console look with a black ground, orange, lilac and light-blue pills, narrow capital lettering and a frame of arcs and stripes at the top and bottom. Choose it under Settings > Appearance. There is no frame in secondary windows or when the window is lower than 700 pixels.", "New setting \"Font weight\" (Normal or Bold) under Settings > Appearance > Text and rows. It applies to all designs; the terminal stays unchanged."],
+      improved: ["The connection editor and the settings window now take over the design and font weight."],
+      fixed: [],
+    },
+  },
   "0.4.7": {
     date: "2026-11-25",
     de: {

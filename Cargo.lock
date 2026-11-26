@@ -572,7 +572,7 @@ dependencies = [
 
 [[package]]
 name = "dualfile-core"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "bzip2",
  "crc32fast",
@@ -598,14 +598,14 @@ dependencies = [
 
 [[package]]
 name = "dualfile-platform"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "rustix",
 ]
 
 [[package]]
 name = "dualfile-plugin"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "base64ct",
  "dualfile-core",
@@ -622,7 +622,7 @@ dependencies = [
 
 [[package]]
 name = "dualfile-remote"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "dualfile-core",
  "nfs3_client",
