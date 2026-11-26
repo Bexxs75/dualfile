@@ -881,6 +881,7 @@ const en: Record<keyof typeof de, string> = {
   "settings.theme.schiefer": "Slate",
   "settings.theme.papier": "Paper",
   "settings.theme.werkstatt": "Workshop",
+  "settings.theme.spaceship": "Spaceship",
   "settings.accent": "Accent color",
   "settings.accent.custom": "Custom color (#rrggbb)",
   "settings.accent.adjusted": "Too bright on a light design: darkened to {color}",

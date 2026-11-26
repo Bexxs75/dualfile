@@ -68,7 +68,7 @@ test("B13 bookmark tooltip follows pinned state", async () => {
 test("B14 German design group and names", async () => {
   await settings();
   const group = screen.getByRole("radiogroup", { name: "Design" });
-  expect(within(group).getAllByRole("radio").map(node => node.textContent)).toEqual(["Schiefer", "Papier", "Werkstatt", "Weiß"]);
+  expect(within(group).getAllByRole("radio").map(node => node.textContent)).toEqual(["Schiefer", "Papier", "Werkstatt", "Weiß", "Spaceship"]);
 });
 
 test("B15 checksum help spans columns and warning slot always exists", async () => {

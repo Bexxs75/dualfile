@@ -651,7 +651,7 @@ pub fn valid_seen_version(s: &str) -> bool {
 }
 
 fn valid_theme(s: &str) -> bool {
-    ["schiefer", "papier", "werkstatt", "weiss"].contains(&s)
+    ["schiefer", "papier", "werkstatt", "weiss", "spaceship"].contains(&s)
 }
 
 /// Genau `#rrggbb` (sechs Hexziffern, keine Kurzform, kein Alpha).
@@ -1109,6 +1109,21 @@ mod tests {
         assert_eq!(s.theme, "schiefer");
         assert_eq!(s.accent, "#010203");
         assert_eq!(o, LoadOutcome::Repaired(vec!["theme".into()]));
+    }
+
+    #[test]
+    fn spaceship_theme_is_accepted_and_survives_save_and_load() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), r##"{"version":4,"theme":"spaceship"}"##);
+        let (mut s, o) = load(dir.path());
+        assert_eq!(s.theme, "spaceship");
+        assert!(!matches!(o, LoadOutcome::Repaired(_)), "{o:?}");
+        s.language = "en".into();
+        save(dir.path(), &s, false).unwrap();
+        let (again, o) = load(dir.path());
+        assert_eq!(again.theme, "spaceship");
+        assert!(!matches!(o, LoadOutcome::Repaired(_)), "{o:?}");
+        assert_eq!(again, s);
     }
 
     #[test]

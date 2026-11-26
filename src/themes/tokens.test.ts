@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { t } from "../i18n";
 import appCss from "../styles/app.css?raw";
+import spaceshipCss from "../styles/spaceship.css?raw";
+import mainSource from "../main.tsx?raw";
 import {
   accentPresets,
   accentPresetsForTheme,
@@ -24,9 +26,9 @@ import {
 const base: ThemeSettings = { theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13 };
 
 describe("Tokens", () => {
-  test("es gibt genau die vier Themes Schiefer, Papier, Werkstatt und Weiß", () => {
-    expect([...themeNames].sort()).toEqual(["papier", "schiefer", "weiss", "werkstatt"]);
-    expect(Object.keys(themes).sort()).toEqual(["papier", "schiefer", "weiss", "werkstatt"]);
+  test("es gibt genau die fünf Themes Schiefer, Papier, Werkstatt, Weiß und Spaceship", () => {
+    expect([...themeNames].sort()).toEqual(["papier", "schiefer", "spaceship", "weiss", "werkstatt"]);
+    expect(Object.keys(themes).sort()).toEqual(["papier", "schiefer", "spaceship", "weiss", "werkstatt"]);
   });
 
   test("jedes Theme hat alle Token als gültige Farbwerte", () => {
@@ -44,6 +46,7 @@ describe("Tokens", () => {
     expect(themes.schiefer).toMatchObject({ bg: "#161a1f", fg: "#d9dee4", accent: "#e0a45c", current: "#38506a", colorScheme: "dark" });
     expect(themes.papier).toMatchObject({ bg: "#ece8df", fg: "#2a2824", accent: "#2f6f6a", accentInk: "#ffffff", colorScheme: "light" });
     expect(themes.werkstatt).toMatchObject({ bg: "#1b1713", fg: "#eadfce", accent: "#d4663f", directory: "#e8c27a", colorScheme: "dark" });
+    expect(themes.spaceship).toMatchObject({ bg: "#000000", fg: "#ffcc99", accent: "#ff9900", accentInk: "#000000", warning: "#cc6666", muted: "#9999cc", colorScheme: "dark" });
   });
 
   test.each(themeNames)("Text auf Hintergrund hat mindestens 4,5:1 im Theme %s", (name) => {
@@ -353,9 +356,9 @@ describe("light designs: heavier text and darker muted (#37)", () => {
   const light = themeNames.filter(name => themes[name].colorScheme === "light");
   const dark = themeNames.filter(name => themes[name].colorScheme === "dark");
 
-  test("White and Paper are the light designs; Slate and Workshop the dark ones", () => {
+  test("White and Paper are the light designs; Slate, Workshop and Spaceship the dark ones", () => {
     expect([...light].sort()).toEqual(["papier", "weiss"]);
-    expect([...dark].sort()).toEqual(["schiefer", "werkstatt"]);
+    expect([...dark].sort()).toEqual(["schiefer", "spaceship", "werkstatt"]);
   });
 
   test.each(light)("%s uses weight 500 for text and 600 for emphasis", name => {
@@ -397,5 +400,45 @@ describe("light designs: heavier text and darker muted (#37)", () => {
     expect(root.style.getPropertyValue("--fw")).toBe("500");
     applyTheme(root, { ...base, theme: "schiefer" });
     expect(root.style.getPropertyValue("--fw")).toBe("400");
+  });
+});
+
+describe("Spaceship", () => {
+  const ship = themes.spaceship;
+  const palette = ["#ff9900", "#cc99cc", "#99ccff", "#ffcc99", "#9999cc", "#cc6666"];
+
+  test("schwarze Schrift auf jeder Farbfläche der Palette erreicht 4,5:1 (Rot und Violett eingeschlossen)", () => {
+    for (const color of palette) expect(contrastRatio("#000000", color), color).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("alle Palettenfarben sind als Text auf Schwarz und auf den Flächen des Designs lesbar", () => {
+    for (const color of palette) {
+      for (const surface of [ship.bg, ship.panel2, ship.raised, ship.accentSoft]) {
+        expect(contrastRatio(color, surface), `${color} on ${surface}`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  test("Standard-Akzent ist Orange auch im automatischen Modus, Vorgaben sind die Palette", () => {
+    expect(themeVariables({ ...base, theme: "spaceship", accentAutomatic: true })["--accent"]).toBe("#ff9900");
+    expect(accentPresetsForTheme("spaceship")).toEqual(["#ff9900", "#cc99cc", "#99ccff", "#ffcc99", "#9999cc"]);
+  });
+
+  test("setzt data-fm und die dunkle Farbstellung", () => {
+    const root = document.createElement("html");
+    applyTheme(root, { ...base, theme: "spaceship", accent: "#ff9900" });
+    expect(root.dataset.fm).toBe("spaceship");
+    expect(root.style.getPropertyValue("--bg")).toBe("#000000");
+    expect(root.style.colorScheme).toBe("dark");
+  });
+
+  test("Stylesheet: Spaceship-Regeln, Antonio gebündelt, Eingabefelder nicht in Großbuchstaben", () => {
+    const css = spaceshipCss;
+    expect(css).toContain('[data-fm="spaceship"]');
+    expect(css).toMatch(/--font-ui:\s*"Antonio"/);
+    expect(css).toMatch(/input[^{]*\{[^}]*text-transform:\s*none/);
+    expect(css).toMatch(/:focus-visible[^{]*\{[^}]*outline/);
+    expect(css).not.toMatch(/https?:\/\//);
+    expect(mainSource).toContain("@fontsource/antonio/600.css");
   });
 });

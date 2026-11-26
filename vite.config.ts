@@ -9,7 +9,7 @@ export default defineConfig({
   base: "./",
   test: {
     environment: "jsdom",
-    css: { include: /(?:app|ssh)\.css/ },
+    css: { include: /(?:app|ssh|spaceship)\.css/ },
     globals: true,
     // CI runners are slower than dev machines; some setup-heavy tests (e.g. comparing
     // 120 created dirs) exceed the 5s default. 20s leaves headroom but still catches hangs.

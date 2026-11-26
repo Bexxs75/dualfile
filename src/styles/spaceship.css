@@ -1,0 +1,226 @@
+/* Design „Spaceship“ (Theme-Id spaceship, Wurzelattribut data-fm="spaceship").
+   Stufe 1: nur Darstellung, der Aufbau der Oberfläche bleibt unverändert. Die Farbwerte kommen als
+   CSS-Variablen aus `applyTheme` (src/themes/tokens.ts); die Palette steht hier nur für Flächenfarben.
+   Schwarze Schrift auf allen Pastellflächen (mindestens 5,6:1, siehe tokens.test.ts). Antonio ist die
+   gebündelte SIL-OFL-Schrift (@fontsource/antonio, offline). Dateinamen, Pfade, Eingaben, Zahlen und das
+   Terminal bleiben in der bisherigen Schrift und in ihrer Schreibweise. Keine Netz-Ressourcen. */
+:root[data-fm="spaceship"] {
+  --font-ui: "Antonio", "Arial Narrow", "Liberation Sans Narrow", sans-serif;
+  --c-orange: #ff9900; --c-lilac: #cc99cc; --c-blue: #99ccff; --c-peach: #ffcc99; --c-violet: #9999cc; --c-red: #cc6666;
+  --ink: #000000;
+  --label-fs: calc(var(--fs) * 1.2);
+  --label-ls: .06em;
+}
+
+/* Beschriftungen: Antonio in Großbuchstaben. Eingabefelder, Pfade und Dateinamen sind nicht dabei. */
+:root[data-fm="spaceship"] :is(
+  .tb, .seg button, .header-chip, .brand, .command-placeholder > span, .fkeys button, .sidebar-heading, .sidebar-new, .sidebar-expand,
+  .settings-nav button, .settings-tabs button, .head, .tbl th, .dlg header, .palette-heading, .settings-group h3,
+  .settings-section h3, .system-group h3, .keys-group h3, .foot, .chip, .badge, .trash-bar button, .link, .settings-filters button,
+  .sidebar-entry .place-name, .tab.plus, .update-banner button, .settings-themes button, .jobs-header
+) {
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  letter-spacing: var(--label-ls);
+  font-size: var(--label-fs);
+  font-weight: 600;
+}
+:root[data-fm="spaceship"] .brand { font-size: calc(var(--fs) * 1.5); font-weight: 700; color: var(--c-orange); }
+:root[data-fm="spaceship"] :is(input, select, textarea, .path-input, .filter, code, kbd, .num, .dt, .row .nm, .crumb-path, .hex) {
+  text-transform: none; letter-spacing: 0;
+}
+:root[data-fm="spaceship"] :is(.tab, .tab button, .crumb-path button) { text-transform: none; }
+
+/* Sichtbarer Fokus: weißer Rahmen, auf Schwarz und auf allen Pastellflächen deutlich. */
+:root[data-fm="spaceship"] :focus-visible { outline: 3px solid #ffffff; outline-offset: 2px; }
+:root[data-fm="spaceship"] :is(.list, .lister, .lv-scroll, .fkeys button, .tab button):focus-visible { outline-offset: -3px; }
+
+/* Schaltflächen als Pillen */
+:root[data-fm="spaceship"] .tb, :root[data-fm="spaceship"] .seg button {
+  border: 0; border-radius: 999px; padding: 4px 16px; background: var(--c-blue); color: var(--ink);
+}
+:root[data-fm="spaceship"] .tb:hover:not(:disabled), :root[data-fm="spaceship"] .seg button:hover:not(:disabled) { filter: brightness(1.12); border-color: transparent; }
+:root[data-fm="spaceship"] :is(.tb.on, .tb.primary, .tb[aria-pressed="true"], .seg button.on) { background: var(--c-orange); color: var(--ink); box-shadow: inset 0 -3px 0 var(--ink); }
+:root[data-fm="spaceship"] .tb.warn, :root[data-fm="spaceship"] .tb.danger { background: var(--c-red); color: var(--ink); }
+:root[data-fm="spaceship"] .tb.small { padding: 1px 12px; }
+:root[data-fm="spaceship"] .seg { border: 0; border-radius: 999px; gap: 4px; background: transparent; }
+:root[data-fm="spaceship"] .seg button + button { border-left: 0; }
+:root[data-fm="spaceship"] .seg button:not(.on) { background: var(--c-violet); }
+:root[data-fm="spaceship"] button:disabled { opacity: .55; }
+:root[data-fm="spaceship"] .link { color: var(--c-blue); }
+
+/* Kopfzeile */
+:root[data-fm="spaceship"] .header-toolbar { border-bottom: 0; background: transparent; gap: 8px; padding: 4px 0; }
+:root[data-fm="spaceship"] .header-icon { border-radius: 999px; background: var(--raised); color: var(--c-blue); border: 0; }
+:root[data-fm="spaceship"] .header-icon:hover:not(:disabled) { background: var(--c-blue); color: var(--ink); }
+:root[data-fm="spaceship"] .header-icon[aria-pressed="true"] { background: var(--c-orange); color: var(--ink); box-shadow: inset 0 -3px 0 var(--ink); }
+:root[data-fm="spaceship"] .header-chip { border: 0; border-radius: 999px; padding: 3px 16px; background: var(--c-blue); color: var(--ink); }
+:root[data-fm="spaceship"] .connections-menu .header-chip { background: var(--c-lilac); }
+:root[data-fm="spaceship"] .header-chip:hover, :root[data-fm="spaceship"] .header-chip[aria-expanded="true"] { filter: brightness(1.12); background-color: inherit; }
+:root[data-fm="spaceship"] .connections-menu .header-chip:hover, :root[data-fm="spaceship"] .connections-menu .header-chip[aria-expanded="true"] { background: var(--c-lilac); }
+:root[data-fm="spaceship"] .place-menu .header-chip { background: var(--c-violet); }
+:root[data-fm="spaceship"] .command-placeholder { border: 3px solid var(--c-orange); border-radius: 999px; background: var(--bg); color: var(--c-blue); padding: 4px 16px; letter-spacing: .08em; }
+:root[data-fm="spaceship"] .command-placeholder kbd { background: var(--c-peach); color: var(--ink); border-radius: 10px; padding: 0 8px; font-family: var(--font-ui); font-size: var(--fs); font-weight: 600; }
+:root[data-fm="spaceship"] .connection-dot { box-shadow: 0 0 0 2px var(--ink); width: 8px; height: 8px; }
+:root[data-fm="spaceship"] .connection-dot.disconnected { border-radius: 2px; }
+:root[data-fm="spaceship"] .header-dropdown, :root[data-fm="spaceship"] .ctx, :root[data-fm="spaceship"] .sidebar-menu, :root[data-fm="spaceship"] .sidebar-popover {
+  background: var(--bg); border: 3px solid var(--c-orange); border-radius: 0 22px 0 22px; padding: 6px;
+}
+:root[data-fm="spaceship"] :is(.header-dropdown button, .ctx button, .sidebar-menu button) { border-radius: 999px; }
+:root[data-fm="spaceship"] :is(.header-dropdown button, .ctx button, .sidebar-menu button):is(:hover, :focus-visible) { background: var(--accent); color: var(--accent-ink); }
+:root[data-fm="spaceship"] :is(.header-dropdown button, .ctx button):is(:hover, :focus-visible) * { color: inherit; }
+
+/* Seitenleiste: farbige Pillen mit rechts gerundeten Enden */
+:root[data-fm="spaceship"] .sidebar { background: transparent; border-right: 0; }
+:root[data-fm="spaceship"] .sidebar-tree { padding: 4px 6px 4px 0; }
+:root[data-fm="spaceship"] .sidebar-heading { color: var(--c-blue); padding-left: 10px; letter-spacing: .14em; }
+:root[data-fm="spaceship"] .sidebar-entry-wrap + .sidebar-entry-wrap { margin-top: 4px; }
+:root[data-fm="spaceship"] .sidebar-entry {
+  border-radius: 0 999px 999px 0; padding: 3px 14px 3px 10px; background: var(--c-orange); color: var(--ink); min-height: max(var(--rowh, 28px), 30px);
+}
+:root[data-fm="spaceship"] .sidebar-entry-wrap:nth-child(5n+2) .sidebar-entry { background: var(--c-lilac); }
+:root[data-fm="spaceship"] .sidebar-entry-wrap:nth-child(5n+3) .sidebar-entry { background: var(--c-blue); }
+:root[data-fm="spaceship"] .sidebar-entry-wrap:nth-child(5n+4) .sidebar-entry { background: var(--c-peach); }
+:root[data-fm="spaceship"] .sidebar-entry-wrap:nth-child(5n) .sidebar-entry { background: var(--c-violet); }
+:root[data-fm="spaceship"] .sidebar-entry:is(:hover, :focus-visible) { filter: brightness(1.12); }
+:root[data-fm="spaceship"] .sidebar-entry[aria-current] { box-shadow: inset -8px 0 0 var(--ink); font-weight: 700; }
+:root[data-fm="spaceship"] .sidebar-entry :is(.place-name, kbd, .place-markers, .place-system, .place-badge, svg) { color: var(--ink); }
+:root[data-fm="spaceship"] .sidebar-entry .place-icon { color: var(--ink) !important; }
+:root[data-fm="spaceship"] .sidebar-entry .place-badge { background: transparent; }
+:root[data-fm="spaceship"] .sidebar-entry.unmounted, :root[data-fm="spaceship"] .sidebar-entry.place-hidden { opacity: .78; font-style: italic; }
+:root[data-fm="spaceship"] .sidebar-eject { color: var(--ink); }
+:root[data-fm="spaceship"] .place-space { background: rgba(0, 0, 0, .28); }
+:root[data-fm="spaceship"] .place-space i { background: var(--ink); }
+:root[data-fm="spaceship"] .place-space.warning i { background: repeating-linear-gradient(45deg, var(--ink) 0 3px, transparent 3px 6px); }
+:root[data-fm="spaceship"] .place-state { box-shadow: 0 0 0 1.5px var(--ink); }
+:root[data-fm="spaceship"] .sidebar-new, :root[data-fm="spaceship"] .sidebar-expand {
+  border-top: 0; border-radius: 0 999px 999px 0; margin: 4px 6px 0 0; padding: 5px 12px; background: var(--c-blue); color: var(--ink);
+}
+:root[data-fm="spaceship"] .sidebar-expand { background: var(--c-lilac); margin-bottom: 4px; }
+:root[data-fm="spaceship"] .sidebar-resizer:hover { background: var(--c-orange); }
+
+/* Fenster: Rahmen mit stark gerundeter Ecke oben rechts */
+:root[data-fm="spaceship"] .pane { border: 3px solid var(--c-violet); border-radius: 0 28px 0 0; background: var(--bg); }
+:root[data-fm="spaceship"] .pane.active { border-color: var(--c-orange); }
+:root[data-fm="spaceship"] .tabs { background: transparent; border-top: 0; gap: 8px; padding: 8px 10px; align-items: center; }
+:root[data-fm="spaceship"] .pane.active .tabs { background: transparent; border-top: 0; }
+:root[data-fm="spaceship"] .tab { border: 0; border-radius: 16px 4px 4px 16px; background: var(--c-lilac); color: var(--ink); min-height: 30px; font-weight: 700; }
+:root[data-fm="spaceship"] .tab button { font-family: var(--font-ui); font-size: var(--label-fs); letter-spacing: var(--label-ls); padding: 2px 8px 2px 14px; color: var(--ink); }
+:root[data-fm="spaceship"] .tab.on, :root[data-fm="spaceship"] .pane.active .tab.on { background: var(--c-violet); color: var(--ink); border: 0; box-shadow: inset 0 -3px 0 var(--ink); }
+:root[data-fm="spaceship"] .pane.active .tab.on { background: var(--c-orange); }
+:root[data-fm="spaceship"] .tab .tab-x { color: var(--ink); padding: 3px 8px 3px 2px; }
+:root[data-fm="spaceship"] .tab .tab-x:hover { color: var(--ink); background: rgba(0, 0, 0, .18); }
+:root[data-fm="spaceship"] .tab .tab-remote { opacity: 1; }
+:root[data-fm="spaceship"] .tab.plus { border-radius: 4px 16px 16px 4px; background: var(--c-blue); padding: 0 12px; font-weight: 700; }
+:root[data-fm="spaceship"] .crumbs { border-bottom: 0; background: transparent; gap: 6px; padding: 0 10px 6px; }
+:root[data-fm="spaceship"] .crumb-path button { color: var(--c-peach); }
+:root[data-fm="spaceship"] .crumb-path button:hover { background: var(--c-peach); color: var(--ink); }
+:root[data-fm="spaceship"] .crumb-path .sep { color: var(--c-violet); }
+:root[data-fm="spaceship"] :is(.path-input, .filter, .panel-filter, .settings-search, .fld input:not([type="range"]):not([type="checkbox"]):not([type="radio"]), .lv-find input, .lv-sel select, .dlg select) {
+  background: var(--bg); color: var(--fg); border: 2px solid var(--c-blue); border-radius: 16px; padding-inline: 12px;
+}
+:root[data-fm="spaceship"] .panel-filter { padding: 1px 10px; }
+:root[data-fm="spaceship"] .panel-filter .filter { border: 0; padding-inline: 0; }
+:root[data-fm="spaceship"] .chip { border: 0; background: var(--c-lilac); color: var(--ink); border-radius: 999px; padding: 1px 10px; }
+:root[data-fm="spaceship"] .foot { border-top: 0; background: var(--c-lilac); color: var(--ink); min-height: 30px; padding: 0 14px; }
+:root[data-fm="spaceship"] .pane.active .foot { background: var(--c-orange); }
+:root[data-fm="spaceship"] .foot * { color: var(--ink); }
+
+/* Spaltenköpfe in Hellblau mit farbigen Linien */
+:root[data-fm="spaceship"] .head { background: var(--bg); color: var(--c-blue); border-top: 2px solid var(--c-lilac); border-bottom: 2px solid var(--c-lilac); letter-spacing: .12em; height: 28px; }
+:root[data-fm="spaceship"] .head button { font-family: inherit; }
+:root[data-fm="spaceship"] .col-resize::after { background: var(--c-lilac); }
+:root[data-fm="spaceship"] .list-body[data-tint] { color: var(--fg); background: var(--panel); }
+
+/* Zeilen: Auswahl voll orange mit schwarzer Schrift; der Cursor bleibt an einem Rahmen erkennbar */
+:root[data-fm="spaceship"] .row { border-left-width: 3px; }
+:root[data-fm="spaceship"] .row:hover { background: var(--raised); }
+:root[data-fm="spaceship"] .pane .row.cur { background: var(--cur); border-left-color: var(--c-violet); box-shadow: inset 0 0 0 2px var(--c-violet); }
+:root[data-fm="spaceship"] .pane.active .row.cur { background: var(--cur); border-left-color: var(--c-orange); box-shadow: inset 0 0 0 2px var(--c-orange); }
+:root[data-fm="spaceship"] .pane .row.sel, :root[data-fm="spaceship"] .pane [data-tint] .row.sel,
+:root[data-fm="spaceship"] .pane .row.cur.sel, :root[data-fm="spaceship"] .pane.active .row.cur.sel, :root[data-fm="spaceship"] .pane.active [data-tint] .row.cur.sel {
+  background: var(--accent); color: var(--accent-ink);
+}
+:root[data-fm="spaceship"] .pane .row.cur.sel { border-left-color: var(--accent-ink); box-shadow: inset 0 0 0 2px var(--accent-ink); }
+:root[data-fm="spaceship"] .pane .row.sel :is(.n, .nm, .nm-start, .nm-end, .lt, .num, .dt, .ex, .ico, .orig, svg) { color: var(--accent-ink); opacity: 1; }
+:root[data-fm="spaceship"] .row.d .ico { color: var(--c-orange); opacity: 1; }
+:root[data-fm="spaceship"] .row .ico { color: var(--c-violet); }
+:root[data-fm="spaceship"] .row.hid .nm, :root[data-fm="spaceship"] .row.parent-entry .nm { color: var(--muted); }
+:root[data-fm="spaceship"] .row.parent-entry .ico { color: var(--c-blue); }
+:root[data-fm="spaceship"] .row .lt, :root[data-fm="spaceship"] .row .num, :root[data-fm="spaceship"] .row .dt, :root[data-fm="spaceship"] .row .ex { color: var(--c-violet); }
+:root[data-fm="spaceship"] .row.broken .n, :root[data-fm="spaceship"] .row.err .n { color: var(--c-red); }
+:root[data-fm="spaceship"] .pane .row.sel.broken .n, :root[data-fm="spaceship"] .pane .row.sel.err .n { color: var(--accent-ink); text-decoration: underline wavy; }
+:root[data-fm="spaceship"] .row.drop-into { background: color-mix(in srgb, var(--c-orange) 25%, transparent); outline-color: var(--c-orange); }
+:root[data-fm="spaceship"] .pane.drop { outline-color: var(--c-orange); }
+
+/* F-Tasten als bunte Pillenreihe */
+:root[data-fm="spaceship"] .fkeys { border-top: 0; gap: 8px; padding: 2px 0; }
+:root[data-fm="spaceship"] .fkeys button { border-radius: 999px; min-height: 40px; color: var(--ink); background: var(--c-blue); gap: 10px; }
+:root[data-fm="spaceship"] .fkeys button:nth-child(2) { background: var(--c-lilac); }
+:root[data-fm="spaceship"] .fkeys button:nth-child(4), :root[data-fm="spaceship"] .fkeys button:nth-child(5) { background: var(--c-orange); }
+:root[data-fm="spaceship"] .fkeys button:nth-child(6) { background: var(--c-peach); }
+:root[data-fm="spaceship"] .fkeys button:nth-child(7) { background: var(--c-lilac); }
+:root[data-fm="spaceship"] .fkeys button.danger:nth-child(8) { background: var(--c-red); }
+:root[data-fm="spaceship"] .fkeys button:hover:not(:disabled) { filter: brightness(1.12); }
+:root[data-fm="spaceship"] .fkeys button:disabled { background: var(--raised); color: var(--muted); opacity: 1; }
+:root[data-fm="spaceship"] .fkeys kbd { border: 0; background: transparent; color: inherit; font: 700 var(--label-fs) var(--font-ui); padding: 0; }
+:root[data-fm="spaceship"] .fkeys .danger:hover:not(:disabled), :root[data-fm="spaceship"] .fkeys .danger:focus-visible { color: var(--ink); }
+
+/* Terminal: Rahmen in Hellblau; die Farben der Konsole selbst kommen wie bisher aus den Terminal-Einstellungen */
+:root[data-fm="spaceship"] .terminal-panel { background: var(--bg); border: 3px solid var(--c-blue); border-radius: 0 0 28px 0; }
+:root[data-fm="spaceship"] .terminal-resize::before { background: var(--c-blue); }
+
+/* Aufträge, Hinweise, Meldungen */
+:root[data-fm="spaceship"] .job { border: 3px solid var(--c-violet); border-radius: 0 18px 0 0; background: var(--bg); }
+:root[data-fm="spaceship"] .job[data-state="failed"] { border-color: var(--c-red); }
+:root[data-fm="spaceship"] .notice, :root[data-fm="spaceship"] .update-banner { border: 3px solid var(--c-orange); border-radius: 22px; background: var(--bg); }
+:root[data-fm="spaceship"] .toast { background: var(--c-blue); color: var(--ink); border-radius: 22px; box-shadow: none; padding: 8px 18px; }
+:root[data-fm="spaceship"] .toast.error { background: var(--c-red); color: var(--ink); }
+:root[data-fm="spaceship"] .toast .tb, :root[data-fm="spaceship"] .undo-toast .tb { background: var(--ink); color: var(--c-blue); border: 0; }
+
+/* Dialoge */
+:root[data-fm="spaceship"] .modal { background: rgba(0, 0, 0, .72); }
+:root[data-fm="spaceship"] .dlg { background: var(--bg); border: 3px solid var(--c-orange); border-radius: 0 32px 0 32px; box-shadow: none; overflow: hidden; }
+:root[data-fm="spaceship"] .dlg header { background: var(--c-orange); color: var(--ink); border-bottom: 0; border-radius: 0 28px 0 0; padding: 8px 20px; font-family: var(--font-ui); font-size: calc(var(--fs) * 1.7); font-weight: 700; letter-spacing: .04em; }
+:root[data-fm="spaceship"] .dlg header .x { color: var(--ink); }
+:root[data-fm="spaceship"] .dlg footer { border-top: 0; }
+:root[data-fm="spaceship"] .dlg.command-palette { border-radius: 0 32px 0 32px; }
+:root[data-fm="spaceship"] .palette-search { background: var(--c-orange); border-bottom: 0; color: var(--ink); padding: 10px 16px; }
+:root[data-fm="spaceship"] .palette-search input { background: var(--bg); color: var(--fg); border-radius: 999px; padding: 8px 18px; font-family: var(--font-mono); font-size: calc(var(--fs) * 1.3); }
+:root[data-fm="spaceship"] .palette-search input::placeholder { color: var(--muted); opacity: 1; }
+:root[data-fm="spaceship"] .palette-list { padding: 8px 12px 12px; }
+:root[data-fm="spaceship"] .palette-heading { color: var(--c-blue); letter-spacing: .18em; padding: 10px 16px 2px; }
+:root[data-fm="spaceship"] .palette-option { border-radius: 999px; padding-inline: 16px; font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .05em; font-size: calc(var(--fs) * 1.5); font-weight: 600; color: var(--c-peach); }
+:root[data-fm="spaceship"] .palette-option kbd, :root[data-fm="spaceship"] .palette-option .sc { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-size: var(--fs); }
+:root[data-fm="spaceship"] .palette-option[aria-selected="true"] { background: var(--c-orange); color: var(--ink); border-radius: 22px 6px 6px 22px; }
+:root[data-fm="spaceship"] .palette-option[aria-selected="true"] * { color: var(--ink); }
+:root[data-fm="spaceship"] .palette-option mark { color: var(--c-orange); text-decoration: underline; }
+:root[data-fm="spaceship"] .palette-option[aria-selected="true"] mark { color: var(--ink); }
+:root[data-fm="spaceship"] .command-palette footer { color: var(--ink); background: var(--c-lilac); border-top: 0; font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .06em; font-size: var(--label-fs); padding: 4px 18px; }
+:root[data-fm="spaceship"] .kc { background: var(--c-peach); color: var(--ink); border-color: transparent; }
+
+/* Einstellungen */
+:root[data-fm="spaceship"] .settings-side { background: transparent; border-right: 0; }
+:root[data-fm="spaceship"] .settings-nav { gap: 6px; }
+:root[data-fm="spaceship"] .settings-nav button { background: var(--raised); color: var(--c-blue); border-radius: 23px 6px 6px 23px; padding: 8px 18px; min-height: 40px; font-size: calc(var(--fs) * 1.45); }
+:root[data-fm="spaceship"] .settings-nav button:hover { filter: brightness(1.2); }
+:root[data-fm="spaceship"] .settings-nav button[aria-selected="true"] { background: var(--c-orange); color: var(--ink); box-shadow: inset 4px 0 0 var(--ink); }
+:root[data-fm="spaceship"] .settings-filters .tb[aria-pressed="true"] { background: var(--c-orange); border-color: transparent; }
+:root[data-fm="spaceship"] .settings-filters .tb[aria-pressed="false"] { background: var(--c-violet); }
+:root[data-fm="spaceship"] .settings-group h3 { color: var(--c-blue); letter-spacing: .14em; }
+:root[data-fm="spaceship"] .setting-row { border-top: 2px solid var(--line-soft); }
+:root[data-fm="spaceship"] .setting-row > label, :root[data-fm="spaceship"] .setting-row > .setting-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .05em; font-size: calc(var(--fs) * 1.35); font-weight: 600; color: var(--c-peach); }
+:root[data-fm="spaceship"] .setting-control .field-help { color: var(--c-violet); }
+:root[data-fm="spaceship"] .settings-footer { background: var(--bg); border-top: 0; }
+:root[data-fm="spaceship"] .settings-shell mark { background: var(--c-peach); color: var(--ink); }
+:root[data-fm="spaceship"] .setting-control input[role="switch"] { background: var(--c-violet); }
+:root[data-fm="spaceship"] .setting-control input[role="switch"]::after { background: var(--ink); }
+:root[data-fm="spaceship"] .setting-control input[role="switch"]:checked { background: var(--c-orange); }
+:root[data-fm="spaceship"] .setting-control input[role="switch"]:focus-visible { outline-offset: 3px; }
+:root[data-fm="spaceship"] .modified-dot { color: var(--c-orange); }
+
+/* Theme-Kacheln: Rahmen mit gerundeter Ecke oben rechts; die gewählte Kachel zusätzlich unterstrichen */
+:root[data-fm="spaceship"] .settings-themes button { background: var(--bg); color: var(--c-peach); border: 3px solid var(--line); border-radius: 0 20px 0 0; padding: 5px 8px; font-size: calc(var(--fs) * 1.3); }
+:root[data-fm="spaceship"] .settings-themes button[aria-checked="true"] { border-color: var(--c-orange); color: var(--c-orange); box-shadow: inset 0 -4px 0 var(--c-orange); }
+:root[data-fm="spaceship"] .settings-themes i { border-radius: 0 14px 0 0; }
+:root[data-fm="spaceship"] .settings-page h2, :root[data-fm="spaceship"] .whats-new h2 { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .06em; font-size: calc(var(--fs) * 2); font-weight: 700; color: var(--c-orange); }

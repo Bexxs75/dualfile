@@ -1,4 +1,4 @@
-// Zentrale Farbwerte der vier Themes; Kopfbereich nach dem Redesign-Mockup.
+// Zentrale Farbwerte der fünf Themes; Kopfbereich nach dem Redesign-Mockup.
 // Gedämpfte Textfarben erfüllen auch auf abgesetzten Kopfflächen WCAG AA.
 import type { Settings } from "../ipc/types";
 import type { TranslationKey } from "../i18n";
@@ -31,7 +31,7 @@ export interface ThemeTokens {
   colorScheme: "dark" | "light";
 }
 
-export const themeNames: readonly ThemeName[] = ["schiefer", "papier", "werkstatt", "weiss"];
+export const themeNames: readonly ThemeName[] = ["schiefer", "papier", "werkstatt", "weiss", "spaceship"];
 
 export const themes: Record<ThemeName, ThemeTokens> = {
   schiefer: {
@@ -101,6 +101,28 @@ export const themes: Record<ThemeName, ThemeTokens> = {
     success: "#9bc47b",
     colorScheme: "dark",
   },
+  // Schwarzer Grund mit Pastellflächen (Orange, Flieder, Hellblau, Pfirsich, Violett, Rot). Schwarze Schrift
+  // auf allen Farbflächen; die Auswahlzeile füllt das Stylesheet voll mit dem Akzent.
+  spaceship: {
+    bg: "#000000",
+    panel: "#000000",
+    panel2: "#14141c",
+    raised: "#1b1b26",
+    lineSoft: "#333333",
+    accentSoft: "#2a1a00",
+    connectionWarning: "#ff9900",
+    line: "#4a4a5a",
+    fg: "#ffcc99",
+    muted: "#9999cc",
+    accent: "#ff9900",
+    accentInk: "#000000",
+    selection: "#2a1a00",
+    current: "#2a1a00",
+    directory: "#ffcc99",
+    warning: "#cc6666",
+    success: "#99ccff",
+    colorScheme: "dark",
+  },
 };
 
 /** Zeilenhöhen und Schriftgrößen wie im Mockup (Kompakt 22, Normal 28, Luftig 36 px). */
@@ -120,10 +142,13 @@ export const fontWeights: Record<ThemeTokens["colorScheme"], { text: number; str
 /** Vorgegebene Akzentfarben aus dem Mockup. */
 export const accentPresets: readonly string[] = ["#e0a45c", "#6fb3d9", "#7bc08a", "#e07a9f", "#c98fe0"];
 
+const spaceshipAccentPresets: readonly string[] = ["#ff9900", "#cc99cc", "#99ccff", "#ffcc99", "#9999cc"];
+
 const lightAccentPresets: readonly string[] = ["#2563eb", "#1f7a3a", "#b45309", "#be185d", "#7e22ce"];
 
 /** Akzentvorgaben passend zum Design; die Pastellpalette bleibt auch für Lesezeichen verfügbar. */
 export function accentPresetsForTheme(theme: ThemeName): readonly string[] {
+  if (theme === "spaceship") return spaceshipAccentPresets;
   return themes[theme].colorScheme === "light" ? lightAccentPresets : accentPresets;
 }
 
@@ -213,8 +238,8 @@ export const accentWarningKeys: Record<AccentWarning, TranslationKey> = {
 
 // ---------------------------------------------------------------- Anwenden
 
-/** Paper and White use their own accent; dark designs keep the application blue. */
-export const defaultAccent = (theme: ThemeName): string => (theme === "papier" || theme === "weiss") ? themes[theme].accent : "#4f8cff";
+/** Paper, White and Spaceship use their own accent; the other dark designs keep the application blue. */
+export const defaultAccent = (theme: ThemeName): string => (theme === "papier" || theme === "weiss" || theme === "spaceship") ? themes[theme].accent : "#4f8cff";
 
 export type ThemeSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize">;
 

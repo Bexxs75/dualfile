@@ -8,7 +8,7 @@ platform-specific dependencies. This is an inventory, not a list of files shippe
 Rust metadata: `vendor/*/Cargo.toml`; npm: lockfile, falling back to matching installed package metadata.
 Use `--vendor DIR` for an offline metadata mirror. No downloads or dependency resolution are performed.
 
-Packages: **858**. Unknown: **0**.
+Packages: **859**. Unknown: **0**.
 
 UNKNOWN is a release-review blocker: provide matching source metadata and regenerate before distribution.
 License expressions are upstream declarations; alternatives (OR) and exceptions need individual review.
@@ -709,6 +709,7 @@ Keep required upstream notices and license texts when distributing binaries; thi
 | npm | @emnapi/wasi-threads | 1.2.3 | MIT |
 | npm | @emnapi/wasi-threads | 2.2.0 | MIT |
 | npm | @exodus/bytes | 1.16.0 | MIT |
+| npm | @fontsource/antonio | 5.3.0 | OFL-1.1 |
 | npm | @fontsource/ibm-plex-mono | 5.3.0 | OFL-1.1 |
 | npm | @fontsource/ibm-plex-sans | 5.3.0 | OFL-1.1 |
 | npm | @jridgewell/gen-mapping | 0.3.13 | MIT |

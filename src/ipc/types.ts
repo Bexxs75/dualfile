@@ -448,7 +448,7 @@ export interface Settings {
   settingsWindowSize?: WindowSize;
   verifyPolicy: VerifyPolicy;
   version: number;
-  theme: "schiefer" | "papier" | "werkstatt" | "weiss";
+  theme: "schiefer" | "papier" | "werkstatt" | "weiss" | "spaceship";
   accent: string;
   accentAutomatic?: boolean;
   showParentEntry?: boolean;

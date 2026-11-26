@@ -22,7 +22,7 @@ export const catalog: readonly SettingEntry[] = [
   { id: "checkUpdatesOnStart", section: "allgemein", group: "updates", label: "updates.onStart", help: "updates.onStartHelp", kind: "switch" },
   { id: "settingsWindowSizeMode", section: "allgemein", group: "window", label: "settings.windowSize", kind: "segment", options: ["ask", "always", "never"],
     keywords: ["settings.windowSize.hint.ask", "settings.windowSize.hint.always", "settings.windowSize.hint.never", "settings.windowSize.rememberedNone"] },
-  { id: "theme", section: "darstellung", group: "design", label: "settings.theme", kind: "custom", options: ["schiefer", "papier", "werkstatt", "weiss"] },
+  { id: "theme", section: "darstellung", group: "design", label: "settings.theme", kind: "custom", options: ["schiefer", "papier", "werkstatt", "weiss", "spaceship"] },
   { id: "accentAutomatic", section: "darstellung", group: "design", label: "settings.accent.default", kind: "custom" },
   { id: "accent", section: "darstellung", group: "design", label: "settings.accent", kind: "custom", keywords: ["settings.accent.default"] },
   { id: "fontSize", section: "darstellung", group: "text", label: "settings.fontSize", kind: "range", min: 10, max: 24, step: 1 },

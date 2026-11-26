@@ -1,9 +1,13 @@
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
+import "@fontsource/antonio/400.css";
+import "@fontsource/antonio/600.css";
+import "@fontsource/antonio/700.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./styles/app.css";
+import "./styles/spaceship.css";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { createRuntime } from "./app/runtime";

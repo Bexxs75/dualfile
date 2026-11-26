@@ -236,7 +236,7 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     {
         return Err(bad_settings("last_seen_version"));
     }
-    if !["schiefer", "papier", "werkstatt", "weiss"].contains(&s.theme.as_str()) {
+    if !["schiefer", "papier", "werkstatt", "weiss", "spaceship"].contains(&s.theme.as_str()) {
         return Err(bad_settings("Theme"));
     }
     if !["compact", "normal", "comfortable"].contains(&s.density.as_str()) {
@@ -531,6 +531,17 @@ mod tests {
             assert_eq!(check_name(bad).unwrap_err().kind, "invalidName", "{bad:?}");
         }
         assert!(check_name("ok name.txt").is_ok());
+    }
+
+    #[test]
+    fn spaceship_theme_validates_and_unknown_theme_is_rejected() {
+        let mut s = settings();
+        s.theme = "spaceship".into();
+        validate_settings(&s).unwrap();
+        let core = dualfile_core::settings::Settings::from(&s);
+        assert_eq!(SettingsDto::from(&core).theme, "spaceship");
+        s.theme = "neon".into();
+        assert!(validate_settings(&s).is_err());
     }
 
     #[test]

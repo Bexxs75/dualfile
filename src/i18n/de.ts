@@ -879,6 +879,7 @@ const de = {
   "settings.theme.schiefer": "Schiefer",
   "settings.theme.papier": "Papier",
   "settings.theme.werkstatt": "Werkstatt",
+  "settings.theme.spaceship": "Spaceship",
   "settings.accent": "Akzentfarbe",
   "settings.accent.custom": "Eigener Farbwert (#rrggbb)",
   "settings.accent.adjusted": "Auf hellem Design zu hell: wird zu {color} abgedunkelt",
