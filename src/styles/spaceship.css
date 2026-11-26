@@ -224,3 +224,89 @@
 :root[data-fm="spaceship"] .settings-themes button[aria-checked="true"] { border-color: var(--c-orange); color: var(--c-orange); box-shadow: inset 0 -4px 0 var(--c-orange); }
 :root[data-fm="spaceship"] .settings-themes i { border-radius: 0 14px 0 0; }
 :root[data-fm="spaceship"] .settings-page h2, :root[data-fm="spaceship"] .whats-new h2 { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .06em; font-size: calc(var(--fs) * 2); font-weight: 700; color: var(--c-orange); }
+
+/* Stufe 2: Rahmen aus Bögen und Streifen, rein dekorativ (kein Text). Nur in der Hauptansicht; die
+   Nebenfenster (html.editor-window-root) bekommen weder Rahmen noch zusätzlichen Innenabstand.
+   Zwei feste Pseudo-Elemente von body (oben links Orange, unten links Flieder) liegen im Randbereich und
+   überdecken keinen Inhalt; Dialoge, Menüs und Hinweise liegen darüber (z-index >= 20). Alle Maße stehen hier. */
+:root[data-fm="spaceship"]:not(.editor-window-root) {
+  --sp-bar: 28px;      /* Breite des linken Bogenarms */
+  --sp-strip: 24px;    /* Höhe der Streifen oben und unten */
+  --sp-r: 22px;        /* Radius der konkaven Innenecke */
+  --sp-outer: 44px;    /* Radius der äußeren Ecke */
+  --sp-gap: 8px;       /* Lücke zwischen den Segmenten */
+  --sp-edge: 10px;     /* Abstand der Streifen zum rechten Fensterrand */
+  --sp-seg-mid: 120px; /* mittleres Segment */
+  --sp-seg-end: 72px;  /* Abschluss mit gerundetem Ende */
+  --sp-pad-y: calc(var(--sp-strip) + 10px);
+  --sp-pad-x: calc(var(--sp-bar) + 12px);
+}
+:root[data-fm="spaceship"]:not(.editor-window-root) body {
+  padding: var(--sp-pad-y) 10px var(--sp-pad-y) var(--sp-pad-x);
+}
+:root[data-fm="spaceship"]:not(.editor-window-root) body::before,
+:root[data-fm="spaceship"]:not(.editor-window-root) body::after {
+  content: ""; position: fixed; left: 0; right: 0; z-index: 0; pointer-events: none;
+  height: calc(50% - 4px); background-repeat: no-repeat;
+  --sp-main: var(--c-orange); --sp-mid: var(--c-lilac); --sp-end: var(--c-blue);
+  --sp-used: calc(var(--sp-edge) + var(--sp-seg-end) + var(--sp-seg-mid) + 2 * var(--sp-gap));
+}
+:root[data-fm="spaceship"]:not(.editor-window-root) body::after {
+  --sp-main: var(--c-lilac); --sp-mid: var(--c-orange);
+}
+/* oben: Bogenarm links, Streifen mit drei Segmenten, konkave Innenecke */
+:root[data-fm="spaceship"]:not(.editor-window-root) body::before {
+  top: 0; border-top-left-radius: var(--sp-outer);
+  background-image:
+    radial-gradient(circle calc(var(--sp-strip) / 2), var(--sp-end) calc(var(--sp-strip) / 2 - 1px), transparent calc(var(--sp-strip) / 2)),
+    linear-gradient(var(--sp-end), var(--sp-end)),
+    linear-gradient(var(--sp-mid), var(--sp-mid)),
+    linear-gradient(var(--sp-main), var(--sp-main)),
+    linear-gradient(var(--sp-main), var(--sp-main)),
+    radial-gradient(circle at 100% 100%, transparent calc(var(--sp-r) - 1px), var(--sp-main) var(--sp-r));
+  background-size:
+    var(--sp-strip) var(--sp-strip),
+    calc(var(--sp-seg-end) - var(--sp-strip) / 2) var(--sp-strip),
+    var(--sp-seg-mid) var(--sp-strip),
+    calc(100% - var(--sp-used)) var(--sp-strip),
+    var(--sp-bar) 100%,
+    var(--sp-r) var(--sp-r);
+  background-position:
+    right var(--sp-edge) top 0,
+    right calc(var(--sp-edge) + var(--sp-strip) / 2) top 0,
+    right calc(var(--sp-edge) + var(--sp-seg-end) + var(--sp-gap)) top 0,
+    left 0 top 0,
+    left 0 top 0,
+    left var(--sp-bar) top var(--sp-strip);
+}
+/* unten: gespiegelt, Bogenarm Flieder */
+:root[data-fm="spaceship"]:not(.editor-window-root) body::after {
+  bottom: 0; border-bottom-left-radius: var(--sp-outer);
+  background-image:
+    radial-gradient(circle calc(var(--sp-strip) / 2), var(--sp-end) calc(var(--sp-strip) / 2 - 1px), transparent calc(var(--sp-strip) / 2)),
+    linear-gradient(var(--sp-end), var(--sp-end)),
+    linear-gradient(var(--sp-mid), var(--sp-mid)),
+    linear-gradient(var(--sp-main), var(--sp-main)),
+    linear-gradient(var(--sp-main), var(--sp-main)),
+    radial-gradient(circle at 100% 0, transparent calc(var(--sp-r) - 1px), var(--sp-main) var(--sp-r));
+  background-size:
+    var(--sp-strip) var(--sp-strip),
+    calc(var(--sp-seg-end) - var(--sp-strip) / 2) var(--sp-strip),
+    var(--sp-seg-mid) var(--sp-strip),
+    calc(100% - var(--sp-used)) var(--sp-strip),
+    var(--sp-bar) 100%,
+    var(--sp-r) var(--sp-r);
+  background-position:
+    right var(--sp-edge) bottom 0,
+    right calc(var(--sp-edge) + var(--sp-strip) / 2) bottom 0,
+    right calc(var(--sp-edge) + var(--sp-seg-end) + var(--sp-gap)) bottom 0,
+    left 0 bottom 0,
+    left 0 bottom 0,
+    left var(--sp-bar) bottom var(--sp-strip);
+}
+/* Niedrige Fenster: kein Rahmen, Innenabstand wie in Stufe 1 */
+@media (max-height: 699px) {
+  :root[data-fm="spaceship"]:not(.editor-window-root) body { padding: 10px max(10px, env(safe-area-inset-right, 0px)) 10px max(10px, env(safe-area-inset-left, 0px)); }
+  :root[data-fm="spaceship"]:not(.editor-window-root) body::before,
+  :root[data-fm="spaceship"]:not(.editor-window-root) body::after { display: none; }
+}

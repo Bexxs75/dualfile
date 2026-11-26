@@ -443,6 +443,19 @@ describe("Spaceship", () => {
     expect(css).not.toMatch(/https?:\/\//);
     expect(mainSource).toContain("@fontsource/antonio/600.css");
   });
+
+  test("Stylesheet Stufe 2: Rahmen nur in der Hauptansicht, dekorativ, unter 700 px Höhe aus", () => {
+    const css = spaceshipCss;
+    const main = ':root[data-fm="spaceship"]:not(.editor-window-root)';
+    expect(css).toContain(`${main} body::before`);
+    expect(css).toContain(`${main} body::after`);
+    expect(css).toMatch(/body::before,[^{]*body::after\s*\{[^}]*position:\s*fixed[^}]*pointer-events:\s*none/);
+    expect(css).not.toMatch(/body::(before|after)[^{]*\{[^}]*content:\s*"[^"]/);
+    expect(css).toMatch(/@media \(max-height: 699px\)[^]*display:\s*none/);
+    // kein Rahmen-Selektor ohne den Ausschluss der Nebenfenster
+    const frame = css.slice(css.indexOf("Stufe 2: Rahmen"));
+    expect(frame.match(/data-fm="spaceship"\](?!:not\(\.editor-window-root\))/g)).toBeNull();
+  });
 });
 
 describe("Schriftstärke", () => {
