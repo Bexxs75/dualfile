@@ -70,6 +70,7 @@ export async function setupApp(setup: SetupOptions = {}) {
     accent: "#e0a45c",
     density: "normal",
     fontSize: 13,
+    fontWeight: "normal",
     language: setup.language ?? "de",
     bookmarks: [],
     session: { windows: [tab(setup.left ?? HOME), tab(setup.right ?? DOWNLOADS)], activeWindow: 0 },

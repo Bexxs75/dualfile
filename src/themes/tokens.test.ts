@@ -312,6 +312,7 @@ describe("designabhängige Akzente", () => {
           "--fg": "#d9dee4",
           "--fs": "13px",
           "--fw": "400",
+          "--fw-emph": "600",
           "--fw-strong": "500",
           "--line": "#2c3540",
           "--line-soft": "#252e38",
@@ -335,6 +336,7 @@ describe("designabhängige Akzente", () => {
           "--fg": "#eadfce",
           "--fs": "13px",
           "--fw": "400",
+          "--fw-emph": "600",
           "--fw-strong": "500",
           "--line": "#3a3025",
           "--line-soft": "#332a21",
@@ -440,5 +442,37 @@ describe("Spaceship", () => {
     expect(css).toMatch(/:focus-visible[^{]*\{[^}]*outline/);
     expect(css).not.toMatch(/https?:\/\//);
     expect(mainSource).toContain("@fontsource/antonio/600.css");
+  });
+});
+
+describe("Schriftstärke", () => {
+  const expected = {
+    schiefer: { normal: ["400", "500", "600"], bold: ["600", "700", "700"] },
+    werkstatt: { normal: ["400", "500", "600"], bold: ["600", "700", "700"] },
+    spaceship: { normal: ["400", "500", "600"], bold: ["600", "700", "700"] },
+    papier: { normal: ["500", "600", "600"], bold: ["700", "700", "700"] },
+    weiss: { normal: ["500", "600", "600"], bold: ["700", "700", "700"] },
+  } as const;
+  test.each(Object.entries(expected))("%s: normal und fett", (theme, e) => {
+    const vars = (fontWeight?: "normal" | "bold") => themeVariables({ ...base, theme: theme as ThemeName, fontWeight });
+    for (const [kind, w] of [["normal", e.normal], ["bold", e.bold]] as const) {
+      const v = vars(kind);
+      expect([v["--fw"], v["--fw-strong"], v["--fw-emph"]]).toEqual(w);
+    }
+    // Ohne Angabe wie bisher (Normal)
+    expect(vars()["--fw"]).toBe(e.normal[0]);
+  });
+
+  test("applyTheme setzt die Variablen am Wurzelelement", () => {
+    const root = document.createElement("html");
+    applyTheme(root, { ...base, fontWeight: "bold" });
+    expect(root.style.getPropertyValue("--fw")).toBe("600");
+    expect(root.style.getPropertyValue("--fw-strong")).toBe("700");
+    applyTheme(root, { ...base, fontWeight: "normal" });
+    expect(root.style.getPropertyValue("--fw")).toBe("400");
+  });
+
+  test("Inter 700 ist gebündelt", () => {
+    expect(mainSource).toContain("@fontsource/inter/700.css");
   });
 });

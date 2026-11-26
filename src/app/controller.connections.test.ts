@@ -24,11 +24,11 @@ test("connectionsChanged (a save in the editor window) refreshes the connection 
 
 test("openConnectionEditor sends the look of this window and reports an already open editor", async () => {
   const r = setup();
-  r.store.dispatch({ type: "settings", update: (s) => ({ ...s, language: "en", theme: "papier", accent: "#112233", accentAutomatic: true, density: "compact", fontSize: 15 }) });
+  r.store.dispatch({ type: "settings", update: (s) => ({ ...s, language: "en", theme: "papier", accent: "#112233", accentAutomatic: true, density: "compact", fontSize: 15, fontWeight: "bold" }) });
   const open = vi.spyOn(r.api, "connectionEditorOpen").mockResolvedValueOnce(true).mockResolvedValueOnce(false);
   const profile = { ...newSshProfile("nas"), id: "p-9" };
   await r.controller.openConnectionEditor(profile);
-  expect(open).toHaveBeenLastCalledWith("p-9", "Connection profile", { theme: "papier", accent: "#112233", accentAutomatic: true, density: "compact", fontSize: 15, lang: "en" });
+  expect(open).toHaveBeenLastCalledWith("p-9", "Connection profile", { theme: "papier", accent: "#112233", accentAutomatic: true, density: "compact", fontSize: 15, fontWeight: "bold", lang: "en" });
   expect(r.store.getState().toasts).toHaveLength(0);
   await r.controller.openConnectionEditor();
   expect(open).toHaveBeenLastCalledWith(null, "Connection profile", expect.anything());

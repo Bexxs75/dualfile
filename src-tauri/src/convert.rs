@@ -690,6 +690,8 @@ pub struct SettingsDto {
     pub settings_window_size: settings::WindowSize,
     pub density: String,
     pub font_size: u8,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: String,
     pub language: String,
     pub bookmarks: Vec<BookmarkDto>,
     #[serde(default)]
@@ -728,6 +730,10 @@ fn default_sidebar_collapsed() -> Vec<String> {
 }
 fn default_sidebar_hidden() -> Vec<String> {
     Vec::new()
+}
+
+fn default_font_weight() -> String {
+    "normal".into()
 }
 
 fn default_settings_window_size_mode() -> String {
@@ -790,6 +796,7 @@ impl From<&settings::Settings> for SettingsDto {
             settings_window_size: s.settings_window_size,
             density: s.density.clone(),
             font_size: s.font_size,
+            font_weight: s.font_weight.clone(),
             language: s.language.clone(),
             bookmarks: s
                 .bookmarks
@@ -868,6 +875,7 @@ impl From<&SettingsDto> for settings::Settings {
             settings_window_size: s.settings_window_size,
             density: s.density.clone(),
             font_size: s.font_size,
+            font_weight: s.font_weight.clone(),
             language: s.language.clone(),
             bookmarks: s
                 .bookmarks
@@ -1499,6 +1507,7 @@ mod tests {
         let mut core = settings::Settings {
             sidebar_discovery: true,
             font_size: 15,
+            font_weight: "bold".into(),
             show_parent_entry: false,
             terminal_height: 420,
             terminal_shell: "login".into(),

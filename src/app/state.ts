@@ -161,6 +161,7 @@ export const defaultSettings: Settings = {
   lastSeenVersion: null,
   density: "normal",
   fontSize: 14,
+  fontWeight: "normal",
   language: "auto",
   bookmarks: [],
   paneColorLeft: "",

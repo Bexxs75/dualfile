@@ -53,6 +53,7 @@ export function parseAppearance(search: string): EditorAppearance {
     accentAutomatic: q.get("accentAutomatic") === "1",
     density: pick(q.get("density"), ["compact", "normal", "comfortable"], "normal"),
     fontSize: Number.isFinite(size) && size > 0 ? size : 13,
+    fontWeight: pick(q.get("fontWeight"), ["normal", "bold"], "normal"),
     lang: pick(q.get("lang"), ["de", "en"], "de"),
   };
 }
@@ -63,14 +64,14 @@ function Editor({ api, params }: { api: DualfileApi; params: EditorParams }) {
   const tr = useT();
   const [load, setLoad] = useState<Load>({ status: "loading" });
   const close = () => { void api.connectionEditorClose().catch(() => window.close()); };
-  const { theme, accent, accentAutomatic, density, fontSize, lang } = params.appearance;
+  const { theme, accent, accentAutomatic, density, fontSize, fontWeight, lang } = params.appearance;
 
   useEffect(() => {
     // The shared stylesheet forces a 900x560 minimum on the page; this window has to shrink below it.
     document.documentElement.classList.add("editor-window-root");
     document.documentElement.lang = lang;
-    applyTheme(document.documentElement, { theme, accent, accentAutomatic, density, fontSize });
-  }, [theme, accent, accentAutomatic, density, fontSize, lang]);
+    applyTheme(document.documentElement, { theme, accent, accentAutomatic, density, fontSize, fontWeight });
+  }, [theme, accent, accentAutomatic, density, fontSize, fontWeight, lang]);
 
   useEffect(() => {
     let active = true;
@@ -110,8 +111,8 @@ export function ConnectionEditorWindow({ api, search }: { api: DualfileApi; sear
   const params = useMemo(() => parseEditorParams(search), [search]);
   const runtime = useMemo(() => {
     const rt = createRuntime(api);
-    const { theme, accent, accentAutomatic, density, fontSize, lang } = params.appearance;
-    rt.store.dispatch({ type: "settings", update: (s: Settings): Settings => ({ ...s, theme, accent, accentAutomatic, density, fontSize, language: lang }) });
+    const { theme, accent, accentAutomatic, density, fontSize, fontWeight, lang } = params.appearance;
+    rt.store.dispatch({ type: "settings", update: (s: Settings): Settings => ({ ...s, theme, accent, accentAutomatic, density, fontSize, fontWeight, language: lang }) });
     return rt;
   }, [api, params]);
   return <RuntimeProvider runtime={runtime}><Editor api={api} params={params} /></RuntimeProvider>;

@@ -97,6 +97,7 @@ function Shell({ api }: { api: DualfileApi }) {
   const accent = useAppState((state) => state.settings.accent);
   const density = useAppState((state) => state.settings.density);
   const fontSize = useAppState((state) => state.settings.fontSize);
+  const fontWeight = useAppState((state) => state.settings.fontWeight);
 
   useEffect(() => {
     let mounted = true;
@@ -107,7 +108,7 @@ function Shell({ api }: { api: DualfileApi }) {
     return () => { mounted = false; stopBridge?.(); controller.dispose(); };
   }, [controller, store, system, settingsWindow]);
   useGlobalKeys(store, controller);
-  useEffect(() => applyTheme(document.documentElement, { theme, accent, accentAutomatic, density, fontSize }), [theme, accent, accentAutomatic, density, fontSize]);
+  useEffect(() => applyTheme(document.documentElement, { theme, accent, accentAutomatic, density, fontSize, fontWeight }), [theme, accent, accentAutomatic, density, fontSize, fontWeight]);
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);

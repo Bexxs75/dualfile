@@ -23,7 +23,7 @@
   text-transform: uppercase;
   letter-spacing: var(--label-ls);
   font-size: var(--label-fs);
-  font-weight: 600;
+  font-weight: 600; /* Antonio 600 is already heavy; 700 would truncate narrow labels (sidebar) */
 }
 :root[data-fm="spaceship"] .brand { font-size: calc(var(--fs) * 1.5); font-weight: 700; color: var(--c-orange); }
 :root[data-fm="spaceship"] :is(input, select, textarea, .path-input, .filter, code, kbd, .num, .dt, .row .nm, .crumb-path, .hex) {
@@ -60,7 +60,7 @@
 :root[data-fm="spaceship"] .connections-menu .header-chip:hover, :root[data-fm="spaceship"] .connections-menu .header-chip[aria-expanded="true"] { background: var(--c-lilac); }
 :root[data-fm="spaceship"] .place-menu .header-chip { background: var(--c-violet); }
 :root[data-fm="spaceship"] .command-placeholder { border: 3px solid var(--c-orange); border-radius: 999px; background: var(--bg); color: var(--c-blue); padding: 4px 16px; letter-spacing: .08em; }
-:root[data-fm="spaceship"] .command-placeholder kbd { background: var(--c-peach); color: var(--ink); border-radius: 10px; padding: 0 8px; font-family: var(--font-ui); font-size: var(--fs); font-weight: 600; }
+:root[data-fm="spaceship"] .command-placeholder kbd { background: var(--c-peach); color: var(--ink); border-radius: 10px; padding: 0 8px; font-family: var(--font-ui); font-size: var(--fs); font-weight: var(--fw-emph); }
 :root[data-fm="spaceship"] .connection-dot { box-shadow: 0 0 0 2px var(--ink); width: 8px; height: 8px; }
 :root[data-fm="spaceship"] .connection-dot.disconnected { border-radius: 2px; }
 :root[data-fm="spaceship"] .header-dropdown, :root[data-fm="spaceship"] .ctx, :root[data-fm="spaceship"] .sidebar-menu, :root[data-fm="spaceship"] .sidebar-popover {
@@ -190,7 +190,7 @@
 :root[data-fm="spaceship"] .palette-search input::placeholder { color: var(--muted); opacity: 1; }
 :root[data-fm="spaceship"] .palette-list { padding: 8px 12px 12px; }
 :root[data-fm="spaceship"] .palette-heading { color: var(--c-blue); letter-spacing: .18em; padding: 10px 16px 2px; }
-:root[data-fm="spaceship"] .palette-option { border-radius: 999px; padding-inline: 16px; font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .05em; font-size: calc(var(--fs) * 1.5); font-weight: 600; color: var(--c-peach); }
+:root[data-fm="spaceship"] .palette-option { border-radius: 999px; padding-inline: 16px; font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .05em; font-size: calc(var(--fs) * 1.5); font-weight: var(--fw-emph); color: var(--c-peach); }
 :root[data-fm="spaceship"] .palette-option kbd, :root[data-fm="spaceship"] .palette-option .sc { font-family: var(--font-mono); text-transform: none; letter-spacing: 0; font-size: var(--fs); }
 :root[data-fm="spaceship"] .palette-option[aria-selected="true"] { background: var(--c-orange); color: var(--ink); border-radius: 22px 6px 6px 22px; }
 :root[data-fm="spaceship"] .palette-option[aria-selected="true"] * { color: var(--ink); }
@@ -209,7 +209,7 @@
 :root[data-fm="spaceship"] .settings-filters .tb[aria-pressed="false"] { background: var(--c-violet); }
 :root[data-fm="spaceship"] .settings-group h3 { color: var(--c-blue); letter-spacing: .14em; }
 :root[data-fm="spaceship"] .setting-row { border-top: 2px solid var(--line-soft); }
-:root[data-fm="spaceship"] .setting-row > label, :root[data-fm="spaceship"] .setting-row > .setting-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .05em; font-size: calc(var(--fs) * 1.35); font-weight: 600; color: var(--c-peach); }
+:root[data-fm="spaceship"] .setting-row > label, :root[data-fm="spaceship"] .setting-row > .setting-label { font-family: var(--font-ui); text-transform: uppercase; letter-spacing: .05em; font-size: calc(var(--fs) * 1.35); font-weight: var(--fw-emph); color: var(--c-peach); }
 :root[data-fm="spaceship"] .setting-control .field-help { color: var(--c-violet); }
 :root[data-fm="spaceship"] .settings-footer { background: var(--bg); border-top: 0; }
 :root[data-fm="spaceship"] .settings-shell mark { background: var(--c-peach); color: var(--ink); }

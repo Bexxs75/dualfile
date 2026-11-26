@@ -16,7 +16,7 @@ describe("settings catalog", () => {
     expect(resetSetting({ ...defaultSettings, sidebarCollapsed: ["network", "devices"] }, "sidebarCollapsed").sidebarCollapsed).toEqual(["network"]);
   });
   test("contains every editable Settings field exactly once", () => {
-    const expected = ["language", "trayEnabled", "checkUpdatesOnStart", "settingsWindowSizeMode", "theme", "accentAutomatic", "accent", "fontSize", "density", "showParentEntry", "extensionColumn", "showPermissionsColumn", "showUidColumn", "showGidColumn", "paneColorLeft", "paneColorRight", "paneTintStrength", "sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarDiscovery", "sidebarHidden", "terminalShell", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy"];
+    const expected = ["language", "trayEnabled", "checkUpdatesOnStart", "settingsWindowSizeMode", "theme", "accentAutomatic", "accent", "fontSize", "fontWeight", "density", "showParentEntry", "extensionColumn", "showPermissionsColumn", "showUidColumn", "showGidColumn", "paneColorLeft", "paneColorRight", "paneTintStrength", "sidebarMode", "sidebarWidth", "sidebarCollapsed", "sidebarDiscovery", "sidebarHidden", "terminalShell", "terminalColors", "terminalBg", "terminalFg", "verifyPolicy"];
     expect(catalog.map(e => e.id).sort()).toEqual(expected.sort());
     expect(catalog.every(e => !settingChanged(defaultSettings, e.id))).toBe(true);
   });

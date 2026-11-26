@@ -26,6 +26,7 @@ export const catalog: readonly SettingEntry[] = [
   { id: "accentAutomatic", section: "darstellung", group: "design", label: "settings.accent.default", kind: "custom" },
   { id: "accent", section: "darstellung", group: "design", label: "settings.accent", kind: "custom", keywords: ["settings.accent.default"] },
   { id: "fontSize", section: "darstellung", group: "text", label: "settings.fontSize", kind: "range", min: 10, max: 24, step: 1 },
+  { id: "fontWeight", section: "darstellung", group: "text", label: "settings.fontWeight", kind: "segment", options: ["normal", "bold"] },
   { id: "density", section: "darstellung", group: "text", label: "settings.density", kind: "segment", options: ["compact", "normal", "comfortable"] },
   { id: "showParentEntry", section: "dateiliste", group: "content", label: "settings.showParentEntry", kind: "switch" },
   { id: "extensionColumn", section: "dateiliste", group: "columns", label: "settings.extensionColumn", kind: "switch" },

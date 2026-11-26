@@ -2843,6 +2843,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
           accentAutomatic: true,
           density: "normal",
           fontSize: 13,
+          fontWeight: "normal",
           language: "auto",
           bookmarks: [],
           session: { windows: [], activeWindow: 0 },

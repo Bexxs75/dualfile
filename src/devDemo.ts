@@ -13,10 +13,12 @@ export async function runDemo(runtime: AppRuntime): Promise<void> {
   const tint = params.get("tint");
   const strength = params.get("strength");
   const owners = params.has("owners");
-  if (!file && !theme && !accent && !tint && !owners && !params.has("settings")) return;
+  const weight = params.get("weight");
+  if (!file && !weight && !theme && !accent && !tint && !owners && !params.has("settings")) return;
   const { store, controller } = runtime;
   while (store.getState().phase !== "ready") await sleep(50);
   if (theme === "schiefer" || theme === "papier" || theme === "werkstatt" || theme === "weiss" || theme === "spaceship") controller.updateSettings((s) => ({ ...s, theme }));
+  if (weight === "bold" || weight === "normal") controller.updateSettings((s) => ({ ...s, fontWeight: weight }));
   if (accent) controller.updateSettings((s) => ({ ...s, accent, accentAutomatic: false }));
   if (tint) controller.updateSettings((s) => ({ ...s, paneColorLeft: "#" + tint, ...(strength ? { paneTintStrength: Number(strength) } : {}) }));
   if (owners) controller.updateSettings((s) => ({ ...s, showPermissionsColumn: true, showUidColumn: true, showGidColumn: true }));

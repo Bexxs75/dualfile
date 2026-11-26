@@ -487,6 +487,7 @@ export interface Settings {
 
   density: "compact" | "normal" | "comfortable";
   fontSize: number;
+  fontWeight: "normal" | "bold";
   language: "de" | "en" | "auto";
   bookmarks: Bookmark[];
   session: { windows: WindowSession[]; activeWindow: number };
@@ -522,6 +523,7 @@ export interface EditorAppearance {
   accentAutomatic: boolean;
   density: Settings["density"];
   fontSize: number;
+  fontWeight: Settings["fontWeight"];
   lang: "de" | "en";
 }
 
@@ -754,7 +756,7 @@ export interface SystemPlace {
 }
 
 export type SettingsTab = "allgemein" | "darstellung" | "dateiliste" | "seitenleiste" | "terminal" | "kopieren" | "tastatur" | "info" | "appearance" | "system" | "keyboard";
-export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "settingsWindowSizeMode" | "settingsWindowSize" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
+export type SettingsWindowSettings = Pick<Settings, "sidebarMode" | "sidebarWidth" | "sidebarCollapsed" | "sidebarHidden" | "sidebarDiscovery" | "settingsWindowSizeMode" | "settingsWindowSize" | "theme" | "accent" | "accentAutomatic" | "density" | "fontSize" | "fontWeight" | "language" | "showParentEntry" | "paneTintStrength" | "showPermissionsColumn" | "showUidColumn" | "showGidColumn" | "extensionColumn" | "paneColorLeft" | "paneColorRight" | "terminalColors" | "terminalBg" | "terminalFg" | "verifyPolicy" | "terminalShell" | "trayEnabled" | "checkUpdatesOnStart" | "lastUpdateCheck" | "keybindings">;
 /** State at program start; memory only, never saved. `autostart` stays null until the system status is first known. */
 export interface SettingsBase { settings: Settings; autostart: import("./system").AutostartMode | null }
 /** Baseline relative to the current settings: only the fields that differ (never `sidebarHidden`). */

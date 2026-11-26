@@ -86,6 +86,8 @@ pub struct Settings {
     pub settings_window_size: WindowSize,
     pub density: String,
     pub font_size: u8,
+    /// Text weight of the interface: "normal" (default) or "bold".
+    pub font_weight: String,
     pub language: String,
     pub bookmarks: Vec<Bookmark>,
     pub session: Session,
@@ -154,6 +156,7 @@ impl Default for Settings {
             settings_window_size: WindowSize::default(),
             density: "normal".into(),
             font_size: 14,
+            font_weight: "normal".into(),
             language: "auto".into(),
             bookmarks: vec![],
             session: Session::default(),
@@ -261,6 +264,7 @@ pub fn config_dir() -> PathBuf {
 }
 
 const DENSITIES: [&str; 3] = ["compact", "normal", "comfortable"];
+const FONT_WEIGHTS: [&str; 2] = ["normal", "bold"];
 const FONT_SIZES: std::ops::RangeInclusive<u8> = 8..=32;
 
 /// Version 0 (vor der Einführung von `version`): Akzent hieß `accent_color`
@@ -473,6 +477,7 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
         ),
         density: field(&mut obj, "density", d.density.clone(), &mut fixes),
         font_size: field(&mut obj, "font_size", d.font_size, &mut fixes),
+        font_weight: field(&mut obj, "font_weight", d.font_weight.clone(), &mut fixes),
         language: field(&mut obj, "language", d.language.clone(), &mut fixes),
         bookmarks: field(&mut obj, "bookmarks", d.bookmarks.clone(), &mut fixes),
         session: field(&mut obj, "session", d.session.clone(), &mut fixes),
@@ -574,6 +579,13 @@ pub fn load(dir: impl AsRef<Path>) -> (Settings, LoadOutcome) {
     }
     if !bad(FONT_SIZES.contains(&s.font_size), "font_size", &mut fixes) {
         s.font_size = d.font_size;
+    }
+    if !bad(
+        FONT_WEIGHTS.contains(&s.font_weight.as_str()),
+        "font_weight",
+        &mut fixes,
+    ) {
+        s.font_weight = d.font_weight.clone();
     }
     if !bad(
         ["de", "en", "auto"].contains(&s.language.as_str()),
@@ -944,6 +956,7 @@ mod tests {
             accent: "#12abEF".into(),
             density: "compact".into(),
             font_size: 16,
+            font_weight: "bold".into(),
             language: "en".into(),
             ..Settings::default()
         };
@@ -1131,7 +1144,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write(
             dir.path(),
-            r#"{"version":4,"font_size":"huge","language":"fr","density":"tiny",
+            r#"{"version":4,"font_size":"huge","language":"fr","density":"tiny","font_weight":"heavy",
                 "session":{"windows":[{"tabs":[],"active_tab":5}],"active_window":3}}"#,
         );
         let (s, o) = load(dir.path());
@@ -1139,15 +1152,29 @@ mod tests {
         assert_eq!(s.font_size, d.font_size);
         assert_eq!(s.language, d.language);
         assert_eq!(s.density, d.density);
+        assert_eq!(s.font_weight, "normal");
         assert_eq!(s.session.windows[0].tabs.len(), 1);
         assert_eq!(s.session.windows[0].active_tab, 0);
         assert_eq!(s.session.active_window, 0);
         let LoadOutcome::Repaired(fixes) = o else {
             panic!("expected Repaired");
         };
-        for k in ["font_size", "language", "density", "session"] {
+        for k in ["font_size", "language", "density", "font_weight", "session"] {
             assert!(fixes.iter().any(|f| f == k), "{k} missing in {fixes:?}");
         }
+    }
+
+    #[test]
+    fn font_weight_defaults_for_old_files_and_roundtrips() {
+        let dir = tempfile::tempdir().unwrap();
+        write(dir.path(), r#"{"version":6,"font_size":15}"#);
+        let (s, o) = load(dir.path());
+        assert_eq!(s.font_weight, "normal");
+        assert!(!matches!(o, LoadOutcome::Repaired(_)), "{o:?}");
+        let mut b = s.clone();
+        b.font_weight = "bold".into();
+        save(dir.path(), &b, false).unwrap();
+        assert_eq!(load(dir.path()).0.font_weight, "bold");
     }
 
     #[test]

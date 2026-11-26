@@ -194,7 +194,7 @@ describe("Befehle: Name und Argumentform", () => {
       { profileId: "p-1", secret: "geheim-marker", expected: null },
     ],
     ["connectionConnect ohne Geheimnis", (a) => a.connectionConnect("p-1"), "connection_connect", { profileId: "p-1", secret: null, expected: null }],
-    ["connectionEditorOpen", (a) => a.connectionEditorOpen("p-1", "Profil", { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 13, lang: "de" }), "connection_editor_open", { profileId: "p-1", title: "Profil", appearance: { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 13, lang: "de" } }],
+    ["connectionEditorOpen", (a) => a.connectionEditorOpen("p-1", "Profil", { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 13, fontWeight: "normal", lang: "de" }), "connection_editor_open", { profileId: "p-1", title: "Profil", appearance: { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 13, fontWeight: "normal", lang: "de" } }],
     ["connectionEditorClose", (a) => a.connectionEditorClose(), "connection_editor_close", undefined],
     [
       "connectionTrust",

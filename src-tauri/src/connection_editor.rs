@@ -32,7 +32,13 @@ pub struct Appearance {
     pub accent_automatic: bool,
     pub density: String,
     pub font_size: f64,
+    #[serde(default = "default_font_weight")]
+    pub font_weight: String,
     pub lang: String,
+}
+
+fn default_font_weight() -> String {
+    "normal".into()
 }
 
 fn invalid(message: &str) -> UiError {
@@ -95,6 +101,7 @@ pub(crate) fn editor_query(
 pub(crate) fn append_appearance(url: &mut Url, appearance: &Appearance) -> Result<(), UiError> {
     if !THEMES.contains(&appearance.theme.as_str())
         || !DENSITIES.contains(&appearance.density.as_str())
+        || !["normal", "bold"].contains(&appearance.font_weight.as_str())
         || !["de", "en"].contains(&appearance.lang.as_str())
         || !is_hex_color(&appearance.accent)
         || !appearance.font_size.is_finite()
@@ -116,6 +123,7 @@ pub(crate) fn append_appearance(url: &mut Url, appearance: &Appearance) -> Resul
         )
         .append_pair("density", &appearance.density)
         .append_pair("fontSize", &appearance.font_size.to_string())
+        .append_pair("fontWeight", &appearance.font_weight)
         .append_pair("lang", &appearance.lang);
     Ok(())
 }
@@ -254,6 +262,7 @@ mod tests {
             accent_automatic: false,
             density: "normal".into(),
             font_size: 13.0,
+            font_weight: "normal".into(),
             lang: "de".into(),
         }
     }
@@ -311,6 +320,10 @@ mod tests {
             },
             Appearance {
                 density: "x".into(),
+                ..ok.clone()
+            },
+            Appearance {
+                font_weight: "heavy".into(),
                 ..ok.clone()
             },
             Appearance {

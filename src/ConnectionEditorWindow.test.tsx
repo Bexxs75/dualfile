@@ -7,16 +7,16 @@ import { newSshProfile } from "./components/dialogs/ConnectionProfileForm";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); document.documentElement.className = ""; document.documentElement.removeAttribute("style"); });
 
-const query = (extra = "") => `?view=connection-editor&theme=papier&accent=%232f6f6a&accentAutomatic=0&density=normal&fontSize=15&lang=en${extra}`;
+const query = (extra = "") => `?view=connection-editor&theme=papier&accent=%232f6f6a&accentAutomatic=0&density=normal&fontSize=15&fontWeight=bold&lang=en${extra}`;
 
 test("parseEditorParams reads the main window's look and falls back on garbage", () => {
   expect(parseEditorParams(query("&profile=p%201"))).toEqual({
     profileId: "p 1",
-    appearance: { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 15, lang: "en" },
+    appearance: { theme: "papier", accent: "#2f6f6a", accentAutomatic: false, density: "normal", fontSize: 15, fontWeight: "bold", lang: "en" },
   });
   const odd = parseEditorParams("?theme=x&density=y&lang=fr&fontSize=nope");
   expect(odd.profileId).toBeNull();
-  expect(odd.appearance).toMatchObject({ theme: "schiefer", density: "normal", lang: "de", fontSize: 13 });
+  expect(odd.appearance).toMatchObject({ theme: "schiefer", density: "normal", lang: "de", fontSize: 13, fontWeight: "normal" });
 });
 
 test("a new profile form shows up in the window's language, focused, with the theme applied", async () => {

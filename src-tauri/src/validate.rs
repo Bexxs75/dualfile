@@ -262,6 +262,9 @@ pub fn validate_settings(s: &SettingsDto) -> Result<(), UiError> {
     if !(8..=32).contains(&s.font_size) {
         return Err(bad_settings("Schriftgröße"));
     }
+    if !["normal", "bold"].contains(&s.font_weight.as_str()) {
+        return Err(bad_settings("Schriftstärke"));
+    }
     if s.bookmarks.len() > 200 {
         return Err(bad_settings("zu viele Lesezeichen"));
     }
@@ -607,6 +610,7 @@ mod tests {
             last_seen_version: None,
             density: "normal".into(),
             font_size: 13,
+            font_weight: "normal".into(),
             language: "auto".into(),
             bookmarks: vec![BookmarkDto {
                 name: "x".into(),
@@ -689,6 +693,11 @@ mod tests {
         }
         let mut s = settings();
         s.font_size = 80;
+        assert!(validate_settings(&s).is_err());
+        let mut s = settings();
+        s.font_weight = "bold".into();
+        assert!(validate_settings(&s).is_ok());
+        s.font_weight = "heavy".into();
         assert!(validate_settings(&s).is_err());
         let mut s = settings();
         s.bookmarks[0].path = "/a\0b".into();

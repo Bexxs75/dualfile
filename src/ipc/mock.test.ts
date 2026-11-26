@@ -637,6 +637,7 @@ describe("Einstellungen", () => {
     accent: "#2f6f6a",
     density: "compact",
     fontSize: 15,
+    fontWeight: "normal",
     language: "en",
     bookmarks: [{ name: "Projekte", path: `${HOME}/Projekte`, color: "#7bc08a", order: 0 }],
     session: { windows: [{ tabs: [{ path: HOME, sort: "name", filter: "" }], activeTab: 0 }], activeWindow: 0 },

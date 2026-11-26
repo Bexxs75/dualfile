@@ -36,6 +36,9 @@ test("search matches options/help across sections, highlights, counts and naviga
   await app.user.type(search, "Schriftgrosse");
   expect(app.dlg.getByRole("slider", { name: "Schriftgröße" })).toBeInTheDocument();
   await app.user.clear(search);
+  await app.user.type(search, "Schriftstärke");
+  expect(app.dlg.getByRole("radiogroup", { name: "Schriftstärke" })).toBeInTheDocument();
+  await app.user.clear(search);
   await app.user.type(search, "no-such-setting");
   expect(app.dlg.getByRole("status")).toHaveTextContent("Nichts gefunden");
 });
@@ -189,6 +192,10 @@ test("preview tracks real design, accent, density, font, tint and extra columns"
   expect(preview().style.getPropertyValue("--rowh")).toBe("22px");
   fireEvent.change(app.dlg.getByRole("slider", { name: "Schriftgröße" }), { target: { value: "20" } });
   expect(preview().style.getPropertyValue("--fs")).toBe("20px");
+  expect(preview().style.getPropertyValue("--fw")).toBe("500");
+  await app.user.click(app.dlg.getByRole("radio", { name: "Fett" }));
+  expect(app.state().fontWeight).toBe("bold");
+  expect(preview().style.getPropertyValue("--fw")).toBe("700");
   await app.user.click(app.dlg.getByRole("tab", { name: "Dateiliste" }));
   const body = () => preview().querySelector<HTMLElement>(".list-body")!;
   const head = () => preview().querySelector<HTMLElement>(".head")!;

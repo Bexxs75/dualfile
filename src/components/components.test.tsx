@@ -17,7 +17,7 @@ import { Toasts } from "./Toasts";
 async function runtime(language: "de" | "en" = "de") {
   const api = createMockApi({
     initialSettings: {
-      version: 1, verifyPolicy: "auto", theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13, language,
+      version: 1, verifyPolicy: "auto", theme: "schiefer", accent: "#e0a45c", density: "normal", fontSize: 13, fontWeight: "normal", language,
       bookmarks: [], session: { windows: [], activeWindow: 0 },
     },
   });

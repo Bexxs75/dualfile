@@ -22,7 +22,7 @@ test("system commands use the typed native bridge and a progress channel", async
 });
 test("settings commands carry session, ack and a channel without event permissions", async () => {
   const api = createTauriApi();
-  const appearance = { theme: "papier", accent: "#123456", accentAutomatic: false, density: "normal", fontSize: 13, lang: "en" } as const;
+  const appearance = { theme: "papier", accent: "#123456", accentAutomatic: false, density: "normal", fontSize: 13, fontWeight: "normal", lang: "en" } as const;
   vi.mocked(invoke).mockResolvedValueOnce(true);
   expect(await api.settingsWindowOpen("info", "Settings", appearance)).toBe("opened");
   expect(invoke).toHaveBeenLastCalledWith("settings_window_open", { tab: "info", title: "Settings", appearance });

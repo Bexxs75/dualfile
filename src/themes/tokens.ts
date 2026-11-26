@@ -139,6 +139,16 @@ export const fontWeights: Record<ThemeTokens["colorScheme"], { text: number; str
   light: { text: 500, strong: 600 },
 };
 
+/**
+ * Setting "Font weight: Bold": one step heavier. Dark designs 600/700, light designs 700/700.
+ * `emph` is the fixed emphasis weight of headings and labels (600 normal, 700 bold), so they
+ * stay above the body text. Inter 400-700 and Antonio 400/600/700 are bundled.
+ */
+export const boldFontWeights: Record<ThemeTokens["colorScheme"], { text: number; strong: number }> = {
+  dark: { text: 600, strong: 700 },
+  light: { text: 700, strong: 700 },
+};
+
 /** Vorgegebene Akzentfarben aus dem Mockup. */
 export const accentPresets: readonly string[] = ["#e0a45c", "#6fb3d9", "#7bc08a", "#e07a9f", "#c98fe0"];
 
@@ -241,7 +251,7 @@ export const accentWarningKeys: Record<AccentWarning, TranslationKey> = {
 /** Paper, White and Spaceship use their own accent; the other dark designs keep the application blue. */
 export const defaultAccent = (theme: ThemeName): string => (theme === "papier" || theme === "weiss" || theme === "spaceship") ? themes[theme].accent : "#4f8cff";
 
-export type ThemeSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize">;
+export type ThemeSettings = Pick<Settings, "theme" | "accent" | "accentAutomatic" | "density" | "fontSize"> & Partial<Pick<Settings, "fontWeight">>;
 
 /** Die tatsächlich wirksame Akzentfarbe (automatisch, eigene oder Design-Vorgabe). */
 export function effectiveAccent(settings: Pick<Settings, "theme" | "accent" | "accentAutomatic">): string {
@@ -262,6 +272,8 @@ export function themeVariables(settings: ThemeSettings): Record<string, string> 
   const fontSize = Number.isFinite(settings.fontSize)
     ? Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(settings.fontSize)))
     : 13;
+  const bold = settings.fontWeight === "bold";
+  const weights = (bold ? boldFontWeights : fontWeights)[tokens.colorScheme];
   return {
     "--bg": tokens.bg,
     "--panel": tokens.panel,
@@ -282,8 +294,9 @@ export function themeVariables(settings: ThemeSettings): Record<string, string> 
     "--ok": tokens.success,
     "--rowh": `${rowHeights[settings.density] ?? rowHeights.normal}px`,
     "--fs": `${fontSize}px`,
-    "--fw": String(fontWeights[tokens.colorScheme].text),
-    "--fw-strong": String(fontWeights[tokens.colorScheme].strong),
+    "--fw": String(weights.text),
+    "--fw-strong": String(weights.strong),
+    "--fw-emph": bold ? "700" : "600",
   };
 }
 

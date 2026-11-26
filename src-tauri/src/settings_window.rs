@@ -242,6 +242,8 @@ struct SettingsProjection {
     #[serde(skip_serializing_if = "Option::is_none")]
     font_size: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    font_weight: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     show_parent_entry: Option<bool>,
@@ -305,6 +307,8 @@ pub struct SettingsPatch {
     density: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     font_size: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    font_weight: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -372,6 +376,9 @@ impl SettingsPatch {
         }
         if let Some(value) = &self.font_size {
             settings.font_size = *value;
+        }
+        if let Some(value) = &self.font_weight {
+            settings.font_weight = value.clone();
         }
         if let Some(value) = &self.language {
             settings.language = value.clone();
@@ -794,6 +801,7 @@ mod tests {
             accent_automatic: false,
             density: "normal".into(),
             font_size: 13.0,
+            font_weight: "normal".into(),
             lang: "en".into(),
         };
         let q = settings_query(Some("keyboard"), &a).unwrap();
@@ -1102,6 +1110,7 @@ mod tests {
             "accentAutomatic",
             "density",
             "fontSize",
+            "fontWeight",
             "language",
             "showParentEntry",
             "extensionColumn",
