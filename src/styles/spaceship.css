@@ -127,7 +127,7 @@
 :root[data-fm="spaceship"] .foot * { color: var(--ink); }
 
 /* Spaltenköpfe in Hellblau mit farbigen Linien */
-:root[data-fm="spaceship"] .head { background: var(--bg); color: var(--c-blue); border-top: 2px solid var(--c-lilac); border-bottom: 2px solid var(--c-lilac); letter-spacing: .12em; height: 28px; }
+:root[data-fm="spaceship"] .head { background: var(--bg); color: var(--c-blue); border-top: 2px solid var(--c-lilac); border-bottom: 2px solid var(--c-lilac); letter-spacing: .12em; height: auto; min-height: 28px; padding-block: 2px; box-sizing: border-box; }
 :root[data-fm="spaceship"] .head button { font-family: inherit; }
 :root[data-fm="spaceship"] .col-resize::after { background: var(--c-lilac); }
 :root[data-fm="spaceship"] .list-body[data-tint] { color: var(--fg); background: var(--panel); }
@@ -310,3 +310,33 @@
   :root[data-fm="spaceship"]:not(.editor-window-root) body::before,
   :root[data-fm="spaceship"]:not(.editor-window-root) body::after { display: none; }
 }
+
+/* Nachbesserung nach dem VM-Test */
+/* Statuszeile: nie umbrechen, Zahl und Einheit bleiben zusammen; schmaler gesetzt als die übrigen Beschriftungen.
+   Auslassungspunkte nur als letzter Ausweg. */
+:root[data-fm="spaceship"] .pane .foot { font-size: calc(var(--fs) * 1.05); letter-spacing: .02em; gap: 10px; white-space: nowrap; font-weight: 500; }
+:root[data-fm="spaceship"] .pane .foot > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+:root[data-fm="spaceship"] .pane .foot > span > span { white-space: nowrap; }
+:root[data-fm="spaceship"] .pane .foot > .status-context { flex: 0 1 auto; }
+
+/* Theme-Kacheln: alle fünf in einer Zeile, gleich breit */
+:root[data-fm="spaceship"] .settings-themes { flex-wrap: nowrap; gap: 6px; }
+:root[data-fm="spaceship"] .settings-themes > button[role="radio"] { flex: 1 1 0; min-width: 0; font-size: min(var(--fs), 13px); letter-spacing: .02em; padding-inline: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-fm="spaceship"] .settings-themes button i { width: 100%; max-width: 48px; box-sizing: border-box; }
+
+/* Verbindungs-Editor (eigenes Fenster): nur Schrift und Schaltflächen, kein Rahmen und kein zusätzlicher Innenabstand */
+:root[data-fm="spaceship"] .ssh-profile label, :root[data-fm="spaceship"] .ssh-profile legend {
+  font-family: var(--font-ui); text-transform: uppercase; letter-spacing: var(--label-ls); font-size: var(--label-fs); font-weight: 600; color: var(--c-peach);
+}
+:root[data-fm="spaceship"] .ssh-profile :is(input, select, textarea, code, option) { font-family: var(--font-sans); text-transform: none; letter-spacing: 0; font-size: var(--fs); font-weight: var(--fw); }
+:root[data-fm="spaceship"] .ssh-profile code { font-family: var(--font-mono); }
+:root[data-fm="spaceship"] .ssh-profile :is(input:not([type="checkbox"]):not([type="radio"]), select) {
+  background: var(--bg); color: var(--fg); border: 2px solid var(--c-blue); border-radius: 16px; padding-inline: 12px;
+}
+:root[data-fm="spaceship"] .ssh-profile .ssh-note { font-family: var(--font-sans); text-transform: none; letter-spacing: 0; }
+:root[data-fm="spaceship"] .ssh-actions button {
+  font-family: var(--font-ui); text-transform: uppercase; letter-spacing: var(--label-ls); font-size: var(--label-fs); font-weight: 600;
+  border: 0; border-radius: 999px; padding: 4px 20px; background: var(--c-blue); color: var(--ink);
+}
+:root[data-fm="spaceship"] .ssh-actions button:not([type="button"]) { background: var(--c-orange); box-shadow: inset 0 -3px 0 var(--ink); }
+:root[data-fm="spaceship"] .ssh-actions button:hover:not(:disabled) { filter: brightness(1.12); }

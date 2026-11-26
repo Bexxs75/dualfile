@@ -453,8 +453,17 @@ describe("Spaceship", () => {
     expect(css).not.toMatch(/body::(before|after)[^{]*\{[^}]*content:\s*"[^"]/);
     expect(css).toMatch(/@media \(max-height: 699px\)[^]*display:\s*none/);
     // kein Rahmen-Selektor ohne den Ausschluss der Nebenfenster
-    const frame = css.slice(css.indexOf("Stufe 2: Rahmen"));
+    const frame = css.slice(css.indexOf("Stufe 2: Rahmen"), css.indexOf("Nachbesserung nach dem VM-Test"));
     expect(frame.match(/data-fm="spaceship"\](?!:not\(\.editor-window-root\))/g)).toBeNull();
+  });
+
+  test("Nachbesserung: Statuszeile ohne Umbruch, Editor-Beschriftungen und Pillen, Kacheln einzeilig", () => {
+    const fix = spaceshipCss.slice(spaceshipCss.indexOf("Nachbesserung nach dem VM-Test"));
+    expect(fix).toMatch(/\.pane \.foot \{[^}]*white-space:\s*nowrap/);
+    expect(fix).toMatch(/\.ssh-profile label[^{]*\{[^}]*font-family:\s*var\(--font-ui\)/);
+    expect(fix).toMatch(/\.ssh-actions button \{[^}]*border-radius:\s*999px/);
+    expect(fix).toMatch(/\.settings-themes \{[^}]*flex-wrap:\s*nowrap/);
+    expect(fix).not.toMatch(/body::(before|after)|\.editor-window-root\)?\s*\{[^}]*border/);
   });
 });
 
