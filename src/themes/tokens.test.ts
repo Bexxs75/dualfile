@@ -462,7 +462,9 @@ describe("Spaceship", () => {
     expect(fix).toMatch(/\.pane \.foot \{[^}]*white-space:\s*nowrap/);
     expect(fix).toMatch(/\.ssh-profile label[^{]*\{[^}]*font-family:\s*var\(--font-ui\)/);
     expect(fix).toMatch(/\.ssh-actions button \{[^}]*border-radius:\s*999px/);
-    expect(fix).toMatch(/\.settings-themes \{[^}]*flex-wrap:\s*nowrap/);
+    expect(fix).toMatch(/\.settings-themes \{[^}]*flex-wrap:\s*wrap/);
+    expect(spaceshipCss).not.toMatch(/background-color:\s*inherit/);
+    expect(spaceshipCss).toMatch(/\.fkeys button, \.tab button\):focus-visible \{[^}]*outline:\s*3px solid #000/);
     expect(fix).not.toMatch(/body::(before|after)|\.editor-window-root\)?\s*\{[^}]*border/);
   });
 });

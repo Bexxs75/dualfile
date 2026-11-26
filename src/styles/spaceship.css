@@ -33,7 +33,9 @@
 
 /* Sichtbarer Fokus: weißer Rahmen, auf Schwarz und auf allen Pastellflächen deutlich. */
 :root[data-fm="spaceship"] :focus-visible { outline: 3px solid #ffffff; outline-offset: 2px; }
-:root[data-fm="spaceship"] :is(.list, .lister, .lv-scroll, .fkeys button, .tab button):focus-visible { outline-offset: -3px; }
+:root[data-fm="spaceship"] :is(.list, .lister, .lv-scroll):focus-visible { outline-offset: -3px; }
+/* Auf Pastellflächen: schwarzer Ring mit weißer Innenkante (mind. 3:1 auf Pastell und auf Schwarz). */
+:root[data-fm="spaceship"] :is(.fkeys button, .tab button):focus-visible { outline: 3px solid #000; outline-offset: -3px; box-shadow: inset 0 0 0 5px #fff; }
 
 /* Schaltflächen als Pillen */
 :root[data-fm="spaceship"] .tb, :root[data-fm="spaceship"] .seg button {
@@ -56,7 +58,7 @@
 :root[data-fm="spaceship"] .header-icon[aria-pressed="true"] { background: var(--c-orange); color: var(--ink); box-shadow: inset 0 -3px 0 var(--ink); }
 :root[data-fm="spaceship"] .header-chip { border: 0; border-radius: 999px; padding: 3px 16px; background: var(--c-blue); color: var(--ink); }
 :root[data-fm="spaceship"] .connections-menu .header-chip { background: var(--c-lilac); }
-:root[data-fm="spaceship"] .header-chip:hover, :root[data-fm="spaceship"] .header-chip[aria-expanded="true"] { filter: brightness(1.12); background-color: inherit; }
+:root[data-fm="spaceship"] .header-chip:hover, :root[data-fm="spaceship"] .header-chip[aria-expanded="true"] { filter: brightness(1.12); }
 :root[data-fm="spaceship"] .connections-menu .header-chip:hover, :root[data-fm="spaceship"] .connections-menu .header-chip[aria-expanded="true"] { background: var(--c-lilac); }
 :root[data-fm="spaceship"] .place-menu .header-chip { background: var(--c-violet); }
 :root[data-fm="spaceship"] .command-placeholder { border: 3px solid var(--c-orange); border-radius: 999px; background: var(--bg); color: var(--c-blue); padding: 4px 16px; letter-spacing: .08em; }
@@ -320,8 +322,8 @@
 :root[data-fm="spaceship"] .pane .foot > .status-context { flex: 0 1 auto; }
 
 /* Theme-Kacheln: alle fünf in einer Zeile, gleich breit */
-:root[data-fm="spaceship"] .settings-themes { flex-wrap: nowrap; gap: 6px; }
-:root[data-fm="spaceship"] .settings-themes > button[role="radio"] { flex: 1 1 0; min-width: 0; font-size: min(var(--fs), 13px); letter-spacing: .02em; padding-inline: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-fm="spaceship"] .settings-themes { flex-wrap: wrap; gap: 6px; }
+:root[data-fm="spaceship"] .settings-themes > button[role="radio"] { flex: 1 1 82px; min-width: 82px; font-size: min(var(--fs), 13px); letter-spacing: .02em; padding-inline: 4px; white-space: nowrap; }
 :root[data-fm="spaceship"] .settings-themes button i { width: 100%; max-width: 48px; box-sizing: border-box; }
 
 /* Verbindungs-Editor (eigenes Fenster): nur Schrift und Schaltflächen, kein Rahmen und kein zusätzlicher Innenabstand */
