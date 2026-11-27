@@ -1017,6 +1017,7 @@ impl From<dualfile_core::undo::UndoEntry> for UndoEntryDto {
             UndoKind::Trash => "trash",
             UndoKind::Copy => "copy",
             UndoKind::MakeDir => "mkdir",
+            UndoKind::MakeFile => "mkfile",
         };
         Self {
             id: e.id,

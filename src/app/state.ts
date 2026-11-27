@@ -41,6 +41,7 @@ export type Dialog =
   | { kind: "delete"; model: DeleteDialogModel; plan: DeletePlan; reason: "permanent" | "trashFailed" }
   | { kind: "rename"; w: WinIdx; dir: string; name: string; existing: readonly string[] }
   | { kind: "makeDir"; w: WinIdx; parent: string; existing: readonly string[] }
+  | { kind: "makeFile"; w: WinIdx; parent: string; existing: readonly string[] }
   | { kind: "multiRename"; w: WinIdx; dir: string; sources: readonly RenameSource[]; existing: readonly string[] }
   /** Packen (Strg+Umschalt+P): Quellen des Fensters `w`, Ziel ist der Ordner des Gegenfensters. */
   | { kind: "pack"; w: WinIdx; sources: readonly string[]; sourceNames: readonly string[]; destination: string; existing: readonly string[]; suggestion: string }

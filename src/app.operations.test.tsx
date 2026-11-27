@@ -478,6 +478,35 @@ describe("Umbenennen und Neuer Ordner", () => {
     expect(app.focused(0)).toBe("Neu");
     expect(await namesIn(app.api, HOME)).toContain("Neu");
   });
+
+  test("Umschalt+F7 legt eine leere Datei an, fokussiert sie und überschreibt nie", async () => {
+    const app = await setupApp({ left: DOCS });
+    await app.user.keyboard("{Shift>}{F7}{/Shift}");
+    const dlg = app.dialog();
+    expect(dlg).toHaveAccessibleName("Neue Datei");
+    const input = within(dlg).getByRole("textbox");
+    expect(input).toHaveFocus();
+    await app.user.type(input, "notizen.txt{Enter}");
+    expect(within(dlg).getByRole("alert")).toHaveTextContent("Der Name ist bereits vorhanden.");
+    await app.user.clear(input);
+    await app.user.type(input, "a/b{Enter}");
+    expect(within(dlg).getByRole("alert")).toBeInTheDocument();
+    await app.user.clear(input);
+    await app.user.type(input, "leer.txt{Enter}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(app.names(0)).toContain("leer.txt"));
+    expect(app.focused(0)).toBe("leer.txt");
+    expect((await app.api.list(DOCS)).entries.find((e) => e.name === "leer.txt")).toMatchObject({ kind: "file", size: 0 });
+  });
+
+  test("Kontextmenü im leeren Bereich bietet „Neue Datei“ unter „Neuer Ordner“", async () => {
+    const app = await setupApp({ left: DOCS });
+    fireEvent.contextMenu(within(app.pane(0)).getByRole("grid"));
+    const items = screen.getAllByRole("menuitem").map((item) => item.getAttribute("aria-label"));
+    expect(items.indexOf("Neue Datei")).toBe(items.indexOf("Neuer Ordner") + 1);
+    await app.user.click(screen.getByRole("menuitem", { name: "Neue Datei" }));
+    expect(app.dialog()).toHaveAccessibleName("Neue Datei");
+  });
 });
 
 describe("Kontextmenü", () => {

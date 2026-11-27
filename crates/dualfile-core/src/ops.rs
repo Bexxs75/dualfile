@@ -1819,6 +1819,18 @@ pub fn make_dir(v: &dyn Vfs, parent: &VPath, name: &str) -> Result<VPath> {
     Ok(path)
 }
 
+/// Creates an empty file `name` in `parent`. Never replaces anything: an existing entry of that
+/// name (file, folder or link) gives `Error::Exists` and stays untouched.
+pub fn make_file(v: &dyn Vfs, parent: &VPath, name: &str) -> Result<VPath> {
+    if v.is_read_only() {
+        return Err(Error::Unsupported(READ_ONLY_MESSAGE));
+    }
+    validate_name(name)?;
+    let path = parent.join(name)?;
+    v.create_write(&path, WriteMode::NoReplace)?.commit()?;
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3375,6 +3387,56 @@ mod tests {
             make_dir(&LocalVfs, &parent, "folder"),
             Err(Error::Exists(_))
         ));
+    }
+
+    #[test]
+    fn make_file_creates_empty_file_and_never_replaces() {
+        let dir = tempfile::tempdir().unwrap();
+        let parent = VPath::local(dir.path()).unwrap();
+        let made = make_file(&LocalVfs, &parent, "neu.txt").unwrap();
+        assert_eq!(made.path(), dir.path().join("neu.txt"));
+        assert_eq!(fs::metadata(made.path()).unwrap().len(), 0);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(made.path()).unwrap().permissions().mode();
+            assert_eq!(mode & 0o111, 0, "no execute bit");
+        }
+        // An existing file keeps its content.
+        fs::write(dir.path().join("alt.txt"), b"inhalt").unwrap();
+        assert!(matches!(
+            make_file(&LocalVfs, &parent, "alt.txt"),
+            Err(Error::Exists(_))
+        ));
+        assert_eq!(fs::read(dir.path().join("alt.txt")).unwrap(), b"inhalt");
+        // An existing folder of that name is not replaced either.
+        fs::create_dir(dir.path().join("ordner")).unwrap();
+        assert!(matches!(
+            make_file(&LocalVfs, &parent, "ordner"),
+            Err(Error::Exists(_))
+        ));
+        assert!(dir.path().join("ordner").is_dir());
+        // Invalid names are refused and leave nothing behind.
+        for bad in ["", "  ", ".", "..", "a/b", "a\0b"] {
+            assert!(
+                matches!(
+                    make_file(&LocalVfs, &parent, bad),
+                    Err(Error::InvalidName(_))
+                ),
+                "{bad:?}"
+            );
+        }
+        let names: std::collections::BTreeSet<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            ["alt.txt", "neu.txt", "ordner"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        );
     }
 
     #[cfg(unix)]

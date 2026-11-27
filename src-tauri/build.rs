@@ -67,6 +67,7 @@ const COMMANDS: &[&str] = &[
     "rename_many",
     "regex_replace",
     "make_dir",
+    "make_file",
     "open_external",
     "open_url",
     "app_confirm_close",

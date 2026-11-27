@@ -20,7 +20,7 @@ import { CompareDialog } from "./components/dialogs/CompareDialog";
 import { DiffDialog } from "./components/dialogs/DiffDialog";
 import { SyncDialog } from "./components/dialogs/SyncDialog";
 import { ArchiveErrorDialog } from "./components/dialogs/ArchiveErrorDialog";
-import { MakeDirDialog, RenameDialog } from "./components/dialogs/NameDialog";
+import { MakeDirDialog, MakeFileDialog, RenameDialog } from "./components/dialogs/NameDialog";
 import { MultiRenameDialog } from "./components/dialogs/MultiRenameDialog";
 import { PatternDialog } from "./components/dialogs/PatternDialog";
 import { PropertiesDialog } from "./components/dialogs/PropertiesDialog";
@@ -62,6 +62,7 @@ function Dialogs({ api }: { api: DualfileApi }) {
       {dialog?.kind === "rename" ? <RenameDialog name={dialog.name} existing={dialog.existing} /> : null}
       {dialog?.kind === "multiRename" ? <MultiRenameDialog dialog={dialog} /> : null}
       {dialog?.kind === "makeDir" ? <MakeDirDialog existing={dialog.existing} /> : null}
+      {dialog?.kind === "makeFile" ? <MakeFileDialog existing={dialog.existing} /> : null}
       {dialog?.kind === "pack" ? (
         <PackDialog sourceNames={dialog.sourceNames} destination={dialog.destination} existing={dialog.existing} suggestion={dialog.suggestion} />
       ) : null}

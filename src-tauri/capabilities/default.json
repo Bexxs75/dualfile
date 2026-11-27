@@ -57,6 +57,7 @@
     "allow-rename-many",
     "allow-regex-replace",
     "allow-make-dir",
+    "allow-make-file",
     "allow-open-external",
     "allow-open-url",
     "allow-app-confirm-close",

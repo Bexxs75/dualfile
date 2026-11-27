@@ -31,6 +31,7 @@ export type Command =
   | "copy"
   | "move"
   | "makeDir"
+  | "makeFile"
   | "trash"
   | "deletePermanent"
   | "toggleSelection"
@@ -92,6 +93,7 @@ export const REBINDABLE: Record<RebindableCommand, string> = {
   copy: "F5",
   move: "F6",
   makeDir: "F7",
+  makeFile: "Shift+F7",
   trash: "F8",
   deletePermanent: "Shift+F8",
   selectAll: "Ctrl+A",
@@ -112,7 +114,7 @@ export const REBINDABLE: Record<RebindableCommand, string> = {
 
 export type RebindableCommand =
   | "toggleSidebar" | "toggleSidebarIcons" | "focusSidebar"
-  | "rename" | "view" | "edit" | "copy" | "move" | "makeDir" | "trash" | "deletePermanent"
+  | "rename" | "view" | "edit" | "copy" | "move" | "makeDir" | "makeFile" | "trash" | "deletePermanent"
   | "selectAll" | "pathInput" | "refresh" | "toggleHidden" | "swapPanes" | "newTab" | "closeTab"
   | "undo" | "multiRename" | "terminal" | "quickView" | "pack" | "compareDirs" | "compareFiles";
 

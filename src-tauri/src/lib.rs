@@ -285,6 +285,7 @@ pub fn run() {
             commands::rename_many,
             commands::regex_replace,
             commands::make_dir,
+            commands::make_file,
             commands::open_external,
             commands::open_url,
             commands::app_confirm_close,

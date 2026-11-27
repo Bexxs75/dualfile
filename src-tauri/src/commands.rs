@@ -198,6 +198,11 @@ pub async fn regex_replace(
 }
 
 #[tauri::command]
+pub async fn make_file(state: Shared<'_>, parent: String, name: String) -> Result<String, UiError> {
+    run(state, move |s| s.make_file(&parent, &name)).await
+}
+
+#[tauri::command]
 pub async fn make_dir(state: Shared<'_>, parent: String, name: String) -> Result<String, UiError> {
     run(state, move |s| s.make_dir(&parent, &name)).await
 }

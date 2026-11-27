@@ -43,6 +43,7 @@ export function createCommands(state: AppState, controller: Controller, tr: (key
   command("trash", "action.trash", "close", s => selected(s) && writable(s));
   command("rename", "action.rename", "edit", s => writable(s) && !!focusedEntry(s, s.active) && focusedEntry(s, s.active)?.name !== "..");
   command("makeDir", "action.newFolder", "dir", writable);
+  command("makeFile", "action.newFile", "file", writable);
   command("multiRename", "action.multiRename", "rename", s => selected(s) && writable(s));
   command("compareDirs", "action.compareDirs", "compare");
   add("usage", "space.button", "disk", "", () => openTool("usage"));

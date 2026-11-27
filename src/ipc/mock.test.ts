@@ -577,6 +577,31 @@ describe("Umbenennen und Ordner anlegen", () => {
   });
 });
 
+describe("makeFile", () => {
+  test("legt eine leere Datei an, meldet Kollisionen und ungültige Namen, nie Überschreiben", async () => {
+    const { api } = setup();
+    expect(await api.makeFile(DOCS, "leer.txt")).toBe(`${DOCS}/leer.txt`);
+    expect((await api.list(DOCS)).entries.find((e) => e.name === "leer.txt")).toMatchObject({ kind: "file", size: 0 });
+    await expect(api.makeFile(DOCS, "leer.txt")).rejects.toMatchObject({ kind: "exists" });
+    await expect(api.makeFile(DOCS, "notizen.txt")).rejects.toMatchObject({ kind: "exists" });
+    await expect(api.makeFile(DOCS, "")).rejects.toMatchObject({ kind: "invalidName" });
+    await expect(api.makeFile(DOCS, "..")).rejects.toMatchObject({ kind: "invalidName" });
+    await expect(api.makeFile(DOCS, "a/b")).rejects.toMatchObject({ kind: "invalidName" });
+    await expect(api.makeFile(`${DOCS}/fehlt`, "x")).rejects.toMatchObject({ kind: "notFound" });
+  });
+
+  test("steht im Rückgängig-Verlauf und lässt sich entfernen", async () => {
+    const { api, scheduler } = setup();
+    await api.makeFile(DOCS, "leer.txt");
+    const entry = (await api.undoList())[0]!;
+    expect(entry).toMatchObject({ kind: "mkfile", first: "leer.txt" });
+    const pending = api.undoRun(entry.id);
+    await scheduler.runAll();
+    expect(await pending).toMatchObject({ ok: true, errors: [] });
+    expect((await api.list(DOCS)).entries.some((e) => e.name === "leer.txt")).toBe(false);
+  });
+});
+
 describe("Ereignisse", () => {
   test("makeDir, rename und trash senden dirChanged für den betroffenen Ordner", async () => {
     const { api, events } = setup();

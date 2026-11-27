@@ -1464,6 +1464,20 @@ impl AppState {
         Ok(vpath_text(&created))
     }
 
+    pub fn make_file(&self, parent: &str, name: &str) -> Result<String, UiError> {
+        let parent = self.path(parent)?;
+        reject_archive_writes(std::slice::from_ref(&parent))?;
+        self.require_writable(std::slice::from_ref(&parent))?;
+        check_name(name)?;
+        let vfs = self.vfs(&parent)?;
+        let _lease = crate::mount_guard::job(&[vpath_text(&parent)])?;
+        let created = ops::make_file(&*vfs, &parent, name)?;
+        self.undo_recorder(vec![vpath_text(&parent)])
+            .record(self.undo.record_make_file(&created));
+        self.announce_dir(&vpath_text(&parent));
+        Ok(vpath_text(&created))
+    }
+
     pub fn open_external(&self, path: &str) -> Result<(), UiError> {
         let path = self.path(path)?;
         if path.scheme() == Scheme::Archive {
@@ -2530,6 +2544,33 @@ mod tests {
     }
 
     #[test]
+    fn make_file_creates_validates_refuses_duplicates_and_undoes_only_while_empty() {
+        let f = fixture();
+        let parent = f.dir("p");
+        let created = f.state.make_file(&parent, "neu.txt").unwrap();
+        assert_eq!(created, f.p("p/neu.txt"));
+        assert_eq!(f.read("p/neu.txt"), "");
+        assert_eq!(f.state.undo_list()[0].kind, "mkfile");
+        assert_eq!(
+            f.state.make_file(&parent, "neu.txt").unwrap_err().kind,
+            "exists"
+        );
+        assert_eq!(f.read("p/neu.txt"), "");
+        assert_eq!(
+            f.state.make_file(&parent, "a/b").unwrap_err().kind,
+            "invalidName"
+        );
+        assert_eq!(
+            f.state.make_file("rel", "x").unwrap_err().kind,
+            "invalidPath"
+        );
+        fs::write(f.p("p/neu.txt"), "inhalt").unwrap();
+        let result = f.state.undo_run(f.state.undo_list()[0].id);
+        assert!(!result.ok);
+        assert_eq!(f.read("p/neu.txt"), "inhalt");
+    }
+
+    #[test]
     fn open_external_only_accepts_existing_paths() {
         let f = fixture();
         assert_eq!(
@@ -2998,6 +3039,7 @@ mod tests {
         assert_read_only(f.state.restore_from_trash(std::slice::from_ref(&inside)));
         assert_read_only(f.state.rename(&inside, "b.txt"));
         assert_read_only(f.state.make_dir(&folder, "neu"));
+        assert_read_only(f.state.make_file(&folder, "neu.txt"));
         assert_read_only(f.state.rename_many(
             &folder,
             &[RenameItemDto {

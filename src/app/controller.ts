@@ -993,6 +993,31 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     }
   }
 
+  function openMakeFile(): void {
+    const w = get().active;
+    if (refuseInArchive(w)) return;
+    dispatch({
+      type: "dialog",
+      dialog: { kind: "makeFile", w, parent: activeTabOf(get(), w).path, existing: get().listings[w].entries.map((e) => e.name) },
+    });
+  }
+
+  async function submitMakeFile(name: string): Promise<string | null> {
+    const dialog = get().dialog;
+    if (dialog?.kind !== "makeFile") return null;
+    const invalid = nameError(name, dialog.existing);
+    if (invalid) return tr(invalid);
+    try {
+      await api.makeFile(dialog.parent, name);
+      toast(tr("toast.fileCreated", { name }));
+      dispatch({ type: "dialog", dialog: null });
+      void reload(dialog.w, { focusName: name });
+      return null;
+    } catch (error) {
+      return describeError(error, { name });
+    }
+  }
+
   // ---------------------------------------------------------------- Packen
 
   /** Packen ist möglich, wenn etwas gewählt ist, das Fenster lesbar ist und das Ziel (Gegenfenster) kein Archiv ist. */
@@ -1306,6 +1331,8 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
         return openTransfer("move");
       case "makeDir":
         return openMakeDir();
+      case "makeFile":
+        return openMakeFile();
       case "trash":
         return void trashSelection();
       case "deletePermanent": {
@@ -1753,6 +1780,7 @@ export function createController(api: DualfileApi, store: AppStore, options: Con
     confirmDelete,
     submitRename,
     submitMakeDir,
+    submitMakeFile,
     openProperties,
     openRename,
     openMultiRename,

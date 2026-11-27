@@ -95,6 +95,7 @@ Defaults from [`src/state/keymap.ts`](src/state/keymap.ts); file-list shortcuts 
 | F3 / Ctrl+Q | Viewer / quick view |
 | F5 / F6 | Copy / move |
 | F7 | New folder |
+| Shift+F7 | New empty file |
 | F8 / Delete | Move to trash |
 | Shift+F8 / Shift+Delete | Permanent deletion dialog |
 | Ctrl+T / Ctrl+W | New / close tab |

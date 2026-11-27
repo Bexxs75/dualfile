@@ -118,10 +118,10 @@ describe("Pfadzeile im Archiv", () => {
 });
 
 describe("Archive sind schreibgeschützt", () => {
-  test("F2, F6, F7, F8 und Umschalt+F8 öffnen nichts und melden den Hinweis", async () => {
+  test("F2, F6, F7, Umschalt+F7, F8 und Umschalt+F8 öffnen nichts und melden den Hinweis", async () => {
     const app = await insideArchive();
     await app.user.click(app.row(0, "README.md"));
-    for (const key of ["{F2}", "{F6}", "{F7}", "{F8}", "{Shift>}{F8}{/Shift}", "{Control>}m{/Control}"]) {
+    for (const key of ["{F2}", "{F6}", "{F7}", "{Shift>}{F7}{/Shift}", "{F8}", "{Shift>}{F8}{/Shift}", "{Control>}m{/Control}"]) {
       await app.user.keyboard(key);
       expect(screen.queryByRole("dialog"), key).toBeNull();
       expect(alerts().some((text) => text.includes("Archive sind schreibgeschützt")), key).toBe(true);

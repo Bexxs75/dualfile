@@ -50,6 +50,7 @@ pub enum UndoKind {
     Trash,
     Copy,
     MakeDir,
+    MakeFile,
 }
 #[derive(Clone, Debug)]
 pub struct UndoEntry {
@@ -186,6 +187,10 @@ impl UndoJournal {
     pub fn record_make_dir(&self, path: &VPath) -> Result<Option<UndoId>> {
         self.record_created(UndoKind::MakeDir, std::slice::from_ref(path), false)
     }
+    /// Records a freshly created empty file; refused (`Changed`) if it is not an empty file.
+    pub fn record_make_file(&self, path: &VPath) -> Result<Option<UndoId>> {
+        self.record_created(UndoKind::MakeFile, std::slice::from_ref(path), false)
+    }
     fn record_created(
         &self,
         kind: UndoKind,
@@ -207,6 +212,14 @@ impl UndoJournal {
             })
             .collect::<Result<Vec<_>>>()?;
         if kind == UndoKind::MakeDir && items.iter().any(|i| i.fingerprint.kind != EntryKind::Dir) {
+            return Err(UndoError::Changed);
+        }
+        if kind == UndoKind::MakeFile
+            && items.iter().any(|i| {
+                i.fingerprint.kind != EntryKind::File
+                    || i.fingerprint.stamp.map(|(size, _)| size) != Some(0)
+            })
+        {
             return Err(UndoError::Changed);
         }
         self.insert(kind, items)
@@ -253,6 +266,7 @@ impl UndoJournal {
             UndoKind::Trash => "Papierkorb",
             UndoKind::Copy => "Kopieren",
             UndoKind::MakeDir => "Ordner anlegen",
+            UndoKind::MakeFile => "Datei anlegen",
         }
         .to_owned();
         state.records.push_back(Record {
@@ -360,8 +374,12 @@ fn revert(kind: UndoKind, item: &Item, vfs: &dyn Vfs) -> Result<()> {
                 return Err(UndoError::NotFound);
             }
         }
-        UndoKind::Copy | UndoKind::MakeDir => {
+        UndoKind::Copy | UndoKind::MakeDir | UndoKind::MakeFile => {
             if kind == UndoKind::MakeDir && !vfs.list(&item.target)?.is_empty() {
+                return Err(UndoError::Changed);
+            }
+            // Only an untouched, still empty file may go; anything written into it is kept.
+            if kind == UndoKind::MakeFile && vfs.stat(&item.target)?.size != 0 {
                 return Err(UndoError::Changed);
             }
             vfs.trash(&item.target)?;
@@ -660,6 +678,28 @@ mod tests {
             UndoError::Changed
         );
     }
+    #[test]
+    fn make_file_undo_refuses_a_file_that_got_content() {
+        let d = tempfile::tempdir().unwrap();
+        let j = UndoJournal::new();
+        let empty = p(d.path().join("leer.txt"));
+        fs::write(empty.path(), b"").unwrap();
+        let id = j.record_make_file(&empty).unwrap().unwrap();
+        assert_eq!(j.list()[0].label, "Datei anlegen");
+        fs::write(empty.path(), b"geschrieben").unwrap();
+        assert_eq!(
+            j.undo(id, &LocalVfs, &JobHandle::silent()).unwrap().failed[0].1,
+            UndoError::Changed
+        );
+        assert_eq!(fs::read(empty.path()).unwrap(), b"geschrieben");
+        // A file that is not empty when recorded is not recorded at all.
+        let full = p(d.path().join("voll.txt"));
+        fs::write(full.path(), b"x").unwrap();
+        assert_eq!(j.record_make_file(&full).unwrap_err(), UndoError::Changed);
+        // Remote paths are not journaled.
+        let remote = VPath::sftp("test", "/x").unwrap();
+        assert_eq!(j.record_make_file(&remote).unwrap(), None);
+    }
     #[cfg(target_os = "linux")]
     struct Env(Vec<(&'static str, Option<std::ffi::OsString>)>);
     #[cfg(target_os = "linux")]
@@ -728,6 +768,15 @@ mod tests {
             .remaining
             .is_empty());
         assert!(!folder.path().exists());
+        let empty = p(d.path().join("leer.txt"));
+        fs::write(empty.path(), b"").unwrap();
+        let id = j.record_make_file(&empty).unwrap().unwrap();
+        assert!(j
+            .undo(id, &LocalVfs, &JobHandle::silent())
+            .unwrap()
+            .remaining
+            .is_empty());
+        assert!(!empty.path().exists());
     }
     #[cfg(target_os = "linux")]
     #[test]

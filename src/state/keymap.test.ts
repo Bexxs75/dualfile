@@ -120,9 +120,13 @@ describe("Umschalt-Varianten", () => {
     expect(list("*", { shiftKey: true })).toBe("invertSelection");
     expect(list("Tab", { shiftKey: true })).toBe("switchPane");
   });
+  it("Umschalt+F7 legt eine neue Datei an, F7 einen Ordner", () => {
+    expect(list("F7", { shiftKey: true })).toBe("makeFile");
+    expect(list("F7")).toBe("makeDir");
+  });
   it("unbelegte Umschalt-Kombinationen ergeben null (kein stilles Kopieren/Löschen)", () => {
     expect(list("F5", { shiftKey: true })).toBeNull();
-    expect(list("F7", { shiftKey: true })).toBeNull();
+    expect(list("F4", { shiftKey: true })).toBeNull();
     expect(list("Enter", { shiftKey: true })).toBeNull();
   });
   it("Entf und F8 ohne Umschalt sind nie endgültiges Löschen", () => {

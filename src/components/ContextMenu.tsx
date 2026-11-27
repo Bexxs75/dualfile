@@ -68,7 +68,7 @@ export function ContextMenu() {
     { text: "action.closeTab", command: "closeTab", action: () => controller.closeTab(menu.w, menu.tab), reason: tabCount <= 1 ? "menu.reason.lastTab" : undefined },
     { text: "action.closeOtherTabs", action: () => controller.closeOtherTabs(menu.w, menu.tab!), reason: tabCount <= 1 ? "menu.reason.lastTab" : undefined },
   ]] : menu.background ? [
-    [cmd("action.newFolder", "makeDir", archiveReason)],
+    [cmd("action.newFolder", "makeDir", archiveReason), cmd("action.newFile", "makeFile", archiveReason)],
     [cmd("action.refresh", "refresh"), { ...cmd("menu.view.hidden", "toggleHidden"), checked: state.showHidden }],
     [cmd("keys.cmd.selectAll", "selectAll"), cmd("action.compareDirs", "compareDirs")],
     [{ text: "space.button", action: () => controller.openTool("usage", path) }, { text: "dupes.title", action: () => controller.openTool("dupes", path) }],

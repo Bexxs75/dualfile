@@ -177,6 +177,7 @@ export function createTauriApi(): DualfileApi {
     regexReplace: (names, pattern, replacement, ignoreCase, all) =>
       call("regex_replace", { names, pattern, replacement, ignoreCase, all }),
     makeDir: (parent, name) => call("make_dir", { parent, name }),
+    makeFile: (parent, name) => call("make_file", { parent, name }),
     openExternal: (path) => call("open_external", { path }),
     openUrl: (url) => call("open_url", { url }),
     logInfo: () => call("log_info"),

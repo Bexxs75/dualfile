@@ -89,6 +89,20 @@ export function RenameDialog({ name, existing }: { name: string; existing: reado
   );
 }
 
+export function MakeFileDialog({ existing }: { existing: readonly string[] }) {
+  const controller = useController();
+  const tr = useT();
+  return (
+    <NameDialog
+      title={tr("dialog.newFile.title")}
+      label={tr("dialog.newFile.label")}
+      initial=""
+      existing={existing}
+      submit={(value) => controller.submitMakeFile(value)}
+    />
+  );
+}
+
 export function MakeDirDialog({ existing }: { existing: readonly string[] }) {
   const controller = useController();
   const tr = useT();

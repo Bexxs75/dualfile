@@ -1489,7 +1489,7 @@ export function createMockApi(options: MockOptions = {}): MockApi {
           else if (["move", "rename", "trash"].includes(kind) && find(item.original)) error = "conflict";
           else if (["move", "rename", "trash"].includes(kind) && !find(parentOf(item.original))?.children) error = "io";
           if (error) { result.errors.push(error); continue; }
-          if (kind === "copy" || kind === "mkdir") {
+          if (kind === "copy" || kind === "mkdir" || kind === "mkfile") {
             trashed.set(`trash://undo-${id}/${result.done}`, { originalPath: item.target, node: node! });
             need(parentOf(item.target)).children!.delete(basename(item.target));
           } else {
@@ -2753,6 +2753,19 @@ export function createMockApi(options: MockOptions = {}): MockApi {
       if (node.children!.has(name)) throw new CoreError(`Der Name ist bereits vorhanden: ${name}`, "exists");
       node.children!.set(name, { entry: makeEntry(name, "dir", 0, clock()), children: new Map() });
       recordUndo("mkdir", [[join(parentPath, name), join(parentPath, name)]]);
+      changed(parentPath);
+      return join(parentPath, name);
+    },
+
+    async makeFile(parent, name): Promise<string> {
+      const parentPath = resolvePath(parent);
+      refuseArchiveWrite(parentPath);
+      refusePluginWrite(parentPath);
+      validateName(name);
+      const node = needDir(parentPath);
+      if (node.children!.has(name)) throw new CoreError(`Der Name ist bereits vorhanden: ${name}`, "exists");
+      node.children!.set(name, { entry: makeEntry(name, "file", 0, clock()) });
+      recordUndo("mkfile", [[join(parentPath, name), join(parentPath, name)]]);
       changed(parentPath);
       return join(parentPath, name);
     },

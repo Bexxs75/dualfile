@@ -670,7 +670,7 @@ export const MAX_PLUGIN_CELL_CHARS = 256;
 export const MAX_PLUGIN_PREVIEW_TEXT_CHARS = 256 * 1024;
 
 export type UndoErrorKind = "changed" | "conflict" | "alreadyUndone" | "notFound" | "unsupported" | "notLocal" | "io";
-export type UndoKind = "move" | "rename" | "trash" | "copy" | "mkdir";
+export type UndoKind = "move" | "rename" | "trash" | "copy" | "mkdir" | "mkfile";
 export interface UndoEntry { first?: string; more?: number; id: number; time: number; label: string; kind: UndoKind; undone: boolean }
 export interface UndoResult { jobId: number; ok: boolean; done: number; remaining: number; cancelled: boolean; errors: UndoErrorKind[] }
 /** Transient OpenSSH question; the answer never travels in an event. */

@@ -177,6 +177,8 @@ export interface DualfileApi extends SystemApi {
     all: boolean,
   ): Promise<RegexResult[]>;
   makeDir(parent: string, name: string): Promise<string>;
+  /** Legt eine leere Datei an; ein vorhandener Name wird nie überschrieben (`exists`). */
+  makeFile(parent: string, name: string): Promise<string>;
   openExternal(path: string): Promise<void>; // nur xdg-open
   /** Öffnet eine https-Adresse im Standardbrowser. */
   openUrl(url: string): Promise<void>;
