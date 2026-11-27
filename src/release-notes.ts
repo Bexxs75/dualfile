@@ -4,6 +4,19 @@ export const currentVersion = config.version;
 export interface ReleaseText { new: readonly string[]; improved: readonly string[]; fixed: readonly string[] }
 export interface ReleaseNote { date: string; de: ReleaseText; en: ReleaseText }
 export const releaseNotes: Record<string, ReleaseNote> = {
+  "0.4.9": {
+    date: "2026-11-27",
+    de: {
+      new: ["Neue Datei anlegen: Im Kontextmenü des leeren Bereichs der Dateiliste gibt es unter „Neuer Ordner“ jetzt „Neue Datei“, auch mit Umschalt+F7. Nach dem Namen entsteht eine leere Datei im aktuellen Ordner und wird markiert. Eine vorhandene Datei wird nie überschrieben. Rückgängig entfernt die Datei, solange sie noch leer ist."],
+      improved: [],
+      fixed: [],
+    },
+    en: {
+      new: ["Create a new file: the context menu of the empty area of the file list now has \"New file\" below \"New folder\", also with Shift+F7. After you enter a name, an empty file is created in the current folder and selected. An existing file is never overwritten. Undo removes the file while it is still empty."],
+      improved: [],
+      fixed: [],
+    },
+  },
   "0.4.8": {
     date: "2026-11-26",
     de: {
