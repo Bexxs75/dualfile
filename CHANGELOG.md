@@ -9,7 +9,7 @@ This reconstruction groups local history and package reports; `0.1.0` is a pre-r
 
 ### Added
 
-- New file: "New file …" in the context menu of the empty area of the file list (below "New folder") and with Shift+F7 asks for a name and creates an empty file in the current folder; it is then selected in the list. An existing name is never overwritten; the file has no execute bit. It is available wherever "New folder" is (local folders, SFTP/FTP/SMB/WebDAV places) and greyed out in archives and read-only places. The creation is listed in the undo history and can be undone while the file is still empty (#67).
+- New file: "New file …" in the context menu of the empty area of the file list (below "New folder") and with Shift+F7 asks for a name and creates an empty file in the current folder; it is then focused in the list. An existing name is never overwritten; the file has no execute bit. It is available wherever "New folder" is (local folders, SFTP/FTP/SMB/WebDAV places) and greyed out in archives and read-only places. In local folders the creation is listed in the undo history and can be undone (the file goes to the trash) while it is still empty (#67).
 
 ## [0.4.8] - 2026-11-26
 
